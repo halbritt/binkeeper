@@ -181,7 +181,10 @@ are removed.
 2. Scaffold the package and move pure modules with their tests. This is a
    structural change only; no live writer changes.
 3. Create BinKeeper-owned migrations, roles, capture ledger, and blob metadata.
-   Keep the schema capable of preserving the existing ids and timestamps.
+   **Implemented in BINK-4:** the initial forward migration owns all nine
+   evidence ledgers, serving is read-only, and synthetic blob restore verifies
+   ciphertext and plaintext hashes. Production database and key provisioning
+   remain part of the gated deployment/cutover sequence.
 4. Build a deterministic exporter from Engram and importer into a disposable
    BinKeeper database. Generate a manifest of row counts, stable ids, payload
    hashes, blob hashes, projected locations, trip checksums, and passports.

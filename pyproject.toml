@@ -8,7 +8,13 @@ version = "0.1.0"
 description = "Local-first physical inventory system"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "cryptography>=42,<47",
+    "psycopg[binary]>=3.1,<4",
+]
+
+[project.scripts]
+binkeeper-migrate = "binkeeper.migrations:main"
 
 [project.optional-dependencies]
 dev = [
@@ -26,6 +32,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 "binkeeper.catalog" = ["templates/*"]
 "binkeeper.photo" = ["templates/*"]
+"binkeeper.migrations" = ["sql/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

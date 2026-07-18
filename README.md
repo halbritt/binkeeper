@@ -3,9 +3,10 @@
 BinKeeper is a local-first system for tracking physical storage bins, their
 contents, locations, photos, movement history, and placement recommendations.
 
-Status: standalone package scaffold and pure preservation tests are present;
-persistence, owner surfaces, deployment, and cutover remain in progress. The
-working implementation and data authority still live in
+Status: the standalone package, pure preservation tests, BinKeeper-owned
+forward migrations, and synthetic encrypted-blob path are present. Owner
+surfaces, deployment, data import, and cutover remain in progress. The working
+implementation and live data authority still live in
 [halbritt/engram](https://github.com/halbritt/engram). Do not deploy this
 repository or treat it as the data authority until the verified one-writer
 cutover in `BINK-11` succeeds.
@@ -20,6 +21,8 @@ Architecture decisions use short, sequential records under
 
 The [test parity inventory](docs/test-parity.md) accounts for the 295-test
 Engram baseline and keeps unported behavior explicitly deferred.
+[ADR 0002](docs/adr/0002-blob-key-transition.md) fixes the blob transition as
+re-encryption under a BinKeeper-owned key.
 
 ## Invariants
 
@@ -46,5 +49,16 @@ make package-test
 ```
 
 `make check` runs the full verification sequence; the editable install is a
-prerequisite of each target. The current test suite is synthetic and does not
-connect to Engram or a live database.
+prerequisite of each target. PostgreSQL acceptance tests require a disposable
+database supplied as `BINKEEPER_TEST_DATABASE_URL`; for example:
+
+```sh
+createdb binkeeper_disposable
+BINKEEPER_TEST_DATABASE_URL=postgresql:///binkeeper_disposable \
+  .venv/bin/pytest -q -m migration tests/test_persistence.py
+dropdb --force binkeeper_disposable
+```
+
+The suite is synthetic and never connects to Engram. `binkeeper-migrate`
+applies checksum-pinned migrations to an explicit URL or
+`BINKEEPER_DATABASE_URL`; do not point it at an Engram database.
