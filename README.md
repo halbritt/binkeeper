@@ -7,12 +7,11 @@ Status: the standalone package now owns the physical-inventory domain, CLI,
 MCP schemas, forward migrations, evidence transfer, encrypted media path, and
 owner catalog/management implementation, and exact/lexical inventory search.
 The standalone loopback service, hardened deployment files, frozen tailnet
-endpoint, authenticated backup/restore drill, and freshness gate are
-implemented; production enablement and cutover remain gated. The working owner
-service and live data authority still live in
-[halbritt/engram](https://github.com/halbritt/engram). Do not deploy this
-repository or treat it as the data authority until the verified one-writer
-cutover in `BINK-11` succeeds.
+endpoint, authenticated backup/restore drill, and freshness gate are deployed.
+The owner-approved `BINK-11` one-writer cutover completed on 2026-07-18;
+BinKeeper is now the live physical-inventory authority. Engram retains frozen
+historical evidence and time-bounded compatibility names, but no direct
+inventory writer.
 
 The extraction plan is in
 [docs/extraction-analysis.md](docs/extraction-analysis.md). Work is tracked in
@@ -61,17 +60,16 @@ package or reaches its database. The web app factories are
 `binkeeper.bin_catalog_web:create_app` and
 `binkeeper.bin_photo_web:create_app`. The composed owner service is
 `binkeeper-serve`, frozen to `127.0.0.1:8766` and documented in
-[docs/deployment.md](docs/deployment.md); enabling it as the production writer
-remains gated to BINK-11.
+[docs/deployment.md](docs/deployment.md). It is the production writer after the
+accepted `BINK-11` cutover.
 The packaged service is fail-closed for writes unless
 `BINKEEPER_WRITES_ENABLED=1`; opening that gate is an owner-approved cutover
 action, not a deployment default. The same process-wide gate protects the CLI
 and MCP mutation paths, so compatibility subprocesses cannot bypass the frozen
 HTTP writer.
 Durability operations and exact recovery stop conditions are documented in
-[docs/runbooks/backup-restore.md](docs/runbooks/backup-restore.md). The cutover
-and compatibility-retirement procedures remain authority-gated runbooks, not
-permission to change the live writer.
+[docs/runbooks/backup-restore.md](docs/runbooks/backup-restore.md). The
+compatibility-retirement procedure remains separately gated by `BINK-13`.
 Run local inventory search with `binkeeper bin-search QUERY`. Transcript
 liveness is optional and accepts only the inert file contract documented in
 [docs/liveness-adapter.md](docs/liveness-adapter.md); absence is reported as

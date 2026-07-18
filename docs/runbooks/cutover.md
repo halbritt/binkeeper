@@ -68,3 +68,19 @@ or evidence that both writers can accept a request.
    pre-freeze Engram watermark.
 4. Record the failure and exact rollback boundary in BINK-11. Do not retry the
    cutover without a new owner-approved window.
+
+## 2026-07-18 execution receipt
+
+The owner-approved window ran from `2026-07-18T17:29:37Z` through
+`2026-07-18T17:59:37Z`. Engram SHA
+`77da129138d75522d787bfbfb9bdd003566bd6cf` was frozen before final export;
+BinKeeper SHA `eceb12534f9ed7d2892a3be0bbd0c1786fd9d4a6` became the sole writer.
+The final source manifest was
+`08c8a07d9b445d2f03d46c3806a868fedbf470dacaf8c1bd67f5eb697e146988`;
+the re-encrypted target manifest was
+`6e0cd78c5204d20f10e2b6dc8a4dbe8d64ad9e7a0798d4fd409536a05721c65c`.
+Import and idempotent replay preserved 8 captures, 5 move events, 4 blobs, and
+move watermark 5. Foreground backup, disposable restore, local and tailnet
+health/readiness, catalog, authoring, management, media, CLI, MCP, legacy
+redirects, and old-writer refusal all passed. Plane `BINK-11` contains the
+approval and detailed execution receipts.

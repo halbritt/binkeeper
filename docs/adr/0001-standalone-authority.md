@@ -13,6 +13,11 @@ interval. The evidence for the extraction and the complete preservation matrix
 live in the [extraction analysis](../extraction-analysis.md), and owner
 acceptance and operating defaults are recorded in Plane `BINK-2`.
 
+Implementation status: `BINK-11` completed in an owner-approved window on
+2026-07-18. BinKeeper is now the sole physical-inventory writer and authority;
+Engram's direct inventory writer is frozen while the separately gated
+compatibility and retirement work proceeds.
+
 BinKeeper owns its Python package, database and migrations, local process, CLI,
 web surface, and `binkeeper.*` MCP interface. It initially uses the existing
 local PostgreSQL cluster through dedicated BinKeeper database roles. Its public

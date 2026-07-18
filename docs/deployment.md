@@ -37,6 +37,7 @@ authorization to install or enable them. Their key material belongs only in the
 owner-local mode-0600 vault configuration. See
 [runbooks/backup-restore.md](runbooks/backup-restore.md) before scheduling them.
 
-Deployment files and disposable local/fronted smoke tests do not authorize the
-production writer. BINK-11 owns the service enablement, final route acceptance,
-and one-writer switch after an owner-approved window.
+`BINK-11` enabled the service and completed the one-writer switch in its
+owner-approved 2026-07-18 window. Changing authority again still requires an
+explicit rollback or later accepted work item; deployment files and smoke tests
+alone never authorize another writer transition.

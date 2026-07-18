@@ -1,6 +1,6 @@
 # BinKeeper extraction analysis
 
-Status: cutover rehearsal in progress; authority unchanged
+Status: production cutover verified; BinKeeper is the sole writer
 
 Date: 2026-07-18
 
@@ -13,15 +13,15 @@ Plane project: `BinKeeper` (`BINK`)
 Accepted decision: [ADR 0001](adr/0001-standalone-authority.md), with owner
 acceptance and operating defaults recorded in Plane `BINK-2`.
 
-Implementation status: `BINK-3` through `BINK-10` establish the standalone
+Implementation status: `BINK-3` through `BINK-10` established the standalone
 package, persistence, transfer, domain, owner workflows, search, and deployment
 and durability boundaries. The frozen owner endpoint is loopback
 `127.0.0.1:8766`, paired with tailnet HTTPS at
-`https://proximal.tail0ecc2e.ts.net:8766`. Engram remains the runtime and data
-authority until the owner-gated `BINK-11` cutover.
-The service writer now fails closed by default, and the cutover transfer can
-re-encrypt source blobs under a distinct BinKeeper key while preserving source
-and target manifests. Neither change opens the production writer.
+`https://proximal.tail0ecc2e.ts.net:8766`. The owner-approved `BINK-11` window
+completed on 2026-07-18: Engram's inventory writer was frozen before the final
+export, BinKeeper imported the manifest exactly and idempotently, and only then
+opened its writer. Engram now retains immutable provenance and time-bounded
+compatibility names that resolve to BinKeeper.
 
 ## Decision summary
 
@@ -36,11 +36,11 @@ BinKeeper can initially use the existing local PostgreSQL cluster, local model
 runtime, local encrypted storage, CUPS, and tailnet host while owning its own
 database, process, migrations, CLI, web app, and MCP interface.
 
-The cutover must have one writer. Engram remains authoritative until a bounded
-write freeze, export, import, verification, and service switch complete. There
-must be no dual-write period. Engram's historical raw captures and append-only
-ledger rows stay in place as frozen provenance after cutover; extraction does
-not authorize deleting or rewriting them.
+The completed cutover preserved exactly one writer. Engram was authoritative
+until the bounded write freeze, export, import, verification, and service switch
+completed. There was no dual-write period. Engram's historical raw captures and
+append-only ledger rows stay in place as frozen provenance; extraction does not
+authorize deleting or rewriting them.
 
 ## Observed scope
 
@@ -211,22 +211,26 @@ are removed.
    service composes health, readiness, catalog, media, and reviewed authoring on
    the frozen loopback port; the existing tailnet front passed an HTTPS smoke
    rehearsal; and stopping the process produced an explicit 502 rather than a
-   stale Engram fallback. Production enablement remains part of `BINK-11`.
+   stale Engram fallback. Production enablement completed in `BINK-11`.
    **BINK-10 complete:** authenticated chunked database dumps, exact encrypted
    blob copies, signed recovery manifests, backup-age readiness, an unmocked
    disposable restore drill, local scheduling templates, and exact
    backup/cutover/rollback/retirement runbooks are implemented. Rehearse a full
    cutover and rollback using synthetic fixtures, then a read-only copy of live
-   data. **BINK-11 rehearsal preparation:** blob staging verifies and decrypts
-   the local Engram source, re-encrypts under a distinct BinKeeper key, and
-   preserves separate source and target manifests. The standalone HTTP writer
-   is frozen by default and refuses every non-safe method before dispatch.
-   Current live-snapshot rehearsal does not authorize the production freeze,
-   writer switch, or compatibility activation.
-7. Freeze Engram BinKeeper writes, run the final export/import, compare the
-   manifest, switch the owner surface, and observe a bounded verification
-   window. Roll back by restoring the Engram writer if any protected projection
-   or physical-action path differs.
+   data. **BINK-11 complete:** blob staging decrypted the local Engram source,
+   re-encrypted it under a distinct BinKeeper key, and preserved separate
+   source and target manifests. The approved production window froze every
+   configured Engram writer, preserved source manifest
+   `08c8a07d9b445d2f03d46c3806a868fedbf470dacaf8c1bd67f5eb697e146988`,
+   imported target manifest
+   `6e0cd78c5204d20f10e2b6dc8a4dbe8d64ad9e7a0798d4fd409536a05721c65c`
+   twice, verified all four blobs plus authenticated backup/restore, activated
+   compatibility reads with target writes still frozen, and then opened only
+   the BinKeeper writer at move watermark 5.
+7. **Complete.** Engram BinKeeper writes are frozen, owner routes and legacy
+   names resolve to BinKeeper, and the bounded verification checks passed.
+   Restore the Engram writer only through the documented immediate rollback if
+   a protected mismatch is discovered inside the accepted window.
 8. Update Praxis and any other consumers. Remove Engram compatibility shims only
    after consumer probes pass.
 9. Supersede Engram decisions and docs that say BinKeeper lives inside Engram.

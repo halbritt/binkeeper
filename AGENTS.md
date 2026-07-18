@@ -6,9 +6,11 @@ extracted from `~/git/engram`; read `README.md` and
 
 ## Current status
 
-The repository contains planning artifacts only. Engram remains the runtime and
-data authority until a verified cutover work item explicitly changes that
-status. Do not start a second writer or copy live owner data into this Git
+The owner-approved `BINK-11` cutover completed on 2026-07-18. BinKeeper is the
+sole runtime and data authority for new physical-inventory evidence. Engram's
+historical rows remain immutable provenance and its legacy names are temporary
+compatibility redirects or subprocess calls into BinKeeper. Do not re-enable
+the Engram writer, start a second writer, or copy live owner data into this Git
 repository.
 
 ## Architecture constraints
