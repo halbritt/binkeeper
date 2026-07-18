@@ -81,3 +81,23 @@ def test_cli_and_mcp_share_idempotent_trip_behavior(conn: psycopg.Connection) ->
     assert cli_result["event_id"] == mcp_result["event_id"]
     assert cli_result["already_existed"] is False
     assert mcp_result["already_existed"] is True
+
+
+def test_compat_trip_arrive_without_bin_reconciles_every_loaded_bin(
+    conn: psycopg.Connection,
+) -> None:
+    for argv in (
+        ["trip-scan", "--action", "open", "--trip", "TRIP-COMPAT", "--to-site", "site-b"],
+        ["trip-scan", "--action", "load", "--trip", "TRIP-COMPAT", "--bin", "TST-A"],
+        ["trip-scan", "--action", "load", "--trip", "TRIP-COMPAT", "--bin", "TST-B"],
+    ):
+        execute(build_parser().parse_args(argv), conn)
+
+    result = execute(
+        build_parser().parse_args(["trip-scan", "--action", "arrive", "--trip", "TRIP-COMPAT"]),
+        conn,
+    )
+
+    assert len(result["arrived"]) == 2
+    assert result["trip"]["arrived"] == ["TST-A", "TST-B"]
+    assert result["trip"]["unaccounted"] == []

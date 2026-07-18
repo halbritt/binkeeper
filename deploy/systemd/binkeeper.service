@@ -1,0 +1,35 @@
+[Unit]
+Description=Standalone local-first BinKeeper owner service
+After=network.target postgresql.service tailscaled.service
+Wants=postgresql.service tailscaled.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=halbritt
+Group=halbritt
+EnvironmentFile=/etc/binkeeper/binkeeper.env
+ExecStart=/opt/binkeeper/venv/bin/binkeeper-serve
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=30
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

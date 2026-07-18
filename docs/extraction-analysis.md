@@ -1,6 +1,6 @@
 # BinKeeper extraction analysis
 
-Status: extraction accepted; standalone scaffold landed, authority unchanged
+Status: standalone deployment boundary implemented; authority unchanged
 
 Date: 2026-07-18
 
@@ -13,10 +13,11 @@ Plane project: `BinKeeper` (`BINK`)
 Accepted decision: [ADR 0001](adr/0001-standalone-authority.md), with owner
 acceptance and operating defaults recorded in Plane `BINK-2`.
 
-Implementation status: `BINK-3` establishes the installable package, build and
-verification commands, catalog/photo package-resource roots, pure synthetic
-preservation tests, and the [295-test parity inventory](test-parity.md). Engram
-remains the runtime and data authority.
+Implementation status: `BINK-3` through `BINK-9` establish the standalone
+package, persistence, transfer, domain, owner workflows, search, and deployment
+boundary. The frozen owner endpoint is loopback `127.0.0.1:8766`, paired with
+tailnet HTTPS at `https://proximal.tail0ecc2e.ts.net:8766`. Engram remains the
+runtime and data authority until the owner-gated `BINK-11` cutover.
 
 ## Decision summary
 
@@ -202,8 +203,13 @@ are removed.
    evidence, and optional transcript liveness accepts only a versioned inert
    local export. Adapter absence is explicit and no model, embedding, cloud,
    or Engram table read was added.
-6. Add backup/restore and deployment checks. Rehearse a full cutover and rollback
-   using synthetic fixtures, then a read-only copy of live data.
+6. Add backup/restore and deployment checks. **BINK-9 complete:** the standalone
+   service composes health, readiness, catalog, media, and reviewed authoring on
+   the frozen loopback port; the existing tailnet front passed an HTTPS smoke
+   rehearsal; and stopping the process produced an explicit 502 rather than a
+   stale Engram fallback. Production enablement remains part of `BINK-11`.
+   Rehearse a full cutover and rollback using synthetic fixtures, then a
+   read-only copy of live data.
 7. Freeze Engram BinKeeper writes, run the final export/import, compare the
    manifest, switch the owner surface, and observe a bounded verification
    window. Roll back by restoring the Engram writer if any protected projection
@@ -242,8 +248,9 @@ itself accept a cutover.
 - Engram compatibility shims remain until `BINK-12` probes pass, with a hard
   maximum of 30 days after production cutover. Extension requires a new owner
   decision.
-- The standalone tailnet host is `proximal.tail0ecc2e.ts.net`; the dedicated
-  HTTPS and loopback ports remain to be selected and frozen before `BINK-9`.
+- The standalone endpoint is frozen to loopback `127.0.0.1:8766` and tailnet
+  HTTPS `https://proximal.tail0ecc2e.ts.net:8766`; Engram retains `:8765`
+  throughout the compatibility window.
 - The four current bin-linked blobs will be re-encrypted under a
   BinKeeper-owned key. Migration and backup/restore must verify plaintext
   hashes before authority moves.

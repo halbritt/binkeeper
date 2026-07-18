@@ -9,7 +9,7 @@ from typing import Any
 
 import psycopg
 
-from binkeeper.bin_inventory import bin_belief, bin_where, record_event
+from binkeeper.bin_inventory import arrive_all, bin_belief, bin_where, record_event, trip_status
 from binkeeper.bin_passport import bin_passport
 from binkeeper.bin_placement import PlacementDecisionAppend, record_placement_decision
 from binkeeper.bin_route import bin_route
@@ -83,6 +83,21 @@ def _scope(parser: argparse.ArgumentParser) -> None:
 def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any]:
     common = {"tenant_id": args.tenant, "corpus_id": args.corpus}
     if args.command == "trip-scan":
+        if args.action == "arrive" and args.bin_code is None:
+            if not args.trip_id:
+                raise ValueError("trip-scan arrive without --bin requires --trip")
+            arrivals = arrive_all(
+                conn,
+                args.trip_id,
+                site=args.site,
+                occurred_at=_datetime(args.occurred_at),
+                source_label=args.source_label,
+                **common,
+            )
+            return {
+                "arrived": [arrival.to_json() for arrival in arrivals],
+                "trip": trip_status(conn, args.trip_id, **common).to_json(),
+            }
         result = record_event(
             conn,
             event_kind=args.action,
@@ -96,7 +111,10 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
             idempotency_key=args.idempotency_key,
             **common,
         )
-        return result.to_json()
+        payload = result.to_json()
+        if args.trip_id:
+            payload["trip"] = trip_status(conn, args.trip_id, **common).to_json()
+        return payload
     if args.command == "bin-where":
         return bin_where(conn, args.bin_code, **common).to_json()
     if args.command == "bin-belief":

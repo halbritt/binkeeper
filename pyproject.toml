@@ -17,6 +17,7 @@ dependencies = [
     "python-multipart>=0.0.9,<1",
     "pyzbar>=0.1.9,<1",
     "qrcode>=7,<9",
+    "uvicorn>=0.34,<1",
 ]
 
 [project.scripts]
@@ -24,6 +25,7 @@ binkeeper-migrate = "binkeeper.migrations:main"
 binkeeper-transfer = "binkeeper.transfer:main"
 binkeeper = "binkeeper.cli:main"
 binkeeper-mcp-stdio = "binkeeper.mcp_stdio:main"
+binkeeper-serve = "binkeeper.service:main"
 
 [project.optional-dependencies]
 dev = [

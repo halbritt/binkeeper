@@ -6,8 +6,9 @@ contents, locations, photos, movement history, and placement recommendations.
 Status: the standalone package now owns the physical-inventory domain, CLI,
 MCP schemas, forward migrations, evidence transfer, encrypted media path, and
 owner catalog/management implementation, and exact/lexical inventory search.
-Deployment and cutover remain in progress. The working owner service and live
-data authority still live in
+The standalone loopback service, hardened deployment files, and frozen tailnet
+endpoint are implemented; production enablement and cutover remain gated. The
+working owner service and live data authority still live in
 [halbritt/engram](https://github.com/halbritt/engram). Do not deploy this
 repository or treat it as the data authority until the verified one-writer
 cutover in `BINK-11` succeeds.
@@ -55,7 +56,10 @@ The standalone entry points are `binkeeper` and `binkeeper-mcp-stdio`. They
 require an explicit local `BINKEEPER_DATABASE_URL`; neither imports the Engram
 package or reaches its database. The web app factories are
 `binkeeper.bin_catalog_web:create_app` and
-`binkeeper.bin_photo_web:create_app`; deployment remains gated to BINK-9.
+`binkeeper.bin_photo_web:create_app`. The composed owner service is
+`binkeeper-serve`, frozen to `127.0.0.1:8766` and documented in
+[docs/deployment.md](docs/deployment.md); enabling it as the production writer
+remains gated to BINK-11.
 Run local inventory search with `binkeeper bin-search QUERY`. Transcript
 liveness is optional and accepts only the inert file contract documented in
 [docs/liveness-adapter.md](docs/liveness-adapter.md); absence is reported as
