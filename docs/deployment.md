@@ -12,9 +12,15 @@ owner-local vault configuration; they never belong in the environment file or
 repository.
 
 `/healthz` proves only that the process can answer. `/readyz` additionally
-checks the read-only serving database path and returns HTTP 503 with an explicit
-reason when it is unavailable. A proxy or compatibility shim must never turn
-that result into a stale direct Engram read or write.
+checks the read-only serving database path and requires an authenticated backup
+no older than `BINKEEPER_BACKUP_MAX_AGE_SECONDS`. It returns HTTP 503 with an
+explicit reason when either dependency is unavailable. A proxy or compatibility
+shim must never turn that result into a stale direct Engram read or write.
+
+The reviewed backup and restore-smoke units are timer-driven templates, not an
+authorization to install or enable them. Their key material belongs only in the
+owner-local mode-0600 vault configuration. See
+[runbooks/backup-restore.md](runbooks/backup-restore.md) before scheduling them.
 
 Deployment files and disposable local/fronted smoke tests do not authorize the
 production writer. BINK-11 owns the service enablement, final route acceptance,

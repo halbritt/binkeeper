@@ -1,6 +1,6 @@
 # BinKeeper extraction analysis
 
-Status: standalone deployment boundary implemented; authority unchanged
+Status: standalone deployment and durability boundaries implemented; authority unchanged
 
 Date: 2026-07-18
 
@@ -13,11 +13,12 @@ Plane project: `BinKeeper` (`BINK`)
 Accepted decision: [ADR 0001](adr/0001-standalone-authority.md), with owner
 acceptance and operating defaults recorded in Plane `BINK-2`.
 
-Implementation status: `BINK-3` through `BINK-9` establish the standalone
+Implementation status: `BINK-3` through `BINK-10` establish the standalone
 package, persistence, transfer, domain, owner workflows, search, and deployment
-boundary. The frozen owner endpoint is loopback `127.0.0.1:8766`, paired with
-tailnet HTTPS at `https://proximal.tail0ecc2e.ts.net:8766`. Engram remains the
-runtime and data authority until the owner-gated `BINK-11` cutover.
+and durability boundaries. The frozen owner endpoint is loopback
+`127.0.0.1:8766`, paired with tailnet HTTPS at
+`https://proximal.tail0ecc2e.ts.net:8766`. Engram remains the runtime and data
+authority until the owner-gated `BINK-11` cutover.
 
 ## Decision summary
 
@@ -208,8 +209,12 @@ are removed.
    the frozen loopback port; the existing tailnet front passed an HTTPS smoke
    rehearsal; and stopping the process produced an explicit 502 rather than a
    stale Engram fallback. Production enablement remains part of `BINK-11`.
-   Rehearse a full cutover and rollback using synthetic fixtures, then a
-   read-only copy of live data.
+   **BINK-10 complete:** authenticated chunked database dumps, exact encrypted
+   blob copies, signed recovery manifests, backup-age readiness, an unmocked
+   disposable restore drill, local scheduling templates, and exact
+   backup/cutover/rollback/retirement runbooks are implemented. Rehearse a full
+   cutover and rollback using synthetic fixtures, then a read-only copy of live
+   data.
 7. Freeze Engram BinKeeper writes, run the final export/import, compare the
    manifest, switch the owner surface, and observe a bounded verification
    window. Roll back by restoring the Engram writer if any protected projection

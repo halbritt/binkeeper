@@ -26,6 +26,8 @@ binkeeper-transfer = "binkeeper.transfer:main"
 binkeeper = "binkeeper.cli:main"
 binkeeper-mcp-stdio = "binkeeper.mcp_stdio:main"
 binkeeper-serve = "binkeeper.service:main"
+binkeeper-backup = "binkeeper.backup_cli:main"
+binkeeper-restore-drill = "binkeeper.restore_drill:main"
 
 [project.optional-dependencies]
 dev = [

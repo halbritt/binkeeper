@@ -1,0 +1,8 @@
+{
+  "backend": "filesystem",
+  "filesystem_root": "/var/lib/binkeeper/blobs",
+  "key_ref": "owner-local://binkeeper/blob-vault/v1",
+  "vault_key_b64": "REPLACE_WITH_32_BYTE_BASE64_KEY",
+  "backup_key_ref": "owner-local://binkeeper/backup/v1",
+  "backup_key_b64": "REPLACE_WITH_DIFFERENT_32_BYTE_BASE64_KEY"
+}

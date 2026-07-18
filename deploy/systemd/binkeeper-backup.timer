@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily authenticated BinKeeper backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=binkeeper-backup.service
+
+[Install]
+WantedBy=timers.target

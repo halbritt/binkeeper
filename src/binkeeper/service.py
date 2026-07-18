@@ -5,15 +5,19 @@ from __future__ import annotations
 import argparse
 import os
 from collections.abc import Callable, Sequence
+from datetime import timedelta
+from pathlib import Path
 from typing import Final
 
 import psycopg
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from binkeeper.backup import BackupError, backup_key_from_config, check_backup_freshness
 from binkeeper.bin_catalog_web import PassportLoader
 from binkeeper.bin_catalog_web import create_app as create_catalog_app
 from binkeeper.bin_photo_web import create_app as create_authoring_app
+from binkeeper.blob_vault import BlobVaultError, load_vault_config
 from binkeeper.database import ServingRoleUnavailableError, connect
 
 FROZEN_HOST: Final[str] = "127.0.0.1"
@@ -34,9 +38,40 @@ def database_readiness() -> tuple[bool, str]:
     return (True, "ready") if row == (1,) else (False, "database probe returned no row")
 
 
+def backup_readiness() -> tuple[bool, str]:
+    """Require an authenticated backup inside the accepted age before cutover."""
+    try:
+        config = load_vault_config()
+        result = check_backup_freshness(
+            Path(os.environ.get("BINKEEPER_BACKUP_ROOT", "/var/lib/binkeeper/backups")),
+            backup_key=backup_key_from_config(config),
+            max_age=timedelta(
+                seconds=int(os.environ.get("BINKEEPER_BACKUP_MAX_AGE_SECONDS", "90000"))
+            ),
+        )
+    except (BackupError, BlobVaultError, OSError, ValueError) as exc:
+        return False, f"backup unavailable: {type(exc).__name__}"
+    return True, f"backup age {int(result.age.total_seconds())} seconds"
+
+
+def operational_readiness(
+    *,
+    database_probe: ReadinessProbe = database_readiness,
+    durability_probe: ReadinessProbe = backup_readiness,
+) -> tuple[bool, str]:
+    """Require both the serving database path and recent recoverability proof."""
+    database_ready, database_detail = database_probe()
+    if not database_ready:
+        return False, database_detail
+    durability_ready, durability_detail = durability_probe()
+    if not durability_ready:
+        return False, durability_detail
+    return True, f"ready; {durability_detail}"
+
+
 def create_app(
     *,
-    readiness_probe: ReadinessProbe = database_readiness,
+    readiness_probe: ReadinessProbe = operational_readiness,
     passport_loader: PassportLoader | None = None,
 ) -> FastAPI:
     """Compose health, catalog, media, and reviewed authoring on one loopback port."""
