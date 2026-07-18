@@ -15,6 +15,7 @@ from binkeeper.bin_placement import PlacementDecisionAppend, record_placement_de
 from binkeeper.bin_route import bin_route
 from binkeeper.bin_sweep import BIN_SWEEP_DEFAULT_LIMIT, bin_sweep
 from binkeeper.database import connect
+from binkeeper.search import search_inventory
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,6 +46,10 @@ def build_parser() -> argparse.ArgumentParser:
     passport = subparsers.add_parser("bin-passport", help="render a read-only bin passport")
     passport.add_argument("bin_code")
     _scope(passport)
+    search = subparsers.add_parser("bin-search", help="search local inventory evidence")
+    search.add_argument("query")
+    search.add_argument("--limit", type=int, default=20)
+    _scope(search)
     route = subparsers.add_parser("bin-route", help="route typed item text over passports")
     route.add_argument("--text", required=True)
     route.add_argument("--site", required=True)
@@ -98,6 +103,8 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
         return bin_belief(conn, args.bin_code, **common).to_json()
     if args.command == "bin-passport":
         return bin_passport(conn, args.bin_code, **common).to_json()
+    if args.command == "bin-search":
+        return search_inventory(conn, args.query, limit=args.limit, **common).to_json()
     if args.command == "bin-route":
         return bin_route(conn, text=args.text, site=args.site, **common).to_json()
     if args.command == "bin-placement-decision":
@@ -131,6 +138,7 @@ def main() -> None:
         "bin-where",
         "bin-belief",
         "bin-passport",
+        "bin-search",
         "bin-route",
         "bin-sweep",
     }

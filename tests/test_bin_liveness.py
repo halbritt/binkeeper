@@ -16,6 +16,7 @@ from binkeeper.bin_liveness import (
 )
 from binkeeper.bin_passport import BinPassport
 from binkeeper.bin_route import route_text_item
+from binkeeper.liveness_adapter import LivenessMention, StaticLivenessSource
 
 NOW = datetime(2026, 7, 7, 12, 0, 0, tzinfo=UTC)
 
@@ -77,6 +78,28 @@ def _insert_text(
     )
 
 
+def _export_source(conn: psycopg.Connection) -> StaticLivenessSource:
+    rows = conn.execute(
+        """
+        SELECT source_kind, external_id, content_text, observed_at, privacy_tier
+        FROM captures
+        WHERE content_text IS NOT NULL AND observed_at IS NOT NULL
+        """
+    ).fetchall()
+    return StaticLivenessSource(
+        tuple(
+            LivenessMention(
+                source_kind=str(row[0]),
+                source_ref=str(row[1]),
+                content_text=str(row[2]),
+                mentioned_at=row[3],
+                privacy_tier=int(row[4]),
+            )
+            for row in rows
+        )
+    )
+
+
 def test_harvest_records_liveness_from_approved_text(conn: psycopg.Connection) -> None:
     _insert_bin_capture(conn, bin_code="FAB-003", accepts=["calipers", "hex keys"])
     _insert_text(
@@ -86,8 +109,9 @@ def test_harvest_records_liveness_from_approved_text(conn: psycopg.Connection) -
         content_text="I finally found the calipers today",
     )
 
-    first = harvest_item_liveness(conn, now=NOW)
-    second = harvest_item_liveness(conn, now=NOW)  # idempotent
+    source = _export_source(conn)
+    first = harvest_item_liveness(conn, now=NOW, source=source)
+    second = harvest_item_liveness(conn, now=NOW, source=source)  # idempotent
 
     assert first.mentions_recorded >= 1
     assert second.mentions_recorded == 0
@@ -104,7 +128,7 @@ def test_harvest_ignores_excluded_sources(conn: psycopg.Connection) -> None:
         content_text="your micrometer order shipped",
     )
 
-    harvest_item_liveness(conn, now=NOW)
+    harvest_item_liveness(conn, now=NOW, source=_export_source(conn))
 
     rows = conn.execute(
         "SELECT count(*) FROM bin_item_liveness WHERE source_kind = 'gmail'"
@@ -119,6 +143,18 @@ def test_source_policy_refuses_email_and_work_corpus(conn: psycopg.Connection) -
             harvest_item_liveness(conn, now=NOW, source_kinds=["capture", forbidden])
 
 
+def test_missing_offline_adapter_is_explicitly_unavailable(
+    conn: psycopg.Connection,
+) -> None:
+    _insert_bin_capture(conn, bin_code="FAB-ADAPTER", accepts=["torque wrench"])
+
+    result = harvest_item_liveness(conn, now=NOW)
+
+    assert result.source_status == "unavailable"
+    assert result.mentions_recorded == 0
+    assert result.source_reason == "offline liveness export is not configured"
+
+
 def test_liveness_scores_decay_with_age(conn: psycopg.Connection) -> None:
     _insert_bin_capture(conn, bin_code="FAB-005", accepts=["torque wrench"])
     _insert_text(
@@ -128,7 +164,7 @@ def test_liveness_scores_decay_with_age(conn: psycopg.Connection) -> None:
         content_text="used the torque wrench",
         observed_at=NOW - timedelta(days=400),
     )
-    harvest_item_liveness(conn, now=NOW)
+    harvest_item_liveness(conn, now=NOW, source=_export_source(conn))
 
     key = normalize_phrase("torque wrench")
     fresh = item_liveness_scores(conn, now=NOW - timedelta(days=390))[key]
@@ -139,7 +175,7 @@ def test_liveness_scores_decay_with_age(conn: psycopg.Connection) -> None:
 def test_liveness_is_append_only(conn: psycopg.Connection) -> None:
     _insert_bin_capture(conn, bin_code="FAB-006", accepts=["calipers"])
     _insert_text(conn, external_id="note-2", source_kind="capture", content_text="the calipers")
-    harvest_item_liveness(conn, now=NOW)
+    harvest_item_liveness(conn, now=NOW, source=_export_source(conn))
 
     with pytest.raises(psycopg.errors.RaiseException):
         conn.execute("UPDATE bin_item_liveness SET phrase_norm = 'x'")

@@ -63,6 +63,20 @@ def tool_schemas() -> list[dict[str, Any]]:
                 ("bin_passport", "Render a provenance-bearing passport."),
             )
         ],
+        {
+            "name": "binkeeper.bin_search",
+            "description": "Run local exact and lexical inventory search.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+                    **scope,
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
     ]
 
 
@@ -84,4 +98,6 @@ def call_tool(conn: psycopg.Connection, name: str, arguments: dict[str, Any]) ->
             if not hasattr(namespace, key):
                 setattr(namespace, key, None)
         namespace.source_label = "mcp"
+    elif command == "bin-search" and not hasattr(namespace, "limit"):
+        namespace.limit = 20
     return execute(namespace, conn)

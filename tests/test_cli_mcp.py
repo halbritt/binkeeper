@@ -16,6 +16,7 @@ def test_cli_help_names_standalone_commands(capsys: pytest.CaptureFixture[str]) 
     help_text = capsys.readouterr().out
     assert "trip-scan" in help_text
     assert "bin-passport" in help_text
+    assert "bin-search" in help_text
     assert "bin-placement-decision" in help_text
     assert "engram" not in help_text.lower()
 
@@ -32,6 +33,7 @@ def test_mcp_schema_snapshot_uses_only_binkeeper_names() -> None:
         "binkeeper.bin_where",
         "binkeeper.bin_belief",
         "binkeeper.bin_passport",
+        "binkeeper.bin_search",
     ]
     rendered = json.dumps(schemas, sort_keys=True)
     assert "engram" not in rendered.lower()

@@ -198,6 +198,10 @@ are removed.
    media projection, advisory local vision, catalog, reviewed management,
    registration, and bounded label handoff now run behind BinKeeper-owned
    modules with synthetic/disposable tests. No live route or hardware was used.
+   **BINK-8 complete:** exact and lexical inventory search reads BinKeeper-owned
+   evidence, and optional transcript liveness accepts only a versioned inert
+   local export. Adapter absence is explicit and no model, embedding, cloud,
+   or Engram table read was added.
 6. Add backup/restore and deployment checks. Rehearse a full cutover and rollback
    using synthetic fixtures, then a read-only copy of live data.
 7. Freeze Engram BinKeeper writes, run the final export/import, compare the
