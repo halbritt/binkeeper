@@ -3,8 +3,9 @@
 BinKeeper is a local-first system for tracking physical storage bins, their
 contents, locations, photos, movement history, and placement recommendations.
 
-Status: extraction decision accepted; implementation and cutover remain in
-progress. The working implementation and data authority still live in
+Status: standalone package scaffold and pure preservation tests are present;
+persistence, owner surfaces, deployment, and cutover remain in progress. The
+working implementation and data authority still live in
 [halbritt/engram](https://github.com/halbritt/engram). Do not deploy this
 repository or treat it as the data authority until the verified one-writer
 cutover in `BINK-11` succeeds.
@@ -16,6 +17,9 @@ the private Proximal Plane workspace under project `BINK`.
 Architecture decisions use short, sequential records under
 [`docs/adr/`](docs/adr/). The accepted standalone-authority decision is
 [ADR 0001](docs/adr/0001-standalone-authority.md).
+
+The [test parity inventory](docs/test-parity.md) accounts for the 295-test
+Engram baseline and keeps unported behavior explicitly deferred.
 
 ## Invariants
 
@@ -29,3 +33,18 @@ Architecture decisions use short, sequential records under
   placement without an explicit owner action.
 - Owner web surfaces must work through tailnet HTTPS; loopback-only success is
   not sufficient.
+
+## Development
+
+```sh
+make install
+make lint
+make typecheck
+make test
+make migration-test
+make package-test
+```
+
+`make check` runs the full verification sequence; the editable install is a
+prerequisite of each target. The current test suite is synthetic and does not
+connect to Engram or a live database.

@@ -1,6 +1,6 @@
 # BinKeeper extraction analysis
 
-Status: extraction accepted; implementation pending
+Status: extraction accepted; standalone scaffold landed, authority unchanged
 
 Date: 2026-07-18
 
@@ -12,6 +12,11 @@ Plane project: `BinKeeper` (`BINK`)
 
 Accepted decision: [ADR 0001](adr/0001-standalone-authority.md), with owner
 acceptance and operating defaults recorded in Plane `BINK-2`.
+
+Implementation status: `BINK-3` establishes the installable package, build and
+verification commands, catalog/photo package-resource roots, pure synthetic
+preservation tests, and the [295-test parity inventory](test-parity.md). Engram
+remains the runtime and data authority.
 
 ## Decision summary
 

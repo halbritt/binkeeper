@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "binkeeper"
+version = "0.1.0"
+description = "Local-first physical inventory system"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2,<2",
+    "pyright>=1.1.380,<2",
+    "pytest>=8,<9",
+    "ruff>=0.6,<1",
+    "setuptools>=69",
+    "wheel",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"binkeeper.catalog" = ["templates/*"]
+"binkeeper.photo" = ["templates/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "migration: exercises the standalone migration surface",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "TID"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B", "SIM"]
+
+[tool.pyright]
+include = ["src", "tests", "scripts"]
+exclude = ["**/__pycache__", ".venv"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMissingImports = "error"
+reportMissingTypeStubs = "none"
+reportUnknownMemberType = "none"
+reportUnknownVariableType = "none"
+reportUnknownArgumentType = "none"
+reportGeneralTypeIssues = "warning"
