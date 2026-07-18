@@ -78,11 +78,7 @@ def create_app(
 ) -> FastAPI:
     """Compose health, catalog, media, and reviewed authoring on one loopback port."""
     paired = (("https", FROZEN_TAILNET_HOST),)
-    writer_open = (
-        writes_enabled
-        if writes_enabled is not None
-        else writer_authority_enabled()
-    )
+    writer_open = writes_enabled if writes_enabled is not None else writer_authority_enabled()
     app = FastAPI(title="BinKeeper", docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.middleware("http")
@@ -112,6 +108,7 @@ def create_app(
         base_path="/bins",
         allowed_paired_origins=paired,
         authoring_enabled=writer_open,
+        authoring_base_path="",
         passport_loader=passport_loader,
     )
     authoring = create_authoring_app(

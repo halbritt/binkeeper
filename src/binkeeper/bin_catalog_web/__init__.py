@@ -213,6 +213,7 @@ def create_app(
     tenant_id: str = "personal",
     corpus_id: str = "personal",
     authoring_enabled: bool = False,
+    authoring_base_path: str = "/bin-photo",
     passport_loader: PassportLoader | None = None,
     photo_source: BinCatalogPhotoSource | None = None,
 ) -> FastAPI:
@@ -221,6 +222,7 @@ def create_app(
     if normalized_host not in _LOOPBACK_HOSTS:
         raise ValueError(f"bin catalog web refuses non-loopback host: {host}")
     normalized_base_path = normalize_base_path(base_path)
+    normalized_authoring_base_path = normalize_base_path(authoring_base_path)
     paired_origins = tuple(allowed_paired_origins)
     bound_port = int(port)
 
@@ -261,13 +263,16 @@ def create_app(
     def path(suffix: str = "/") -> str:
         return surface_path(normalized_base_path, suffix)
 
+    def authoring_path(suffix: str = "/") -> str:
+        return surface_path(normalized_authoring_base_path, suffix)
+
     shell_context: dict[str, object] = {
         "surface_label": "Bin catalog",
         "bind_address": f"{normalized_host}:{bound_port}",
         "surface_path": path,
         "catalog_url": path("/"),
-        "photo_url": "/bin-photo/",
-        "register_url": "/bin-photo/register",
+        "photo_url": authoring_path("/"),
+        "register_url": authoring_path("/register"),
         "binkeeper_section": "catalog",
         "authoring_enabled": authoring_enabled,
         "help_title": "Bin catalog help",
@@ -312,7 +317,7 @@ def create_app(
                         else None
                     ),
                     manage_url=(
-                        f"/bin-photo/manage/{quote(passport.bin_code, safe='')}"
+                        authoring_path(f"/manage/{quote(passport.bin_code, safe='')}")
                         if authoring_enabled
                         else None
                     ),

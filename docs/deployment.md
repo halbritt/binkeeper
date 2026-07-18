@@ -5,6 +5,11 @@ by tailnet-only HTTPS at `https://proximal.tail0ecc2e.ts.net:8766`. Engram keeps
 `:8765` throughout the compatibility window. Do not change either mapping in a
 package install or service restart.
 
+The standalone catalog is mounted at `/bins/`; its photo, registration, and
+management links target the standalone authoring mount at `/`, `/register`, and
+`/manage/<bin-code>`. The legacy `/bin-photo/` prefix belongs to Engram's
+compatibility surface and is not emitted by the standalone catalog.
+
 Install the wheel into `/opt/binkeeper/venv`, copy the reviewed unit from
 `deploy/systemd/binkeeper.service`, and create `/etc/binkeeper/binkeeper.env`
 from the example with owner-only permissions. Blob keys stay in the separate

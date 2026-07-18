@@ -5,12 +5,33 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from binkeeper.bin_passport import BinPassport
 from binkeeper.service import (
     FROZEN_PORT,
     FROZEN_TAILNET_ORIGIN,
     create_app,
     operational_readiness,
 )
+
+
+def _passport() -> BinPassport:
+    return BinPassport(
+        bin_code="TST-SERVICE",
+        theme="Synthetic fixtures",
+        home_site="site-a",
+        current_site="site-a",
+        owner_phrase="Synthetic owner phrase",
+        accepts=(),
+        excludes=(),
+        examples=(),
+        sibling_contents=("synthetic contents",),
+        physical_constraints=(),
+        volume_profile=None,
+        capacity_state="unknown",
+        location_confidence=1.0,
+        passport_confidence=1.0,
+        provenance_refs=("synthetic:test",),
+    )
 
 
 def test_production_service_can_write_only_its_blob_root() -> None:
@@ -62,6 +83,25 @@ def test_catalog_and_authoring_are_mounted_without_hosted_assets() -> None:
     assert client.get("/bins/").status_code == 200
     assert client.get("/").status_code == 200
     assert client.get("/shared-static/binkeeper.css").status_code == 200
+
+
+def test_catalog_links_to_the_standalone_authoring_mount() -> None:
+    client = TestClient(
+        create_app(
+            readiness_probe=lambda: (True, "ready"),
+            passport_loader=lambda: [_passport()],
+            writes_enabled=True,
+        ),
+        base_url="http://127.0.0.1:8766",
+    )
+
+    response = client.get("/bins/")
+
+    assert response.status_code == 200
+    assert 'href="/"' in response.text
+    assert 'href="/register"' in response.text
+    assert 'href="/manage/TST-SERVICE"' in response.text
+    assert "/bin-photo/" not in response.text
 
 
 def test_writer_is_fail_closed_until_cutover_authority_is_opened() -> None:
