@@ -15,8 +15,9 @@ acceptance and operating defaults are recorded in Plane `BINK-2`.
 
 Implementation status: `BINK-11` completed in an owner-approved window on
 2026-07-18. BinKeeper is now the sole physical-inventory writer and authority;
-Engram's direct inventory writer is frozen while the separately gated
-compatibility and retirement work proceeds.
+Engram's direct inventory writer, compatibility names, and embedded runtime
+were retired under `BINK-13` after consumer probes and the rollback-window
+observation passed.
 
 BinKeeper owns its Python package, database and migrations, local process, CLI,
 web surface, and `binkeeper.*` MCP interface. It initially uses the existing
@@ -28,16 +29,15 @@ depend on storage tables or implementation modules.
 
 ## Operating defaults
 
-- Engram compatibility shims remain until `BINK-12` consumer probes pass, with
-  a hard maximum of 30 days after production cutover. Extension requires a new
-  owner decision.
+- The former Engram compatibility shims were removed under `BINK-13` after
+  `BINK-12` consumer probes passed; they must not be restored as a second
+  implementation or writer.
 - During the verification window, the owner or executing operator may restore
   the Engram writer immediately after a manifest mismatch, incorrect protected
   projection, failed physical-action path, or failed backup/restore check.
 - The owner surface stays local and is published through tailnet HTTPS on
-  `proximal.tail0ecc2e.ts.net`. Engram's active `:8765` route stays in place
-  throughout the compatibility window. `BINK-9` must freeze a dedicated,
-  collision-free BinKeeper HTTPS and loopback port before changing routes.
+  `proximal.tail0ecc2e.ts.net:8766`, backed by loopback `127.0.0.1:8766`.
+  Engram remains independently served on `:8765` with no inventory routes.
 - The four current bin-linked blobs are re-encrypted under a BinKeeper-owned
   key. Migration and restored backups must reproduce their plaintext hashes.
   This decision does not authorize a live key or blob operation.

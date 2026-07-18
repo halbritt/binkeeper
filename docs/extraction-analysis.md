@@ -20,8 +20,9 @@ and durability boundaries. The frozen owner endpoint is loopback
 `https://proximal.tail0ecc2e.ts.net:8766`. The owner-approved `BINK-11` window
 completed on 2026-07-18: Engram's inventory writer was frozen before the final
 export, BinKeeper imported the manifest exactly and idempotently, and only then
-opened its writer. Engram now retains immutable provenance and time-bounded
-compatibility names that resolve to BinKeeper.
+opened its writer. `BINK-12` consumer probes and the full rollback-window
+observation then passed; `BINK-13` removed Engram's compatibility names and
+embedded runtime. Engram now retains immutable provenance and migrations only.
 
 ## Decision summary
 
@@ -227,13 +228,14 @@ are removed.
    twice, verified all four blobs plus authenticated backup/restore, activated
    compatibility reads with target writes still frozen, and then opened only
    the BinKeeper writer at move watermark 5.
-7. **Complete.** Engram BinKeeper writes are frozen, owner routes and legacy
-   names resolve to BinKeeper, and the bounded verification checks passed.
-   Restore the Engram writer only through the documented immediate rollback if
-   a protected mismatch is discovered inside the accepted window.
-8. Update Praxis and any other consumers. Remove Engram compatibility shims only
-   after consumer probes pass.
-9. Supersede Engram decisions and docs that say BinKeeper lives inside Engram.
+7. **Complete.** Engram BinKeeper writes were frozen, owner routes and temporary
+   legacy names resolved only to BinKeeper, and the bounded verification checks
+   passed through the full accepted rollback window.
+8. **Complete.** Praxis and named consumer probes use standalone BinKeeper
+   contracts; no consumer requires an Engram implementation or table seam.
+9. **Complete.** `BINK-13` removed Engram compatibility and runtime wiring and
+   superseded the Engram-hosted decisions/docs while preserving migrations,
+   captures, ledgers, blobs, decisions, and audit provenance.
    Keep historical migrations and frozen data for provenance unless a later
    explicit retention decision authorizes something else.
 
@@ -262,12 +264,12 @@ itself accept a cutover.
 
 ## Accepted operating defaults and unresolved decisions
 
-- Engram compatibility shims remain until `BINK-12` probes pass, with a hard
-  maximum of 30 days after production cutover. Extension requires a new owner
-  decision.
+- Engram compatibility shims were removed under `BINK-13` after `BINK-12`
+  probes and the accepted observation window passed. Restoring them requires a
+  new owner decision and must never restore a second writer.
 - The standalone endpoint is frozen to loopback `127.0.0.1:8766` and tailnet
-  HTTPS `https://proximal.tail0ecc2e.ts.net:8766`; Engram retains `:8765`
-  throughout the compatibility window.
+  HTTPS `https://proximal.tail0ecc2e.ts.net:8766`; Engram retains its unrelated
+  operator service on `:8765` with no inventory routes.
 - The four current bin-linked blobs will be re-encrypted under a
   BinKeeper-owned key. Migration and backup/restore must verify plaintext
   hashes before authority moves.

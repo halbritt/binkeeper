@@ -10,8 +10,9 @@ The standalone loopback service, hardened deployment files, frozen tailnet
 endpoint, authenticated backup/restore drill, and freshness gate are deployed.
 The owner-approved `BINK-11` one-writer cutover completed on 2026-07-18;
 BinKeeper is now the live physical-inventory authority. Engram retains frozen
-historical evidence and time-bounded compatibility names, but no direct
-inventory writer.
+historical evidence and migrations, but its runtime, compatibility names, and
+direct inventory writer were retired under `BINK-13` after the accepted
+consumer and rollback-window gates.
 
 The extraction plan is in
 [docs/extraction-analysis.md](docs/extraction-analysis.md). Work is tracked in
@@ -65,11 +66,11 @@ accepted `BINK-11` cutover.
 The packaged service is fail-closed for writes unless
 `BINKEEPER_WRITES_ENABLED=1`; opening that gate is an owner-approved cutover
 action, not a deployment default. The same process-wide gate protects the CLI
-and MCP mutation paths, so compatibility subprocesses cannot bypass the frozen
-HTTP writer.
+and MCP mutation paths.
 Durability operations and exact recovery stop conditions are documented in
-[docs/runbooks/backup-restore.md](docs/runbooks/backup-restore.md). The
-compatibility-retirement procedure remains separately gated by `BINK-13`.
+[docs/runbooks/backup-restore.md](docs/runbooks/backup-restore.md). The completed
+compatibility-retirement record is in
+[docs/runbooks/compatibility-retirement.md](docs/runbooks/compatibility-retirement.md).
 Run local inventory search with `binkeeper bin-search QUERY`. Transcript
 liveness is optional and accepts only the inert file contract documented in
 [docs/liveness-adapter.md](docs/liveness-adapter.md); absence is reported as

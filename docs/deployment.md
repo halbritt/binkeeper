@@ -2,13 +2,14 @@
 
 The frozen standalone endpoint is loopback `127.0.0.1:8766`, already fronted
 by tailnet-only HTTPS at `https://proximal.tail0ecc2e.ts.net:8766`. Engram keeps
-`:8765` throughout the compatibility window. Do not change either mapping in a
-package install or service restart.
+its unrelated operator service on `:8765`; it no longer mounts or redirects
+inventory paths. Do not change either mapping in a package install or service
+restart.
 
 The standalone catalog is mounted at `/bins/`; its photo, registration, and
 management links target the standalone authoring mount at `/`, `/register`, and
-`/manage/<bin-code>`. The legacy `/bin-photo/` prefix belongs to Engram's
-compatibility surface and is not emitted by the standalone catalog.
+`/manage/<bin-code>`. The retired Engram `/bin-photo/` prefix is not emitted by
+the standalone catalog.
 
 Install the wheel into `/opt/binkeeper/venv`, copy the reviewed unit from
 `deploy/systemd/binkeeper.service`, and create `/etc/binkeeper/binkeeper.env`
@@ -22,15 +23,15 @@ writable only by the separate backup unit.
 method returns HTTP 503 before an authoring handler runs, the catalog hides
 authoring links, and standalone CLI or MCP mutation commands fail before
 appending evidence. Starting the process for a rehearsal therefore does not
-start a second writer, including through an Engram compatibility subprocess.
+start a second writer.
 Set it to `1` only at BINK-11's approved one-writer step after the Engram writer
 has been frozen and its refusal recorded.
 
 `/healthz` proves only that the process can answer. `/readyz` additionally
 checks the read-only serving database path and requires an authenticated backup
 no older than `BINKEEPER_BACKUP_MAX_AGE_SECONDS`. It returns HTTP 503 with an
-explicit reason when either dependency is unavailable. A proxy or compatibility
-shim must never turn that result into a stale direct Engram read or write.
+explicit reason when either dependency is unavailable. A proxy must never turn
+that result into a stale or cross-database read or write.
 
 The reviewed backup and restore-smoke units are timer-driven templates, not an
 authorization to install or enable them. Their key material belongs only in the
