@@ -10,6 +10,7 @@ from psycopg import sql
 
 from binkeeper.blob_vault import FilesystemBlobStore, open_blob, put_blob
 from binkeeper.migrations import migrate
+from binkeeper.transfer import SCHEMA_VERSION, TABLE_ORDER, build_manifest, import_snapshot
 
 DATABASE_URL = os.environ.get("BINKEEPER_TEST_DATABASE_URL")
 EVIDENCE_TABLES = (
@@ -56,6 +57,53 @@ def test_serving_role_cannot_write_evidence(conn: psycopg.Connection, table: str
             conn.execute(sql.SQL("DELETE FROM {}").format(sql.Identifier(table)))
     finally:
         conn.rollback()
+
+
+@pytest.mark.migration
+def test_synthetic_snapshot_import_is_idempotent(conn: psycopg.Connection) -> None:
+    timestamp = "2026-01-01T00:00:00+00:00"
+    tables: dict[str, list[dict[str, object]]] = {table: [] for table in TABLE_ORDER}
+    tables["capture_evidence"] = [
+        {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "seq": 1,
+            "external_id": "synthetic-transfer-capture",
+            "source_external_id": "synthetic-source",
+            "captured_at": timestamp,
+            "recorded_at": timestamp,
+            "content_text": "synthetic contents",
+            "payload": {"metadata": {"kind": "bin_capture", "bin_code": "TST-001"}},
+            "privacy_class": "private",
+            "provenance": {"source_table": "synthetic"},
+        }
+    ]
+    tables["bin_trip_events"] = [
+        {
+            "id": "00000000-0000-0000-0000-000000000002",
+            "seq": 1,
+            "external_id": "synthetic-transfer-place",
+            "event_kind": "place",
+            "trip_id": None,
+            "bin_code": "TST-001",
+            "from_site": None,
+            "to_site": None,
+            "site": "site-a",
+            "occurred_at": timestamp,
+            "recorded_at": timestamp,
+            "payload": {},
+            "privacy_class": "private",
+            "provenance": {"source_table": "synthetic"},
+        }
+    ]
+    snapshot: dict[str, object] = {"schema_version": SCHEMA_VERSION, "tables": tables}
+    snapshot["manifest"] = build_manifest(snapshot)
+
+    import_snapshot(conn, snapshot)
+    import_snapshot(conn, snapshot)
+
+    assert conn.execute(
+        "SELECT count(*) FROM capture_evidence WHERE external_id = 'synthetic-transfer-capture'"
+    ).fetchone() == (1,)
 
 
 @pytest.mark.migration

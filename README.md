@@ -23,6 +23,8 @@ The [test parity inventory](docs/test-parity.md) accounts for the 295-test
 Engram baseline and keeps unported behavior explicitly deferred.
 [ADR 0002](docs/adr/0002-blob-key-transition.md) fixes the blob transition as
 re-encryption under a BinKeeper-owned key.
+The [transfer contract](docs/transfer.md) describes the read-only exporter,
+isolated importer, and fail-closed manifest.
 
 ## Invariants
 

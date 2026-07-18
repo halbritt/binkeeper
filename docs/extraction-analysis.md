@@ -188,6 +188,9 @@ are removed.
 4. Build a deterministic exporter from Engram and importer into a disposable
    BinKeeper database. Generate a manifest of row counts, stable ids, payload
    hashes, blob hashes, projected locations, trip checksums, and passports.
+   **Implemented in BINK-5:** export is read-only and pinned to the accepted
+   source schema; import has only a target connection and verifies every
+   protected manifest dimension before committing.
 5. Extract label, vision, photo, catalog, management, CLI, and MCP surfaces.
    Keep network access local and preserve strict front/origin checks.
 6. Add backup/restore and deployment checks. Rehearse a full cutover and rollback
