@@ -24,8 +24,8 @@ from typing import Final, Literal
 import psycopg
 from psycopg.types.json import Jsonb
 
-DEFAULT_BIN_TENANT_ID: Final[str] = os.environ.get("ENGRAM_BIN_TENANT_ID", "personal")
-DEFAULT_BIN_CORPUS_ID: Final[str] = os.environ.get("ENGRAM_BIN_CORPUS_ID", "personal")
+DEFAULT_BIN_TENANT_ID: Final[str] = os.environ.get("BINKEEPER_BIN_TENANT_ID", "personal")
+DEFAULT_BIN_CORPUS_ID: Final[str] = os.environ.get("BINKEEPER_BIN_CORPUS_ID", "personal")
 DEFAULT_ORDER_SOURCE_LABEL: Final[str] = "manual"
 DEFAULT_RESTING_ORDER_ACTION: Final[str] = "confirm_bin"
 RESTING_ORDER_SCHEMA_VERSION: Final[str] = "bin_resting_order_event.v1"

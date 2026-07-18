@@ -1,0 +1,8 @@
+<nav class="surface-tabs" aria-label="Operator surfaces">
+  <a class="surface-tab{% if surface == 'interview' %} is-active{% endif %}"
+     href="{{ interview_url|default('/') }}">Interview</a>
+  <a class="surface-tab{% if surface == 'context_quiz' %} is-active{% endif %}"
+     href="{{ context_quiz_url|default('/context-quiz/') }}">Context quiz</a>
+  <a class="surface-tab{% if surface == 'bin_catalog' %} is-active{% endif %}"
+     href="{{ bin_catalog_url|default('/bins/') }}">Bin catalog</a>
+</nav>

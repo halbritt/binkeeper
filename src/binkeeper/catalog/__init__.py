@@ -1,6 +1,3 @@
-"""Catalog package resources.
-
-The owner-facing catalog moves from Engram in BINK-7.
-"""
+"""Compatibility resource marker; the app lives in ``binkeeper.bin_catalog_web``."""
 
 from __future__ import annotations

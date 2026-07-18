@@ -1,1 +1,1 @@
-This directory is packaged for the catalog templates extracted in BINK-7.
+Compatibility resource marker. Runtime catalog templates live in binkeeper.bin_catalog_web.

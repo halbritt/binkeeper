@@ -24,13 +24,13 @@ from typing import Final, Literal
 import psycopg
 from psycopg.types.json import Jsonb
 
-DEFAULT_BIN_TENANT_ID: Final[str] = os.environ.get("ENGRAM_BIN_TENANT_ID", "personal")
-DEFAULT_BIN_CORPUS_ID: Final[str] = os.environ.get("ENGRAM_BIN_CORPUS_ID", "personal")
+DEFAULT_BIN_TENANT_ID: Final[str] = os.environ.get("BINKEEPER_BIN_TENANT_ID", "personal")
+DEFAULT_BIN_CORPUS_ID: Final[str] = os.environ.get("BINKEEPER_BIN_CORPUS_ID", "personal")
 DEFAULT_PRESENCE_SOURCE_LABEL: Final[str] = "manual"
 PRESENCE_TABLE: Final[str] = "bin_presence_events"
 PRESENCE_EVENT_SCHEMA_VERSION: Final[str] = "bin_presence_event.v1"
 BIN_PRESENCE_WINDOW_HOURS: Final[float] = float(
-    os.environ.get("ENGRAM_BIN_PRESENCE_WINDOW_HOURS", "6")
+    os.environ.get("BINKEEPER_BIN_PRESENCE_WINDOW_HOURS", "6")
 )
 BIN_PRESENCE_WINDOW_SECONDS: Final[float] = BIN_PRESENCE_WINDOW_HOURS * 3600.0
 

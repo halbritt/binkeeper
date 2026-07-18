@@ -23,7 +23,7 @@ from binkeeper.bin_inventory import DEFAULT_BIN_CORPUS_ID, DEFAULT_BIN_TENANT_ID
 from binkeeper.bin_passport import load_bin_passports
 
 BIN_LIVENESS_HARVESTER_VERSION: Final[str] = os.environ.get(
-    "ENGRAM_BIN_LIVENESS_HARVESTER_VERSION", "bin-liveness.v1.rfc0088-t3b"
+    "BINKEEPER_BIN_LIVENESS_HARVESTER_VERSION", "bin-liveness.v1.rfc0088-t3b"
 )
 # Approved owner-life text only. gmail (email), git (code), and claude_code (the
 # removed work corpus) are deliberately excluded; owner decision 2026-07-07.
@@ -37,14 +37,14 @@ _DEFAULT_APPROVED_SOURCE_KINDS: Final[tuple[str, ...]] = (
 APPROVED_LIVENESS_SOURCE_KINDS: Final[tuple[str, ...]] = tuple(
     kind.strip()
     for kind in os.environ.get(
-        "ENGRAM_BIN_LIVENESS_SOURCE_KINDS", ",".join(_DEFAULT_APPROVED_SOURCE_KINDS)
+        "BINKEEPER_BIN_LIVENESS_SOURCE_KINDS", ",".join(_DEFAULT_APPROVED_SOURCE_KINDS)
     ).split(",")
     if kind.strip()
 )
 _EXCLUDED_SOURCE_KINDS: Final[frozenset[str]] = frozenset({"gmail", "git", "claude_code"})
-BIN_LIVENESS_TIER_MAX: Final[int] = int(os.environ.get("ENGRAM_BIN_LIVENESS_TIER_MAX", "1"))
+BIN_LIVENESS_TIER_MAX: Final[int] = int(os.environ.get("BINKEEPER_BIN_LIVENESS_TIER_MAX", "1"))
 BIN_LIVENESS_HALF_LIFE_DAYS: Final[float] = float(
-    os.environ.get("ENGRAM_BIN_LIVENESS_HALF_LIFE_DAYS", "45")
+    os.environ.get("BINKEEPER_BIN_LIVENESS_HALF_LIFE_DAYS", "45")
 )
 _MIN_PHRASE_LEN: Final[int] = 4
 _TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"[a-z0-9]+", re.IGNORECASE)

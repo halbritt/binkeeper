@@ -79,7 +79,7 @@ def register_bin(
         "bin_code": code,
         "site": clean_site,
         "captured_at": when.isoformat(),
-        "app": "engram-bin-register/0.1",
+        "app": "binkeeper-bin-register/0.1",
     }
     if gps is not None:
         metadata["gps"] = {"lat": gps.lat, "lon": gps.lon, "accuracy_m": gps.accuracy_m}

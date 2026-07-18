@@ -22,9 +22,9 @@ from binkeeper.bin_route import TextRoute, bin_route
 
 PLACEMENT_LEDGER_SCHEMA_VERSION: Final[str] = "bin_placement_ledger.v1.rfc0093-p2a"
 DEFAULT_PLACEMENT_SOURCE_LABEL: Final[str] = os.environ.get(
-    "ENGRAM_BIN_PLACEMENT_SOURCE_LABEL", "manual"
+    "BINKEEPER_BIN_PLACEMENT_SOURCE_LABEL", "manual"
 )
-DEFAULT_PLACEMENT_ACTOR: Final[str] = os.environ.get("ENGRAM_BIN_PLACEMENT_ACTOR", "owner")
+DEFAULT_PLACEMENT_ACTOR: Final[str] = os.environ.get("BINKEEPER_BIN_PLACEMENT_ACTOR", "owner")
 
 DecisionKind = Literal[
     "accept",

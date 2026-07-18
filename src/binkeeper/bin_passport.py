@@ -28,7 +28,7 @@ from binkeeper.bin_inventory import (
 
 BIN_CAPTURE_KIND: Final[str] = "bin_capture"
 BIN_PASSPORT_PROJECTOR_VERSION: Final[str] = os.environ.get(
-    "ENGRAM_BIN_PASSPORT_PROJECTOR_VERSION", "bin-passport.v1.rfc0093-p0"
+    "BINKEEPER_BIN_PASSPORT_PROJECTOR_VERSION", "bin-passport.v1.rfc0093-p0"
 )
 
 CapacityState = Literal["unknown", "empty", "sparse", "half", "tight", "full", "overfull"]

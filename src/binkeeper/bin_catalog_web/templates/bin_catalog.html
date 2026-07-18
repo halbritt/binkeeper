@@ -1,0 +1,513 @@
+{% extends "_app_shell.html" %}
+
+{% block title %}BinKeeper Catalog{% endblock %}
+
+{% block brand_line %}
+<div class="brand-line">
+  <span class="brand-mark" aria-hidden="true"></span>
+  <span class="brand-name">BinKeeper</span>
+  <span aria-hidden="true">·</span>
+  <span class="surface-label">Catalog</span>
+</div>
+{% endblock %}
+
+{% block surface_navigation %}{% include "_binkeeper_tabs.html" %}{% endblock %}
+
+{% block head_extra %}
+<style>
+  .bin-catalog-page { display: grid; gap: var(--space-5); }
+  .bin-catalog-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-4);
+    align-items: end;
+  }
+  .bin-catalog-kicker {
+    margin: 0;
+    color: var(--color-accent);
+    font-size: var(--type-meta);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .bin-catalog-intro { max-width: 46rem; margin: 0; }
+  .bin-catalog-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(7rem, 1fr));
+    gap: var(--space-2);
+  }
+  .bin-catalog-stat {
+    display: grid;
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface-muted);
+  }
+  .bin-catalog-stat strong { font-size: var(--type-heading); }
+  .bin-catalog-stat span { color: var(--color-fg-muted); font-size: var(--type-meta); }
+  .bin-catalog-filter {
+    display: grid;
+    grid-template-columns: minmax(14rem, 2fr) minmax(11rem, 1fr) auto;
+    gap: var(--space-3);
+    align-items: end;
+  }
+  .bin-catalog-query,
+  .bin-catalog-site { width: 100%; }
+  .bin-catalog-results-head {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    align-items: baseline;
+  }
+  .bin-catalog-card {
+    align-content: start;
+    border-top: 3px solid var(--color-accent);
+  }
+  .bin-catalog-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    align-items: start;
+  }
+  .bin-catalog-card-label {
+    margin: 0;
+    color: var(--color-fg-muted);
+    font-size: var(--type-meta);
+  }
+  .bin-catalog-code { font-size: var(--type-heading); }
+  .bin-catalog-theme { margin: 0; font-weight: 600; }
+  .bin-catalog-owner-phrase {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-left: 3px solid var(--color-border-strong);
+    background: var(--color-surface-muted);
+    color: var(--color-fg-muted);
+  }
+  .bin-catalog-photo {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    min-height: 0;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface-muted);
+    padding: 0;
+  }
+  .bin-catalog-photo-button {
+    cursor: zoom-in;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bin-catalog-photo-button:hover {
+    border-color: var(--color-accent);
+  }
+  .bin-catalog-photo-button:disabled {
+    opacity: 1;
+    cursor: default;
+  }
+  .bin-catalog-photo img {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+  .bin-catalog-photo img[hidden],
+  .bin-photo-dialog-image[hidden] { display: none; }
+  .bin-catalog-photo p,
+  .bin-catalog-photo-fallback {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    color: var(--color-fg-muted);
+    font-size: var(--type-meta);
+  }
+  .bin-catalog-photo-action {
+    position: absolute;
+    right: var(--space-2);
+    bottom: var(--space-2);
+    z-index: 1;
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-fg);
+    font-size: var(--type-meta);
+    font-weight: 600;
+  }
+  .bin-photo-dialog {
+    width: min(960px, calc(100vw - 32px));
+    max-width: 960px;
+    max-height: calc(100dvh - 32px);
+    margin: auto;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 8px;
+    background: var(--color-surface);
+    color: var(--color-fg);
+  }
+  .bin-photo-dialog::backdrop { background: rgb(22 32 28 / 72%); }
+  .bin-photo-dialog-shell {
+    display: grid;
+    gap: var(--space-3);
+    max-height: calc(100dvh - 32px);
+    padding: var(--space-4);
+  }
+  .bin-photo-dialog-head {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    align-items: center;
+  }
+  .bin-photo-dialog-figure {
+    display: grid;
+    place-items: center;
+    min-height: 12rem;
+    margin: 0;
+    overflow: hidden;
+    border-radius: 6px;
+    background: var(--color-surface-sunken);
+  }
+  .bin-photo-dialog-image {
+    display: block;
+    width: 100%;
+    max-height: calc(100dvh - 9rem);
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+  .bin-photo-dialog-status { margin: var(--space-5); }
+  .bin-catalog-section {
+    display: grid;
+    gap: var(--space-1);
+    padding-top: var(--space-2);
+  }
+  .bin-catalog-section p,
+  .bin-catalog-section ul { margin: 0; }
+  .bin-catalog-attributes { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+  .bin-catalog-profile-list { margin-top: var(--space-2); }
+  .bin-catalog-no-match { text-align: center; }
+  .bin-catalog-card[hidden],
+  .bin-catalog-no-match[hidden],
+  [data-clear-filters][hidden] { display: none; }
+  @media (max-width: 760px) {
+    .bin-catalog-hero,
+    .bin-catalog-filter { grid-template-columns: 1fr; align-items: stretch; }
+    .bin-catalog-stats { width: 100%; }
+  }
+  @media (max-width: 480px) {
+    .bin-catalog-card-head { align-items: stretch; flex-direction: column; }
+    .bin-photo-dialog-shell { padding: var(--space-3); }
+    .bin-photo-dialog-head { align-items: stretch; flex-direction: column; }
+  }
+</style>
+{% endblock %}
+
+{% block main %}
+<div class="bin-catalog-page">
+  <header class="bin-catalog-hero">
+    <div class="stack">
+      <p class="bin-catalog-kicker">BinKeeper</p>
+      <h1>Bin catalog</h1>
+      <p class="bin-catalog-intro muted">
+        Find a labeled bin, see what is recorded inside, and check its latest recorded site.
+      </p>
+    </div>
+    {% if not catalog_unavailable %}
+    <div class="bin-catalog-stats" aria-label="Catalog summary">
+      <div class="bin-catalog-stat">
+        <strong>{{ total_count }}</strong>
+        <span>known bin{% if total_count != 1 %}s{% endif %}</span>
+      </div>
+      <div class="bin-catalog-stat">
+        <strong>{{ contents_count }}</strong>
+        <span>bin{% if contents_count != 1 %}s{% endif %} with contents</span>
+      </div>
+    </div>
+    {% endif %}
+  </header>
+
+  {% if catalog_unavailable %}
+  <section class="panel panel-padded stack" aria-labelledby="unavailable-heading">
+    <div class="banner banner-warn">Catalog data could not be loaded. Nothing was changed.</div>
+    <h2 id="unavailable-heading">Catalog unavailable</h2>
+    <p>Try the read again.</p>
+    <div class="action-bar">
+      <a class="button" href="{{ catalog_url }}">Reload this page</a>
+    </div>
+  </section>
+  {% elif total_count %}
+  <section class="panel panel-padded stack" aria-labelledby="filter-heading">
+    <h2 id="filter-heading">Find a bin</h2>
+    <form class="bin-catalog-filter" method="get" action="{{ catalog_url }}" data-catalog-filter>
+      <div class="field">
+        <label for="bin-search">Search bins</label>
+        <input class="bin-catalog-query" type="search" id="bin-search" name="q"
+               value="{{ query }}" placeholder="Code, contents, theme, or site"
+               autocomplete="off" data-catalog-query>
+      </div>
+      <div class="field">
+        <label for="site-filter">Current site</label>
+        <select class="bin-catalog-site" id="site-filter" name="site" data-catalog-site>
+          <option value="">All sites</option>
+          {% for site in sites %}
+          <option value="{{ site.key }}"{% if selected_site == site.key %} selected{% endif %}>{{ site.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="action-bar">
+        <button type="submit">Search</button>
+        <a class="button" href="{{ catalog_url }}" data-clear-filters{% if not query and not selected_site %} hidden{% endif %}>Clear</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="stack" aria-labelledby="results-heading">
+    <div class="bin-catalog-results-head">
+      <h2 id="results-heading">Bins</h2>
+      <p class="muted" id="catalog-result-count" aria-live="polite">
+        Showing {{ entries|length }} of {{ total_count }} bin{% if total_count != 1 %}s{% endif %}
+      </p>
+    </div>
+
+    <div class="grid-fit-280" data-catalog-results>
+      {% for entry in entries %}
+      <article class="panel panel-padded bin-catalog-card"
+               data-bin-card data-site="{{ entry.current_site_key }}"
+               data-search-text="{{ entry.search_text }}">
+        <header class="bin-catalog-card-head">
+          <div>
+            <p class="bin-catalog-card-label">Bin</p>
+            <h2><code class="bin-catalog-code">{{ entry.bin_code }}</code></h2>
+          </div>
+          <span class="chip">Current · {{ entry.current_site_label }}</span>
+        </header>
+
+        {% if entry.photo_state == "available" %}
+        <button type="button" class="bin-catalog-photo bin-catalog-photo-button"
+                data-photo-state="available" data-photo-frame data-photo-preview
+                data-bin-code="{{ entry.bin_code }}"
+                aria-label="View stored photo for {{ entry.bin_code }}"
+                aria-haspopup="dialog">
+          <img src="{{ entry.photo_url }}"
+               alt="Stored bin photo for {{ entry.bin_code }}"
+               loading="lazy" decoding="async" draggable="false" data-bin-photo>
+          <span class="bin-catalog-photo-action" aria-hidden="true" data-photo-action>View photo</span>
+          <span class="bin-catalog-photo-fallback" data-photo-unavailable hidden>Photo unavailable</span>
+        </button>
+        {% elif entry.photo_state == "missing" %}
+        <div class="bin-catalog-photo" data-photo-state="missing">
+          <p>No photo recorded</p>
+        </div>
+        {% else %}
+        <div class="bin-catalog-photo" data-photo-state="unavailable">
+          <p>Photo unavailable</p>
+        </div>
+        {% endif %}
+
+        <p class="bin-catalog-theme">{{ entry.theme or "No theme recorded" }}</p>
+        {% if entry.owner_phrase %}
+        <p class="bin-catalog-owner-phrase">{{ entry.owner_phrase }}</p>
+        {% endif %}
+
+        <section class="bin-catalog-section" aria-labelledby="contents-{{ loop.index }}">
+          <h3 id="contents-{{ loop.index }}">Contents</h3>
+          {% if entry.current_contents %}
+          <p>{{ entry.current_contents }}</p>
+          {% else %}
+          <p class="muted">No contents recorded.</p>
+          {% endif %}
+        </section>
+
+        {% if entry.manage_url %}
+        <div class="action-bar">
+          <a class="button" href="{{ entry.manage_url }}">Manage bin</a>
+        </div>
+        {% endif %}
+
+        <div class="bin-catalog-attributes" aria-label="Capacity and volume">
+          <span class="chip">{{ entry.capacity_label }}</span>
+          <span class="chip">{{ entry.volume_label }}</span>
+        </div>
+
+        <details class="details-block">
+          <summary>Bin details</summary>
+          <div class="details-body stack">
+            <dl class="kv-list kv-list-wide bin-catalog-profile-list">
+              <dt>Current site</dt><dd>{{ entry.current_site_label }}</dd>
+              <dt>Home site</dt><dd>{{ entry.home_site_label }}</dd>
+              <dt>Location confidence</dt><dd>{{ entry.location_confidence_label }}</dd>
+              <dt>Profile confidence</dt><dd>{{ entry.passport_confidence_label }}</dd>
+            </dl>
+            {% if entry.physical_constraints %}
+            <div class="bin-catalog-section">
+              <h3>Physical notes</h3>
+              <ul>{% for value in entry.physical_constraints %}<li>{{ value|capitalize }}</li>{% endfor %}</ul>
+            </div>
+            {% endif %}
+          </div>
+        </details>
+      </article>
+      {% endfor %}
+    </div>
+
+    <div class="panel panel-padded stack bin-catalog-no-match" data-no-matches{% if entries %} hidden{% endif %}>
+      <h2>No matching bins</h2>
+      <p>Try a different code, content word, theme, or site.</p>
+      <div class="action-bar"><a class="button" href="{{ catalog_url }}">Clear filters</a></div>
+    </div>
+  </section>
+  {% else %}
+  <section class="panel panel-padded stack" aria-labelledby="empty-heading">
+    <h2 id="empty-heading">No bins yet</h2>
+    {% if authoring_enabled %}
+    <p>Photograph a bin to propose a label, or register one that already has a label.</p>
+    <div class="action-bar">
+      <a class="button" href="{{ photo_url }}">Photograph &amp; label</a>
+      <a class="button" href="{{ register_url }}">Register a labeled bin</a>
+    </div>
+    {% else %}
+    <p>No bins have been recorded, and BinKeeper authoring is not active in this operator.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if not catalog_unavailable and total_count %}
+  <dialog class="bin-photo-dialog" data-photo-dialog aria-labelledby="bin-photo-dialog-heading">
+    <div class="bin-photo-dialog-shell">
+      <header class="bin-photo-dialog-head">
+        <h2 id="bin-photo-dialog-heading" data-photo-dialog-heading>Stored bin photo</h2>
+        <button type="button" data-photo-dialog-close>Close</button>
+      </header>
+      <figure class="bin-photo-dialog-figure">
+        <img class="bin-photo-dialog-image" alt="" draggable="false"
+             data-photo-dialog-image hidden>
+        <p class="bin-photo-dialog-status muted" aria-live="polite"
+           data-photo-dialog-status>Loading photo…</p>
+      </figure>
+    </div>
+  </dialog>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block body_extra %}
+{% if not catalog_unavailable and total_count %}
+<script>
+(() => {
+  const form = document.querySelector("[data-catalog-filter]");
+  const query = document.querySelector("[data-catalog-query]");
+  const site = document.querySelector("[data-catalog-site]");
+  const cards = Array.from(document.querySelectorAll("[data-bin-card]"));
+  const count = document.getElementById("catalog-result-count");
+  const noMatches = document.querySelector("[data-no-matches]");
+  const clear = document.querySelector("[data-clear-filters]");
+  const total = Number({{ total_count }});
+  const photoDialog = document.querySelector("[data-photo-dialog]");
+  const photoDialogHeading = photoDialog?.querySelector("[data-photo-dialog-heading]");
+  const photoDialogImage = photoDialog?.querySelector("[data-photo-dialog-image]");
+  const photoDialogStatus = photoDialog?.querySelector("[data-photo-dialog-status]");
+  const photoDialogClose = photoDialog?.querySelector("[data-photo-dialog-close]");
+  let lastPhotoTrigger = null;
+
+  for (const image of document.querySelectorAll("[data-bin-photo]")) {
+    image.addEventListener("error", () => {
+      const frame = image.closest("[data-photo-frame]");
+      const unavailable = frame?.querySelector("[data-photo-unavailable]");
+      const action = frame?.querySelector("[data-photo-action]");
+      image.hidden = true;
+      if (frame) frame.dataset.photoState = "unavailable";
+      if (frame instanceof HTMLButtonElement) frame.disabled = true;
+      if (action) action.hidden = true;
+      if (unavailable) unavailable.hidden = false;
+    });
+  }
+
+  if (photoDialog && photoDialogHeading && photoDialogImage &&
+      photoDialogStatus && photoDialogClose) {
+    const photoLoaded = () => {
+      photoDialogImage.hidden = false;
+      photoDialogStatus.hidden = true;
+    };
+    const photoUnavailable = () => {
+      photoDialogImage.hidden = true;
+      photoDialogStatus.hidden = false;
+      photoDialogStatus.textContent = "Photo unavailable";
+    };
+    photoDialogImage.addEventListener("load", photoLoaded);
+    photoDialogImage.addEventListener("error", photoUnavailable);
+
+    for (const trigger of document.querySelectorAll("[data-photo-preview]")) {
+      trigger.addEventListener("click", () => {
+        const image = trigger.querySelector("[data-bin-photo]");
+        if (!image || image.hidden) return;
+        lastPhotoTrigger = trigger;
+        photoDialogHeading.textContent = `Stored bin photo for ${trigger.dataset.binCode}`;
+        photoDialogImage.alt = image.alt;
+        photoDialogImage.hidden = true;
+        photoDialogStatus.hidden = false;
+        photoDialogStatus.textContent = "Loading photo…";
+        photoDialogImage.src = image.currentSrc || image.src;
+        photoDialog.showModal();
+        photoDialogClose.focus();
+        if (photoDialogImage.complete) {
+          if (photoDialogImage.naturalWidth > 0) photoLoaded();
+          else photoUnavailable();
+        }
+      });
+    }
+    photoDialogClose.addEventListener("click", () => photoDialog.close());
+    photoDialog.addEventListener("close", () => {
+      if (lastPhotoTrigger instanceof HTMLElement) lastPhotoTrigger.focus();
+      lastPhotoTrigger = null;
+    });
+  }
+
+  if (!form || !query || !site || !count || !noMatches || !clear || cards.length !== total) return;
+
+  const apply = () => {
+    const term = query.value.trim().toLocaleLowerCase();
+    const selectedSite = site.value;
+    let visible = 0;
+    for (const card of cards) {
+      const matches = (!term || card.dataset.searchText.includes(term)) &&
+        (!selectedSite || card.dataset.site === selectedSite);
+      card.hidden = !matches;
+      if (matches) visible += 1;
+    }
+    count.textContent = `Showing ${visible} of ${total} ${total === 1 ? "bin" : "bins"}`;
+    noMatches.hidden = visible !== 0;
+    clear.hidden = !term && !selectedSite;
+    const params = new URLSearchParams();
+    if (query.value.trim()) params.set("q", query.value.trim());
+    if (selectedSite) params.set("site", selectedSite);
+    history.replaceState(null, "", `${form.action}${params.size ? `?${params}` : ""}`);
+  };
+
+  form.addEventListener("submit", (event) => { event.preventDefault(); apply(); });
+  query.addEventListener("input", apply);
+  site.addEventListener("change", apply);
+  clear.addEventListener("click", (event) => {
+    event.preventDefault();
+    query.value = "";
+    site.value = "";
+    apply();
+    query.focus();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "/" && document.activeElement !== query) {
+      event.preventDefault();
+      query.focus();
+    }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

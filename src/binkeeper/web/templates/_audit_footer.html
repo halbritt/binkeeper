@@ -1,0 +1,7 @@
+<footer class="audit-footer">
+  <span>local-only · loopback bind: {{ bind_address|default("127.0.0.1:<port>") }} · no network egress.</span>
+  {% if build_sha %}
+    <span>build {{ build_sha }}</span>
+  {% endif %}
+</footer>
+

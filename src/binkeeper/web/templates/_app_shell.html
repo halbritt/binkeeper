@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}BinKeeper {{ surface_label|default("operator") }}{% endblock %}</title>
+    <link rel="stylesheet" href="{{ binkeeper_css_url }}">
+    {% block head_extra %}{% endblock %}
+    <script src="{{ keyboard_static_url }}" defer></script>
+  </head>
+  <body>
+    <div id="live-region" aria-live="polite" class="visually-hidden"></div>
+    <header class="app-header">
+      <div class="app-header-row">
+        {% block brand_line %}
+        <div class="brand-line">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-name">BinKeeper local</span>
+          <span aria-hidden="true">·</span>
+          <span class="surface-label">{{ surface_label|default("Operator") }}</span>
+        </div>
+        {% endblock %}
+        <div class="header-actions">
+          <button type="button" class="icon-button" data-help-open data-key="?"
+                  aria-label="Open help">?</button>
+        </div>
+      </div>
+      {% block surface_navigation %}{% include "_surface_tabs.html" %}{% endblock %}
+    </header>
+    <main id="main" class="surface-main">
+      {% block main %}{% endblock %}
+    </main>
+    {% include "_audit_footer.html" %}
+    {% include "_help_modal.html" %}
+    {% block body_extra %}{% endblock %}
+  </body>
+</html>

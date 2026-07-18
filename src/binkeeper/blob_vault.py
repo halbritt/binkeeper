@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -13,6 +16,14 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 ENCRYPTION_ALGORITHM = "AES-256-GCM"
+DEFAULT_BLOB_TENANT_ID = os.environ.get("BINKEEPER_BLOB_TENANT_ID", "personal")
+DEFAULT_BLOB_CORPUS_ID = os.environ.get("BINKEEPER_BLOB_CORPUS_ID", "personal")
+BLOB_VAULT_CONFIG_PATH = Path(
+    os.environ.get(
+        "BINKEEPER_BLOB_VAULT_CONFIG",
+        str(Path.home() / ".config/binkeeper/blob-vault.json"),
+    )
+)
 
 
 class BlobVaultError(ValueError):
@@ -25,6 +36,29 @@ class BlobStore(Protocol):
     def put(self, object_key: str, data: bytes) -> None: ...
 
     def get(self, object_key: str) -> bytes: ...
+
+    def exists(self, object_key: str) -> bool: ...
+
+
+class InMemoryBlobStore:
+    """Ciphertext-only ephemeral store for deterministic tests."""
+
+    backend_name = "memory"
+
+    def __init__(self) -> None:
+        self._objects: dict[str, bytes] = {}
+
+    def put(self, object_key: str, data: bytes) -> None:
+        self._objects[object_key] = bytes(data)
+
+    def get(self, object_key: str) -> bytes:
+        try:
+            return self._objects[object_key]
+        except KeyError as exc:
+            raise BlobVaultError(f"object {object_key!r} not found") from exc
+
+    def exists(self, object_key: str) -> bool:
+        return object_key in self._objects
 
 
 class FilesystemBlobStore:
@@ -54,6 +88,9 @@ class FilesystemBlobStore:
         except FileNotFoundError as exc:
             raise BlobVaultError(f"object {object_key!r} not found") from exc
 
+    def exists(self, object_key: str) -> bool:
+        return self._path(object_key).exists()
+
 
 @dataclass(frozen=True)
 class BlobRecord:
@@ -78,6 +115,8 @@ def put_blob(
     key: bytes,
     key_ref: str,
     content_type: str | None = None,
+    tenant_id: str = DEFAULT_BLOB_TENANT_ID,
+    corpus_id: str = DEFAULT_BLOB_CORPUS_ID,
 ) -> BlobRecord:
     """Encrypt one blob and append its metadata idempotently."""
     _require_key(key)
@@ -87,7 +126,11 @@ def put_blob(
     object_key = content_object_key(digest)
     conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (digest,))
     existing = conn.execute(
-        "SELECT byte_size FROM evidence_blobs WHERE plaintext_sha256 = %s", (digest,)
+        """
+        SELECT byte_size FROM evidence_blobs
+        WHERE tenant_id = %s AND corpus_id = %s AND plaintext_sha256 = %s
+        """,
+        (tenant_id, corpus_id, digest),
     ).fetchone()
     if existing is not None:
         return BlobRecord(digest, object_key, int(existing[0]), True)
@@ -98,12 +141,14 @@ def put_blob(
     conn.execute(
         """
         INSERT INTO evidence_blobs (
-            plaintext_sha256, byte_size, content_type, storage_backend,
+            tenant_id, corpus_id, plaintext_sha256, byte_size, content_type, storage_backend,
             object_key, encryption_algorithm, ciphertext_sha256, nonce, key_ref,
             provenance
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, '{}'::jsonb)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, '{}'::jsonb)
         """,
         (
+            tenant_id,
+            corpus_id,
             digest,
             len(data),
             content_type,
@@ -119,7 +164,13 @@ def put_blob(
 
 
 def open_blob(
-    conn: psycopg.Connection, store: BlobStore, plaintext_sha256: str, *, key: bytes
+    conn: psycopg.Connection,
+    store: BlobStore,
+    plaintext_sha256: str,
+    *,
+    key: bytes,
+    tenant_id: str = DEFAULT_BLOB_TENANT_ID,
+    corpus_id: str = DEFAULT_BLOB_CORPUS_ID,
 ) -> bytes:
     """Restore a blob only after authentication and both hash checks."""
     _require_key(key)
@@ -128,9 +179,9 @@ def open_blob(
         """
         SELECT object_key, ciphertext_sha256, nonce
         FROM evidence_blobs
-        WHERE plaintext_sha256 = %s
+        WHERE tenant_id = %s AND corpus_id = %s AND plaintext_sha256 = %s
         """,
-        (digest,),
+        (tenant_id, corpus_id, digest),
     ).fetchone()
     if row is None:
         raise BlobVaultError(f"no blob for plaintext sha256 {digest!r}")
@@ -149,3 +200,44 @@ def open_blob(
 def _require_key(key: bytes) -> None:
     if not isinstance(key, bytes | bytearray) or len(key) != 32:
         raise BlobVaultError("encryption key must be 32 bytes")
+
+
+def load_vault_config(path: Path | None = None) -> Mapping[str, object]:
+    """Load the owner-local vault configuration; it is never a package resource."""
+    resolved = path or BLOB_VAULT_CONFIG_PATH
+    try:
+        parsed = json.loads(resolved.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise BlobVaultError(f"blob-vault config not found at {resolved}") from exc
+    except json.JSONDecodeError as exc:
+        raise BlobVaultError("blob-vault config is not valid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise BlobVaultError("blob-vault config must be a JSON object")
+    return {str(key): value for key, value in parsed.items()}
+
+
+def vault_key_from_config(config: Mapping[str, object] | None = None) -> tuple[bytes, str]:
+    """Read the local AES key and its audit reference."""
+    selected = config if config is not None else load_vault_config()
+    encoded = _required_text(selected.get("vault_key_b64"), "vault_key_b64")
+    try:
+        key = base64.b64decode(encoded, validate=True)
+    except ValueError as exc:
+        raise BlobVaultError("vault_key_b64 is not valid base64") from exc
+    _require_key(key)
+    return key, _required_text(selected.get("key_ref"), "key_ref")
+
+
+def blob_store_from_config(config: Mapping[str, object] | None = None) -> BlobStore:
+    """Build the explicitly configured on-box ciphertext store."""
+    selected = config if config is not None else load_vault_config()
+    backend = selected.get("backend", "filesystem")
+    if backend != "filesystem":
+        raise BlobVaultError(f"unsupported local blob-vault backend {backend!r}")
+    return FilesystemBlobStore(_required_text(selected.get("filesystem_root"), "filesystem_root"))
+
+
+def _required_text(value: object, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise BlobVaultError(f"{field_name} is required")
+    return value.strip()

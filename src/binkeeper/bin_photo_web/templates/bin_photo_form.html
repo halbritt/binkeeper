@@ -1,0 +1,67 @@
+{% extends "bin_photo_base.html" %}
+{% import "_components.html" as components %}
+
+{% block title %}BinKeeper Photo Drop{% endblock %}
+
+{% block bin_photo_main %}
+<header class="bin-photo-hero">
+  <div class="bin-photo-heading-row">
+    <span class="bin-photo-kicker">BinKeeper</span>
+    <span class="status-chip" data-status="active">Local vision</span>
+  </div>
+  <h1>Bin photo drop</h1>
+  <p class="bin-photo-intro">Upload photos of a bin's contents. The local vision model proposes a label;
+    nothing is captured or printed until you confirm.</p>
+</header>
+
+<section class="panel panel-padded bin-photo-card" aria-labelledby="photo-details-heading">
+  <div class="bin-photo-card-header">
+    <h2 id="photo-details-heading">Photos and label details</h2>
+    <p class="bin-photo-card-copy">Start with a clear view of the contents. Add context only when it helps distinguish what belongs here.</p>
+  </div>
+
+  <form method="post" action="{{ form_action }}" enctype="multipart/form-data"
+        class="form-grid bin-photo-form" data-submit-form>
+
+    {% call components.field("photos", "Photos", "One or more photos of the bin's contents") %}
+      <input type="file" id="photos" name="photos" accept="image/*" multiple required>
+    {% endcall %}
+
+    {% call components.field("notes", "Notes", "Anything you want on the label, in your words") %}
+      <textarea id="notes" name="notes" placeholder="e.g. keep near the workbench; spare 3D-printer nozzles"></textarea>
+    {% endcall %}
+
+    <div class="grid-fit-180">
+      {% call components.field("site", "Site") %}
+        <select id="site" name="site">
+          <option value="" selected>(unset)</option>
+          {% for site in sites %}
+          <option value="{{ site }}">{{ site }}</option>
+          {% endfor %}
+        </select>
+      {% endcall %}
+
+      {% call components.field("bin_code", "Bin code", "Leave blank to auto-suggest") %}
+        <input type="text" id="bin_code" name="bin_code" placeholder="AGR-014">
+      {% endcall %}
+    </div>
+
+    <div class="action-bar bin-photo-action-row">
+      <button type="submit" class="bin-photo-primary" data-submit-button
+              data-busy-label="Analyzing photos…">
+        <span data-button-label>Propose label</span>
+      </button>
+      <span class="field-help bin-photo-action-note">Stored locally; no cloud upload.</span>
+    </div>
+
+    <p class="bin-photo-progress" data-submit-progress hidden role="status"
+       aria-live="polite" aria-atomic="true">
+      <span class="bin-photo-progress-marker" aria-hidden="true"></span>
+      <span>Photos are uploading. The local vision model is preparing a label proposal. Keep this page open.</span>
+    </p>
+  </form>
+</section>
+
+<p class="callout bin-photo-secondary">Already printed a label? <a href="{{ register_href }}">Register the bin</a>
+  by photographing it — its GPS places it at the right site.</p>
+{% endblock %}

@@ -1,1 +1,1 @@
-This directory is packaged for the photo templates extracted in BINK-7.
+Compatibility resource marker. Runtime photo templates live in binkeeper.bin_photo_web.

@@ -4,8 +4,8 @@ BinKeeper is a local-first system for tracking physical storage bins, their
 contents, locations, photos, movement history, and placement recommendations.
 
 Status: the standalone package now owns the physical-inventory domain, CLI,
-MCP schemas, forward migrations, evidence transfer, and synthetic encrypted
-blob path. Owner web/media surfaces, deployment, and cutover remain in
+MCP schemas, forward migrations, evidence transfer, encrypted media path, and
+owner catalog/management implementation. Deployment and cutover remain in
 progress. The working owner service and live data authority still live in
 [halbritt/engram](https://github.com/halbritt/engram). Do not deploy this
 repository or treat it as the data authority until the verified one-writer
@@ -52,7 +52,9 @@ make package-test
 
 The standalone entry points are `binkeeper` and `binkeeper-mcp-stdio`. They
 require an explicit local `BINKEEPER_DATABASE_URL`; neither imports the Engram
-package or reaches its database.
+package or reaches its database. The web app factories are
+`binkeeper.bin_catalog_web:create_app` and
+`binkeeper.bin_photo_web:create_app`; deployment remains gated to BINK-9.
 
 `make check` runs the full verification sequence; the editable install is a
 prerequisite of each target. PostgreSQL acceptance tests require a disposable

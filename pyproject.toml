@@ -10,8 +10,11 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "cryptography>=42,<47",
+    "fastapi>=0.115,<1",
+    "jinja2>=3.1,<4",
     "Pillow>=10,<13",
     "psycopg[binary]>=3.1,<4",
+    "python-multipart>=0.0.9,<1",
     "pyzbar>=0.1.9,<1",
     "qrcode>=7,<9",
 ]
@@ -25,6 +28,7 @@ binkeeper-mcp-stdio = "binkeeper.mcp_stdio:main"
 [project.optional-dependencies]
 dev = [
     "build>=1.2,<2",
+    "httpx>=0.27,<1",
     "pyright>=1.1.380,<2",
     "pytest>=8,<9",
     "ruff>=0.6,<1",
@@ -37,7 +41,10 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "binkeeper.catalog" = ["templates/*"]
+"binkeeper.bin_catalog_web" = ["templates/*"]
+"binkeeper.bin_photo_web" = ["templates/*"]
 "binkeeper.photo" = ["templates/*"]
+"binkeeper.web" = ["templates/*", "static/*"]
 "binkeeper.migrations" = ["sql/*.sql"]
 
 [tool.pytest.ini_options]

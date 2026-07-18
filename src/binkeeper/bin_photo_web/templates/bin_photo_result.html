@@ -1,0 +1,127 @@
+{% extends "bin_photo_base.html" %}
+{% import "_components.html" as components %}
+
+{% block title %}BinKeeper Label Proposal{% endblock %}
+
+{% block bin_photo_main %}
+<header class="bin-photo-hero">
+  <div class="bin-photo-heading-row">
+    <span class="bin-photo-kicker">BinKeeper</span>
+    <span class="status-chip" data-status="advisory">Review required</span>
+  </div>
+  <h1>Bin photos received</h1>
+  <p class="bin-photo-intro">Storage and label analysis are reported separately. Review every field before creating the bin.</p>
+</header>
+
+{# Storage is the guaranteed primary action, reported on its own. #}
+{% if store_error %}
+<p class="banner banner-error" role="status"><strong>Photos were not stored.</strong>
+  {{ store_error }}. Nothing was saved — please retry.</p>
+{% elif blob_refs %}
+<p class="banner banner-ok" role="status"><strong>✓ {{ blob_refs|length }} of {{ photo_count }} photo(s) stored</strong>
+  in the encrypted, full-resolution vault. This is independent of the label below.</p>
+{% elif photo_count %}
+<p class="banner banner-warn" role="status"><strong>No photos were stored.</strong>
+  The vault was unavailable, though {{ photo_count }} were received.</p>
+{% endif %}
+
+<section class="panel panel-padded bin-photo-card" aria-labelledby="proposal-heading">
+  <div class="bin-photo-card-header">
+    <h2 id="proposal-heading">Proposed label</h2>
+    <p class="bin-photo-card-copy">The local model's proposal is advisory. Check the details against the bin.</p>
+  </div>
+  {% if proposal %}
+  {% set pairs = [
+    ('theme', proposal.theme),
+    ('bin_code', suggested_bin_code or '(none)'),
+    ('site', site or '(unset)'),
+    ('owner_phrase', proposal.owner_phrase or '(none)'),
+    ('photos', proposal.photo_count),
+    ('model', proposal.model_version)
+  ] %}
+  {{ components.kv_list(pairs) }}
+
+  {% if proposal.summary %}<p>{{ proposal.summary }}</p>{% endif %}
+
+  <h3>Accepts</h3>
+  {% if proposal['items'] %}
+  <ul class="stack">
+    {% for item in proposal['items'] %}
+    <li>{{ item.label }} <span class="field-help">({{ item.confidence }})</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="field-help">The model did not identify any items above the confidence floor.</p>
+  {% endif %}
+
+  <p class="field-help">This proposal is advisory — review the code, site, and contents,
+    then create the bin.</p>
+
+  {% elif label_error %}
+  <p class="banner banner-warn" role="status">No label proposed this time: {{ label_error }}</p>
+  <p class="field-help">Your photos are safe in the vault — the label can be generated again
+    later without re-uploading.</p>
+  {% endif %}
+</section>
+
+{% if proposal %}
+<section class="panel panel-padded bin-photo-card" aria-labelledby="create-bin-heading">
+  <div class="bin-photo-card-header">
+    <h2 id="create-bin-heading">Create this bin</h2>
+    <p class="bin-photo-card-copy">Code, site, theme, and contents are saved. The same reviewed theme is used on the optional printed label. Edit anything the proposal got wrong.</p>
+  </div>
+  <form method="post" action="{{ confirm_action }}" class="form-grid bin-photo-form"
+        data-submit-form>
+    <input type="hidden" name="photo_sha256" value="{{ blob_refs[0] if blob_refs else '' }}">
+    <input type="hidden" name="code_source" value="the proposal">
+
+    <div class="grid-fit-180">
+      {% call components.field("create_bin_code", "Bin code", "From the proposal — edit if needed") %}
+        <input type="text" id="create_bin_code" name="bin_code"
+               value="{{ suggested_bin_code or '' }}" placeholder="AGR-014" required>
+      {% endcall %}
+
+      {% call components.field("create_site", "Site", "Where this bin lives") %}
+        <select id="create_site" name="site" required>
+          <option value="" disabled {% if not site %}selected{% endif %}>(pick a site)</option>
+          {% for s in all_sites or [] %}
+          <option value="{{ s }}" {% if s == site %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      {% endcall %}
+    </div>
+
+    {% call components.field("create_theme", "Bin theme", "Saved in the catalog and used as the large label grab-word") %}
+      <input type="text" id="create_theme" name="theme" value="{{ proposal.theme or '' }}"
+             placeholder="HAND TOOLS">
+    {% endcall %}
+
+    {% call components.field("create_contents", "Contents", "From the detected items — edit freely") %}
+      <textarea id="create_contents" name="contents">{{ proposed_contents }}</textarea>
+    {% endcall %}
+
+    <div class="action-bar bin-photo-action-row">
+      <button type="submit" name="print_label" value="0" data-submit-button
+              data-busy-label="Creating bin…">
+        <span data-button-label>Create without printing</span>
+      </button>
+      <button type="submit" class="bin-photo-primary" name="print_label" value="1"
+              data-submit-button data-busy-label="Creating and printing…">
+        <span data-button-label>Create and print label</span>
+      </button>
+      <span class="field-help bin-photo-action-note">Printing happens only after this explicit confirmation.</span>
+    </div>
+
+    <p class="bin-photo-progress" data-submit-progress hidden role="status"
+       aria-live="polite" aria-atomic="true">
+      <span class="bin-photo-progress-marker" aria-hidden="true"></span>
+      <span>Finishing the reviewed bin action. Keep this page open.</span>
+    </p>
+  </form>
+</section>
+{% endif %}
+
+<div class="action-bar">
+  <a class="button" href="{{ new_href }}">Drop more photos</a>
+</div>
+{% endblock %}

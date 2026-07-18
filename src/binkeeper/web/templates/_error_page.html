@@ -1,0 +1,18 @@
+{% extends "_app_shell.html" %}
+
+{% block title %}{{ error_title|default("Request problem") }} · BinKeeper {{ surface_label|default("operator") }}{% endblock %}
+
+{% block main %}
+  <section class="stack" aria-labelledby="error-heading">
+    <h1 id="error-heading">{{ error_title|default("Request problem") }}</h1>
+    {% with kind="warn", message=error_detail %}
+      {% include "_status_banner.html" %}
+    {% endwith %}
+    {% if error_help %}
+      <p class="muted">{{ error_help }}</p>
+    {% endif %}
+    <p>
+      <a class="button" href="{{ surface_path('/') }}">Back to {{ surface_label|default("start") }}</a>
+    </p>
+  </section>
+{% endblock %}

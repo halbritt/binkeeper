@@ -1,0 +1,56 @@
+{# Shared component macros (RFC 0081). Import with:
+     {% import "_components.html" as components %}
+   All macros escape their inputs via the environment's pinned autoescape;
+   none bypasses escaping. Rich body content goes through {% call %} blocks,
+   which are template-authored by construction. #}
+
+{% macro banner(kind, text) -%}
+<p class="banner banner-{{ kind }}" role="status">{{ text }}</p>
+{%- endmacro %}
+
+{% macro field(name, label, help="") -%}
+<div class="field">
+  <label for="{{ name }}">{{ label }}</label>
+  {{ caller() }}
+  {% if help %}<span class="field-help">{{ help }}</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro text_input(name, value="", required=False) -%}
+<input type="text" id="{{ name }}" name="{{ name }}" value="{{ value }}"
+       {% if required %}required{% endif %}>
+{%- endmacro %}
+
+{% macro textarea(name, value="", rows=4, required=False) -%}
+<textarea id="{{ name }}" name="{{ name }}" rows="{{ rows }}"
+          {% if required %}required{% endif %}>{{ value }}</textarea>
+{%- endmacro %}
+
+{% macro data_table(headers) -%}
+<table class="data-table">
+  <thead>
+    <tr>{% for header in headers %}<th scope="col">{{ header }}</th>{% endfor %}</tr>
+  </thead>
+  <tbody>
+    {{ caller() }}
+  </tbody>
+</table>
+{%- endmacro %}
+
+{% macro kv_list(pairs) -%}
+<dl class="kv-list">
+  {% for key, value in pairs %}
+  <dt>{{ key }}</dt>
+  <dd>{{ value }}</dd>
+  {% endfor %}
+</dl>
+{%- endmacro %}
+
+{% macro details_block(summary, open=False) -%}
+<details class="details-block" {% if open %}open{% endif %}>
+  <summary>{{ summary }}</summary>
+  <div class="details-body">
+    {{ caller() }}
+  </div>
+</details>
+{%- endmacro %}

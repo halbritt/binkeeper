@@ -29,10 +29,10 @@ from typing import Final, Literal
 import psycopg
 from psycopg.types.json import Jsonb
 
-# --- tunables (ENGRAM_-prefixed, read at module top per RFC 0012) -----------
+# --- tunables (BINKEEPER_-prefixed, read at module top per RFC 0012) -----------
 
-DEFAULT_BIN_TENANT_ID: Final[str] = os.environ.get("ENGRAM_BIN_TENANT_ID", "personal")
-DEFAULT_BIN_CORPUS_ID: Final[str] = os.environ.get("ENGRAM_BIN_CORPUS_ID", "personal")
+DEFAULT_BIN_TENANT_ID: Final[str] = os.environ.get("BINKEEPER_BIN_TENANT_ID", "personal")
+DEFAULT_BIN_CORPUS_ID: Final[str] = os.environ.get("BINKEEPER_BIN_CORPUS_ID", "personal")
 DEFAULT_BIN_SOURCE_LABEL: Final[str] = "manual"
 TRIP_EVENT_SCHEMA_VERSION: Final[str] = "bin_trip_event.v1"
 
@@ -62,16 +62,18 @@ def _env_flag(name: str, default: str = "0") -> bool:
 
 # Gates whether retrieval/serving ABSTAINS on a stale location belief. Off =>
 # bin_where() stays byte-identical; the bin_belief() instrument is always available
-# for calibration (instrument-first, like ENGRAM_READ_PATH_ABSTAIN_ENABLED).
-BIN_BELIEF_SERVING_ENABLED = _env_flag("ENGRAM_BIN_BELIEF_ENABLED")
+# for calibration (instrument-first, like BINKEEPER_READ_PATH_ABSTAIN_ENABLED).
+BIN_BELIEF_SERVING_ENABLED = _env_flag("BINKEEPER_BIN_BELIEF_ENABLED")
 # Confidence floor M_loc in [0,1]: a belief below it abstains. A frozen constant for
 # now; a calibrated, corpus-keyed floor + a D098 freeze precede the default-on flip.
-BIN_LOCATION_FLOOR = float(os.environ.get("ENGRAM_BIN_M_LOC", "0.5"))
+BIN_LOCATION_FLOOR = float(os.environ.get("BINKEEPER_BIN_M_LOC", "0.5"))
 # Half-life (days) for bins with too few moves to learn their own cadence.
-BIN_DEFAULT_HALF_LIFE_DAYS = float(os.environ.get("ENGRAM_BIN_DEFAULT_HALF_LIFE_DAYS", "120"))
+BIN_DEFAULT_HALF_LIFE_DAYS = float(os.environ.get("BINKEEPER_BIN_DEFAULT_HALF_LIFE_DAYS", "120"))
 # Confidence drop per post-placement `contradict` event (a shock, not a clock tick).
-BIN_CONTRADICTION_SHOCK = float(os.environ.get("ENGRAM_BIN_CONTRADICTION_SHOCK", "0.6"))
-BIN_BELIEF_PROJECTOR_VERSION = os.environ.get("ENGRAM_BIN_BELIEF_PROJECTOR_VERSION", "loc-decay-v1")
+BIN_CONTRADICTION_SHOCK = float(os.environ.get("BINKEEPER_BIN_CONTRADICTION_SHOCK", "0.6"))
+BIN_BELIEF_PROJECTOR_VERSION = os.environ.get(
+    "BINKEEPER_BIN_BELIEF_PROJECTOR_VERSION", "loc-decay-v1"
+)
 
 # --- T3b passive-harvest tunables (RFC 0088 §4; corroborative-only) ---------
 
@@ -92,7 +94,7 @@ BIN_DEFAULT_SOURCE_PRIOR: Final[tuple[float, float]] = (1.0, 1.0)
 # Reliability a source must reach before a cross-site disagreement is allowed to emit a
 # `contradict` shock (the load-bearing geofence risk: a flaky source must never train the
 # owner to ignore the surface). The harvester also requires an unambiguous geofence.
-BIN_CONTRADICT_TRUST_THRESHOLD = float(os.environ.get("ENGRAM_BIN_CONTRADICT_TRUST", "0.6"))
+BIN_CONTRADICT_TRUST_THRESHOLD = float(os.environ.get("BINKEEPER_BIN_CONTRADICT_TRUST", "0.6"))
 OBSERVATION_SCHEMA_VERSION: Final[str] = "location_observation.v1"
 
 

@@ -1,0 +1,140 @@
+{% extends "bin_photo_base.html" %}
+
+{% block title %}Manage {{ bin_code }} · BinKeeper{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+  .bin-manage-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bin-manage-grid .bin-manage-wide { grid-column: 1 / -1; }
+  .bin-manage-preview {
+    width: 100%; max-height: 22rem; border-radius: var(--radius-md);
+    background: var(--color-surface-muted); object-fit: contain;
+  }
+  .bin-manage-code { font-size: var(--type-heading); }
+  @media (max-width: 760px) { .bin-manage-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block bin_photo_main %}
+<a href="{{ catalog_url }}">← Back to catalog</a>
+<header class="bin-photo-hero">
+  <div class="bin-photo-heading-row">
+    <div>
+      <span class="bin-photo-kicker">BinKeeper</span>
+      <h1>Manage <code class="bin-manage-code">{{ bin_code }}</code></h1>
+    </div>
+    <span class="chip">Current · {{ current_site|replace('-', ' ')|title if current_site else 'Unknown' }}</span>
+  </div>
+  <p class="bin-photo-intro">Update what this bin contains, add a photo, move it, or print another label.</p>
+</header>
+
+{% if notice %}
+<div class="banner banner-{{ notice.kind }}" tabindex="-1" data-manage-notice
+     {% if notice.kind == 'error' %}role="alert"{% else %}role="status"{% endif %}>
+  {{ notice.message }}
+</div>
+{% endif %}
+
+<div class="bin-manage-grid">
+  <section class="panel panel-padded stack bin-photo-card bin-manage-wide" aria-labelledby="profile-heading">
+    <div class="bin-photo-card-header">
+      <h2 id="profile-heading">Details</h2>
+      <p class="bin-photo-card-copy">These are the bin's current details. Saving updates the catalog while keeping prior snapshots in history.</p>
+    </div>
+    <form method="post" action="{{ profile_action }}" class="form-grid bin-photo-form"
+          data-submit-form>
+      <input type="hidden" name="action_id" value="{{ profile_action_id }}">
+      <label for="manage-theme">Theme
+        <input id="manage-theme" name="theme" value="{{ theme }}" maxlength="120" autocomplete="off">
+        <span class="field-help">The large heading printed on the label.</span>
+      </label>
+      <label for="manage-contents">Contents
+        <textarea id="manage-contents" name="contents" rows="4" maxlength="1200">{{ contents }}</textarea>
+        <span class="field-help">What is in the bin now. Leave blank to clear it.</span>
+      </label>
+      <label for="manage-home-site">Home / return-to site
+        <select id="manage-home-site" name="home_site">
+          <option value="">Not set</option>
+          {% for site in all_sites %}<option value="{{ site }}"{% if site == home_site %} selected{% endif %}>{{ site|replace('-', ' ')|title }}</option>{% endfor %}
+        </select>
+        <span class="field-help">Where the label says this bin belongs; this is separate from its current location.</span>
+      </label>
+      <div class="action-bar bin-photo-action-row">
+        <button type="submit" class="bin-photo-primary" data-submit-button data-busy-label="Saving…">
+          <span data-button-label>Save changes</span>
+        </button>
+      </div>
+      <p class="bin-photo-progress" data-submit-progress hidden role="status" aria-live="polite">
+        <span class="bin-photo-progress-marker" aria-hidden="true"></span>
+        <span>Saving changes to {{ bin_code }}…</span>
+      </p>
+    </form>
+  </section>
+
+  <section class="panel panel-padded stack bin-photo-card" aria-labelledby="photo-heading">
+    <div class="bin-photo-card-header">
+      <h2 id="photo-heading">Photos</h2>
+      <p class="bin-photo-card-copy">Add another contents photo. The newest becomes the catalog cover; older photos remain stored.</p>
+    </div>
+    {% if catalog_photo_url %}<img class="bin-manage-preview" src="{{ catalog_photo_url }}" alt="Newest stored photo for {{ bin_code }}">{% endif %}
+    <form method="post" action="{{ photo_action }}" enctype="multipart/form-data"
+          class="form-grid bin-photo-form" data-submit-form>
+      <input type="hidden" name="action_id" value="{{ photo_action_id }}">
+      <label for="manage-photo">Add a photo
+        <input id="manage-photo" type="file" name="photo" accept="image/*" required>
+      </label>
+      <div class="action-bar"><button type="submit" data-submit-button data-busy-label="Adding photo…"><span data-button-label>Add photo</span></button></div>
+      <p class="bin-photo-progress" data-submit-progress hidden role="status" aria-live="polite">
+        <span class="bin-photo-progress-marker" aria-hidden="true"></span>
+        <span>Uploading the photo to {{ bin_code }}. Keep this page open.</span>
+      </p>
+    </form>
+  </section>
+
+  <section class="panel panel-padded stack bin-photo-card" aria-labelledby="location-heading">
+    <div class="bin-photo-card-header">
+      <h2 id="location-heading">Current location</h2>
+      <p class="bin-photo-card-copy">Moving a bin records a placement event. It does not change the return-to site printed on its label.</p>
+    </div>
+    <form method="post" action="{{ location_action }}" class="form-grid bin-photo-form" data-submit-form>
+      <input type="hidden" name="action_id" value="{{ location_action_id }}">
+      <label for="manage-current-site">Current location
+        <select id="manage-current-site" name="current_site" required>
+          {% for site in all_sites %}<option value="{{ site }}"{% if site == current_site %} selected{% endif %}>{{ site|replace('-', ' ')|title }}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="action-bar"><button type="submit" data-submit-button data-busy-label="Updating location…"><span data-button-label>Update location</span></button></div>
+      <p class="bin-photo-progress" data-submit-progress hidden role="status" aria-live="polite">
+        <span class="bin-photo-progress-marker" aria-hidden="true"></span>
+        <span>Recording the current location for {{ bin_code }}…</span>
+      </p>
+    </form>
+  </section>
+
+  <section class="panel panel-padded stack bin-photo-card bin-manage-wide" aria-labelledby="print-heading">
+    <div class="bin-photo-card-header">
+      <h2 id="print-heading">Label</h2>
+      <p class="bin-photo-card-copy">Request one extra copy from the saved details—for example, for the other side of the bin.</p>
+    </div>
+    <form method="post" action="{{ print_action }}" class="bin-photo-form" data-submit-form>
+      <input type="hidden" name="action_id" value="{{ print_action_id }}">
+      <div class="action-bar bin-photo-action-row">
+        <button type="submit" class="bin-photo-primary" data-submit-button data-busy-label="Sending one label…">
+          <span data-button-label>Print another label</span>
+        </button>
+        <span class="field-help">One press attempts one copy. Save edits above before printing them.</span>
+      </div>
+      <p class="bin-photo-progress" data-submit-progress hidden role="status" aria-live="polite">
+        <span class="bin-photo-progress-marker" aria-hidden="true"></span>
+        <span>Requesting one label. Keep this page open.</span>
+      </p>
+    </form>
+  </section>
+</div>
+{% endblock %}
+
+{% block body_extra %}
+{{ super() }}
+{% if notice %}<script>document.querySelector('[data-manage-notice]')?.focus();</script>{% endif %}
+{% endblock %}

@@ -10,4 +10,5 @@ def test_initial_persistence_migration_is_packaged() -> None:
     assert migration_names() == (
         "001_initial_persistence.sql",
         "002_domain_compatibility.sql",
+        "003_scope_idempotency.sql",
     )

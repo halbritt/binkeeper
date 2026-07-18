@@ -27,7 +27,7 @@ from binkeeper.bin_inventory import DEFAULT_BIN_CORPUS_ID, DEFAULT_BIN_TENANT_ID
 from binkeeper.bin_presence import current_presence
 from binkeeper.bin_priority import ReconfirmCandidate, reconfirm_priorities
 
-BIN_SWEEP_DEFAULT_LIMIT: Final[int] = int(os.environ.get("ENGRAM_BIN_SWEEP_LIMIT", "8"))
+BIN_SWEEP_DEFAULT_LIMIT: Final[int] = int(os.environ.get("BINKEEPER_BIN_SWEEP_LIMIT", "8"))
 
 _ABSTAIN_NO_PRESENCE: Final[str] = "no_current_presence"
 _ABSTAIN_NAMED_SITE_NOT_PRESENT: Final[str] = "named_site_not_present"

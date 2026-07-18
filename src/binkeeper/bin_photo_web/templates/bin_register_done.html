@@ -1,0 +1,50 @@
+{% extends "bin_photo_base.html" %}
+{% import "_components.html" as components %}
+
+{% block title %}Bin registered{% endblock %}
+
+{% block bin_photo_main %}
+<header class="bin-photo-hero">
+  <div class="bin-photo-heading-row">
+    <span class="bin-photo-kicker">BinKeeper</span>
+    <span class="status-chip" data-status="active">
+      {% if already_existed %}Already on file{% else %}Registration complete{% endif %}
+    </span>
+  </div>
+  <h1>{% if already_existed %}Already registered{% else %}Bin registered{% endif %}</h1>
+  <p class="bin-photo-intro">The bin now resolves to its saved record and location.</p>
+</header>
+
+{% if print_requested %}
+  {% if printed %}
+  <p class="banner banner-ok" role="status"><strong>Label sent to {{ print_target }}.</strong>
+    The bin record was saved before the local print job was submitted.</p>
+  {% else %}
+  <p class="banner banner-warn" role="status"><strong>The bin was registered, but the label was not printed.</strong>
+    {{ print_error }} The saved bin record is unchanged.</p>
+  {% endif %}
+{% endif %}
+
+<section class="panel panel-padded bin-photo-card" aria-labelledby="registered-bin-heading">
+  <div class="bin-photo-card-header">
+    <h2 id="registered-bin-heading">{{ bin_code }} at {{ site }}</h2>
+    <p class="bin-photo-card-copy">Registration details</p>
+  </div>
+  {% set pairs = [
+    ('bin_code', bin_code ~ (' (from %s)'|format(code_source) if code_source and code_source != 'entered' else '')),
+    ('site', site),
+    ('location', ('%s, %s'|format(lat, lon)) if has_gps else '(no GPS in photo)'),
+    ('accuracy (m)', accuracy_m if has_gps and accuracy_m != '' else 'unknown'),
+    ('photo stored', 'yes' if photo_stored else 'no')
+  ] %}
+  {{ components.kv_list(pairs) }}
+
+  <p><strong>{{ bin_code }}</strong> is placed at <strong>{{ site }}</strong>.
+    Scanning the label's QR now resolves to this record, and its location folds into
+    the move ledger.</p>
+</section>
+
+<div class="action-bar">
+  <a class="button" href="{{ new_href }}">Register another</a>
+</div>
+{% endblock %}

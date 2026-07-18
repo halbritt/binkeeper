@@ -194,8 +194,10 @@ are removed.
 5. Extract label, vision, photo, catalog, management, CLI, and MCP surfaces.
    Keep network access local and preserve strict front/origin checks.
    **BINK-6 complete:** domain, persistence adapters, CLI, and MCP schemas are
-   standalone and direct parity tests pass. Photo, vision, catalog, and owner
-   management remain in BINK-7.
+   standalone and direct parity tests pass. **BINK-7 complete:** encrypted
+   media projection, advisory local vision, catalog, reviewed management,
+   registration, and bounded label handoff now run behind BinKeeper-owned
+   modules with synthetic/disposable tests. No live route or hardware was used.
 6. Add backup/restore and deployment checks. Rehearse a full cutover and rollback
    using synthetic fixtures, then a read-only copy of live data.
 7. Freeze Engram BinKeeper writes, run the final export/import, compare the

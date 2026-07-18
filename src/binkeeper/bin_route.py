@@ -20,12 +20,12 @@ from binkeeper.bin_passport import BinPassport
 from binkeeper.bin_placement_feedback import load_folded_bin_passports
 
 BIN_ROUTE_ROUTER_VERSION: Final[str] = os.environ.get(
-    "ENGRAM_BIN_ROUTE_ROUTER_VERSION", "bin-route.v1.rfc0093-p1"
+    "BINKEEPER_BIN_ROUTE_ROUTER_VERSION", "bin-route.v1.rfc0093-p1"
 )
 DEFAULT_PLACEMENT_FLOOR: Final[float] = float(
-    os.environ.get("ENGRAM_BIN_ROUTE_PLACEMENT_FLOOR", "0.60")
+    os.environ.get("BINKEEPER_BIN_ROUTE_PLACEMENT_FLOOR", "0.60")
 )
-DEFAULT_TIE_MARGIN: Final[float] = float(os.environ.get("ENGRAM_BIN_ROUTE_TIE_MARGIN", "0.05"))
+DEFAULT_TIE_MARGIN: Final[float] = float(os.environ.get("BINKEEPER_BIN_ROUTE_TIE_MARGIN", "0.05"))
 _TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 _FULL_CAPACITY_STATES: Final[frozenset[str]] = frozenset({"full", "overfull"})
 _CONSTRAINT_REJECT_TOKENS: Final[frozenset[str]] = frozenset(
@@ -45,10 +45,10 @@ _SCORE_WEIGHTS: Final[dict[str, float]] = {
 # case whenever the liveness lane is off or empty) is byte-identical to a
 # router with no history_fit at all.
 BIN_ROUTE_HISTORY_FIT_WEIGHT: Final[float] = float(
-    os.environ.get("ENGRAM_BIN_ROUTE_HISTORY_FIT_WEIGHT", "0.05")
+    os.environ.get("BINKEEPER_BIN_ROUTE_HISTORY_FIT_WEIGHT", "0.05")
 )
 BIN_LIVENESS_SERVING_ENABLED: Final[bool] = os.environ.get(
-    "ENGRAM_BIN_LIVENESS_ENABLED", ""
+    "BINKEEPER_BIN_LIVENESS_ENABLED", ""
 ).strip().lower() not in {"", "0", "false", "no", "off"}
 _CAPACITY_FIT: Final[dict[str, float]] = {
     "unknown": 0.55,

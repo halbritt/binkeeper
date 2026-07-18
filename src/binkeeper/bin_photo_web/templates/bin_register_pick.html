@@ -1,0 +1,68 @@
+{% extends "bin_photo_base.html" %}
+{% import "_components.html" as components %}
+
+{% block title %}Which site?{% endblock %}
+
+{% block bin_photo_main %}
+<header class="bin-photo-hero">
+  <div class="bin-photo-heading-row">
+    <span class="bin-photo-kicker">BinKeeper</span>
+    <span class="status-chip" data-status="advisory">One choice needed</span>
+  </div>
+  <h1>Which site?</h1>
+  <p class="bin-photo-intro">For <strong>{{ bin_code }}</strong>{% if code_source and code_source != 'entered' %}
+    (read from {{ code_source }}){% endif %}, {{ reason }}.</p>
+</header>
+
+<section class="panel panel-padded bin-photo-card" aria-labelledby="site-choice-heading">
+  <div class="bin-photo-card-header">
+    <h2 id="site-choice-heading">Choose the bin's location</h2>
+    <p class="bin-photo-card-copy">Nearby sites are listed first. This choice finishes registration.</p>
+  </div>
+
+  {% if has_gps %}
+  {{ components.kv_list([('gps', lat ~ ', ' ~ lon), ('accuracy (m)', accuracy_m or 'unknown')]) }}
+  {% endif %}
+
+  <form method="post" action="{{ confirm_action }}" class="form-grid bin-photo-form"
+        data-submit-form>
+    <input type="hidden" name="bin_code" value="{{ bin_code }}">
+    <input type="hidden" name="code_source" value="{{ code_source or '' }}">
+    <input type="hidden" name="contents" value="{{ contents or '' }}">
+    <input type="hidden" name="photo_sha256" value="{{ photo_sha256 or '' }}">
+    <input type="hidden" name="lat" value="{{ lat }}">
+    <input type="hidden" name="lon" value="{{ lon }}">
+    <input type="hidden" name="accuracy_m" value="{{ accuracy_m }}">
+
+    {% call components.field("site", "Site") %}
+      <select id="site" name="site" required>
+        {% if candidates %}
+        <optgroup label="Nearest">
+          {% for site in candidates %}<option value="{{ site }}">{{ site }}</option>{% endfor %}
+        </optgroup>
+        <optgroup label="All sites">
+        {% endif %}
+        {% for site in all_sites %}<option value="{{ site }}">{{ site }}</option>{% endfor %}
+        {% if candidates %}</optgroup>{% endif %}
+      </select>
+    {% endcall %}
+
+    <p class="field-help">Picking a site here also establishes its GPS anchor if it
+      doesn't have one yet, so nearby bins resolve automatically next time.</p>
+
+    <div class="action-bar bin-photo-action-row">
+      <button type="submit" class="bin-photo-primary" data-submit-button
+              data-busy-label="Registering bin…">
+        <span data-button-label>Register here</span>
+      </button>
+      <span class="field-help bin-photo-action-note">The selected site is saved with this bin.</span>
+    </div>
+
+    <p class="bin-photo-progress" data-submit-progress hidden role="status"
+       aria-live="polite" aria-atomic="true">
+      <span class="bin-photo-progress-marker" aria-hidden="true"></span>
+      <span>Registering this bin at the selected site. Keep this page open.</span>
+    </p>
+  </form>
+</section>
+{% endblock %}

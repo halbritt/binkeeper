@@ -1,6 +1,3 @@
-"""Photo workflow package resources.
-
-The owner-facing photo workflow moves from Engram in BINK-7.
-"""
+"""Compatibility resource marker; the app lives in ``binkeeper.bin_photo_web``."""
 
 from __future__ import annotations

@@ -1,0 +1,10 @@
+<section class="cli-command-card" aria-label="{{ description|default('CLI command') }}">
+  {% if description %}
+    <p class="muted">{{ description }}</p>
+  {% endif %}
+  <div class="cli-command-row">
+    <code>{{ command }}</code>
+    <button type="button" data-copy-command="{{ command }}" aria-label="Copy command">copy</button>
+  </div>
+</section>
+

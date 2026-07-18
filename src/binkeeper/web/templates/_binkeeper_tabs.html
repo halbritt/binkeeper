@@ -1,0 +1,10 @@
+<nav class="surface-tabs" aria-label="BinKeeper">
+  <a class="surface-tab{% if binkeeper_section == 'catalog' %} is-active{% endif %}"
+     href="{{ catalog_url|default('/bins/') }}" data-binkeeper-section="catalog"{% if binkeeper_section == 'catalog' %} aria-current="page"{% endif %}>Catalog</a>
+  {% if authoring_enabled|default(true) %}
+  <a class="surface-tab{% if binkeeper_section == 'photo' %} is-active{% endif %}"
+     href="{{ photo_url|default('/') }}" data-binkeeper-section="photo"{% if binkeeper_section == 'photo' %} aria-current="page"{% endif %}>Photograph &amp; label</a>
+  <a class="surface-tab{% if binkeeper_section == 'register' %} is-active{% endif %}"
+     href="{{ register_url|default('/register') }}" data-binkeeper-section="register"{% if binkeeper_section == 'register' %} aria-current="page"{% endif %}>Register</a>
+  {% endif %}
+</nav>

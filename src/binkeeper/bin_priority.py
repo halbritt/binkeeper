@@ -50,23 +50,23 @@ from binkeeper.bin_inventory import (
     load_bin_observations,
 )
 
-# --- tunables (ENGRAM_-prefixed, read at module top per RFC 0012) -----------
+# --- tunables (BINKEEPER_-prefixed, read at module top per RFC 0012) -----------
 
 # The prior probability that any given bin is one you'll need soon, before a
 # per-bin access signal exists. A flat 0.5 keeps the ranking driven by P(stale)
 # and reachability until usage is learned (a later slice).
-BIN_NEED_PRIOR: Final[float] = float(os.environ.get("ENGRAM_BIN_NEED_PRIOR", "0.5"))
+BIN_NEED_PRIOR: Final[float] = float(os.environ.get("BINKEEPER_BIN_NEED_PRIOR", "0.5"))
 # Default cost-of-being-wrong for a site with no override (relative units).
-BIN_DEFAULT_COST: Final[float] = float(os.environ.get("ENGRAM_BIN_DEFAULT_COST", "1.0"))
+BIN_DEFAULT_COST: Final[float] = float(os.environ.get("BINKEEPER_BIN_DEFAULT_COST", "1.0"))
 # Default reachability for a site with no override: 1.0 = no trip discount.
 BIN_DEFAULT_REACHABILITY: Final[float] = float(
-    os.environ.get("ENGRAM_BIN_DEFAULT_REACHABILITY", "1.0")
+    os.environ.get("BINKEEPER_BIN_DEFAULT_REACHABILITY", "1.0")
 )
 # Optional per-site factor overrides (reachability / cost). Missing file => no
 # overrides (every site uses the defaults above), so the prioritizer is a safe
 # no-op-shaped instrument until the owner fills it in.
 DEFAULT_SITE_FACTORS_FILE: Final[str] = os.environ.get(
-    "ENGRAM_BIN_SITE_FACTORS_FILE",
+    "BINKEEPER_BIN_SITE_FACTORS_FILE",
     str(Path(__file__).resolve().parents[2] / "scripts" / "bin-capture" / "site-factors.json"),
 )
 

@@ -1,0 +1,90 @@
+{% extends "bin_photo_base.html" %}
+{% import "_components.html" as components %}
+
+{% block title %}Register a bin{% endblock %}
+
+{% block bin_photo_main %}
+<header class="bin-photo-hero">
+  <div class="bin-photo-heading-row">
+    <span class="bin-photo-kicker">BinKeeper</span>
+    <span class="status-chip" data-status="active">Camera + location</span>
+  </div>
+  <h1>Register a bin</h1>
+  <p class="bin-photo-intro">Photograph the <strong>labeled</strong> bin with its QR in frame. The code is read
+    from the label's QR and the location from your device. No typing. You're only
+    asked to pick when two sites are too close to tell apart.</p>
+</header>
+
+<section class="panel panel-padded bin-photo-card" aria-labelledby="register-photo-heading">
+  <div class="bin-photo-card-header">
+    <h2 id="register-photo-heading">Photograph the printed label</h2>
+    <p class="bin-photo-card-copy">Keep the QR sharp and readable. The photo and location stay on this machine.</p>
+  </div>
+
+  {% if error %}{{ components.banner("error", error) }}{% endif %}
+
+  <form method="post" action="{{ form_action }}" enctype="multipart/form-data"
+        class="form-grid bin-photo-form" data-submit-form>
+    <input type="hidden" name="geo_lat" id="geo_lat">
+    <input type="hidden" name="geo_lon" id="geo_lon">
+    <input type="hidden" name="geo_accuracy" id="geo_accuracy">
+
+    {% call components.field("photo", "Photo of the labeled bin", "QR in frame — reads the code") %}
+      <input type="file" id="photo" name="photo" accept="image/*" capture="environment" required>
+    {% endcall %}
+
+    {% call components.field("bin_code", "Bin code", "Leave blank — read from the label. Type only to override.") %}
+      <input type="text" id="bin_code" name="bin_code" value="{{ bin_code or '' }}"
+             placeholder="(read from the QR)">
+    {% endcall %}
+
+    {% call components.field("contents", "Contents", "Optional; folded into the record") %}
+      <textarea id="contents" name="contents">{{ contents or '' }}</textarea>
+    {% endcall %}
+
+    <p id="geo_status" class="callout bin-photo-secondary" role="status" aria-live="polite">
+      Getting your location…
+    </p>
+
+    <div class="action-bar bin-photo-action-row">
+      <button type="submit" class="bin-photo-primary" data-submit-button
+              data-busy-label="Reading label…">
+        <span data-button-label>Register bin</span>
+      </button>
+      <span class="field-help bin-photo-action-note">You can review the site before the record is final.</span>
+    </div>
+
+    <p class="bin-photo-progress" data-submit-progress hidden role="status"
+       aria-live="polite" aria-atomic="true">
+      <span class="bin-photo-progress-marker" aria-hidden="true"></span>
+      <span>Reading the printed label and placing this bin. Keep this page open.</span>
+    </p>
+  </form>
+</section>
+
+<script>
+(function () {
+  var status = document.getElementById("geo_status");
+  function say(msg) { if (status) { status.textContent = msg; } }
+  if (!("geolocation" in navigator)) {
+    say("Location unavailable on this device — you'll pick the site once.");
+    return;
+  }
+  say("Getting your location… (allow the prompt to place the bin automatically)");
+  navigator.geolocation.getCurrentPosition(
+    function (pos) {
+      document.getElementById("geo_lat").value = pos.coords.latitude;
+      document.getElementById("geo_lon").value = pos.coords.longitude;
+      if (pos.coords.accuracy != null) {
+        document.getElementById("geo_accuracy").value = pos.coords.accuracy;
+      }
+      say("Location captured (±" + Math.round(pos.coords.accuracy) + " m) — the site will be placed for you.");
+    },
+    function () {
+      say("Location off — no problem, you'll pick the site once.");
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+  );
+})();
+</script>
+{% endblock %}

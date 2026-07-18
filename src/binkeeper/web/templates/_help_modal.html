@@ -1,0 +1,64 @@
+<div id="help-modal" hidden role="dialog" aria-modal="true"
+     aria-labelledby="help-modal-title">
+  <h2 id="help-modal-title">{{ help_title|default("BinKeeper operator help") }}</h2>
+  <p class="muted">
+    BinKeeper runs entirely on your machine. No cloud service. No telemetry. No CDN. The browser fetches assets from this process only.
+  </p>
+
+  {% if verdict_help_rows %}
+    <h3>Verdicts</h3>
+    <table>
+      <thead>
+        <tr><th>Verdict</th><th>Key</th><th>Gloss</th></tr>
+      </thead>
+      <tbody>
+        {% for verdict, gloss, key in verdict_help_rows %}
+          <tr>
+            <td>{{ verdict }}</td>
+            <td><kbd>{{ key }}</kbd></td>
+            <td>{{ gloss }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% if decision_help_rows %}
+    <h3>Decisions</h3>
+    <table>
+      <thead>
+        <tr><th>Decision</th><th>Key</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        {% for decision, key, meaning in decision_help_rows %}
+          <tr>
+            <td>{{ decision }}</td>
+            <td><kbd>{{ key }}</kbd></td>
+            <td>{{ meaning }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% if shortcut_rows %}
+    <h3>Shortcuts</h3>
+    <table>
+      <tbody>
+        {% for key, action in shortcut_rows %}
+          <tr>
+            <td><kbd>{{ key }}</kbd></td>
+            <td>{{ action }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% for line in disclosure_lines or [] %}
+    <p class="muted">{{ line }}</p>
+  {% endfor %}
+
+  <button type="button" data-help-close data-key="Escape">Close</button>
+</div>
+

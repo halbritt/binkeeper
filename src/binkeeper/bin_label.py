@@ -31,28 +31,28 @@ import subprocess
 from dataclasses import dataclass
 from typing import Final
 
-# --- tunables (ENGRAM_-prefixed, read at module top per RFC 0012) -----------
+# --- tunables (BINKEEPER_-prefixed, read at module top per RFC 0012) --------
 
 # The D450BT is a 203-dpi (8 dots/mm) head; TSPL coordinates are in dots.
-BIN_LABEL_DPI: Final[int] = int(os.environ.get("ENGRAM_BIN_LABEL_DPI", "203"))
+BIN_LABEL_DPI: Final[int] = int(os.environ.get("BINKEEPER_BIN_LABEL_DPI", "203"))
 # Default media: the 4x6 stock the printer ships with. Override per call / on the CLI.
-BIN_LABEL_DEFAULT_SIZE: Final[str] = os.environ.get("ENGRAM_BIN_LABEL_SIZE", "4x6")
+BIN_LABEL_DEFAULT_SIZE: Final[str] = os.environ.get("BINKEEPER_BIN_LABEL_SIZE", "4x6")
 # QR error-correction level (L/M/Q/H). H is most damage-tolerant for a shop label.
-BIN_LABEL_QR_ECC: Final[str] = os.environ.get("ENGRAM_BIN_LABEL_QR_ECC", "H").upper()
+BIN_LABEL_QR_ECC: Final[str] = os.environ.get("BINKEEPER_BIN_LABEL_QR_ECC", "H").upper()
 # Inter-label gap in inches for the GAP command. 0 = treat media as continuous
 # (verified working on the bundled 4x6 die-cut stock); set to the real gap (~0.12)
 # if smaller die-cut labels drift over a long run.
-BIN_LABEL_GAP_IN: Final[float] = float(os.environ.get("ENGRAM_BIN_LABEL_GAP_IN", "0"))
+BIN_LABEL_GAP_IN: Final[float] = float(os.environ.get("BINKEEPER_BIN_LABEL_GAP_IN", "0"))
 # Default raw device node for --print when no target is given. Empty => autodetect
 # the first /dev/usb/lp* (a usblp printer-class node).
-BIN_LABEL_DEVICE: Final[str] = os.environ.get("ENGRAM_BIN_LABEL_DEVICE", "")
+BIN_LABEL_DEVICE: Final[str] = os.environ.get("BINKEEPER_BIN_LABEL_DEVICE", "")
 # Optional raw CUPS queue used by the reviewed BinKeeper web action. Empty keeps
 # browser printing unavailable until an operator selects an explicit local queue.
-BIN_LABEL_CUPS_QUEUE: Final[str] = os.environ.get("ENGRAM_BIN_LABEL_CUPS_QUEUE", "")
+BIN_LABEL_CUPS_QUEUE: Final[str] = os.environ.get("BINKEEPER_BIN_LABEL_CUPS_QUEUE", "")
 # Bound the synchronous CUPS handoff so a wedged local spooler cannot leave the
 # owner-facing request busy forever after registration has already committed.
 BIN_LABEL_PRINT_TIMEOUT_S: Final[float] = float(
-    os.environ.get("ENGRAM_BIN_LABEL_PRINT_TIMEOUT_S", "15")
+    os.environ.get("BINKEEPER_BIN_LABEL_PRINT_TIMEOUT_S", "15")
 )
 
 
@@ -341,7 +341,7 @@ class PrintPlan:
 def default_device() -> str | None:
     """The raw device node to print to when none is given.
 
-    ``ENGRAM_BIN_LABEL_DEVICE`` if set, else the first ``/dev/usb/lp*`` usblp node
+    ``BINKEEPER_BIN_LABEL_DEVICE`` if set, else the first ``/dev/usb/lp*`` usblp node
     (a USB printer-class device), else None.
     """
     if BIN_LABEL_DEVICE:

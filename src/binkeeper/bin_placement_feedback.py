@@ -54,13 +54,13 @@ from binkeeper.bin_passport import BinPassport, load_bin_passports
 #: folds into it. Base (unfolded) passports keep their original projector
 #: version, so the feedback stamp stays confined to bins that actually changed.
 BIN_PLACEMENT_FEEDBACK_VERSION: Final[str] = os.environ.get(
-    "ENGRAM_BIN_PLACEMENT_FEEDBACK_VERSION", "bin-passport-feedback.v1.rfc0093-p2b"
+    "BINKEEPER_BIN_PLACEMENT_FEEDBACK_VERSION", "bin-passport-feedback.v1.rfc0093-p2b"
 )
 
 #: Environment kill switch. When this variable is set to a falsey value the fold
 #: is skipped entirely and :func:`load_folded_bin_passports` returns the base
 #: passports unchanged. Feedback folding is enabled by default.
-PLACEMENT_FEEDBACK_ENABLED_ENV: Final[str] = "ENGRAM_BIN_PLACEMENT_FEEDBACK_ENABLED"
+PLACEMENT_FEEDBACK_ENABLED_ENV: Final[str] = "BINKEEPER_BIN_PLACEMENT_FEEDBACK_ENABLED"
 
 #: Prefix for the provenance ref minted for each surviving correction directive.
 PLACEMENT_DECISION_PROVENANCE_PREFIX: Final[str] = "placement-decision:"

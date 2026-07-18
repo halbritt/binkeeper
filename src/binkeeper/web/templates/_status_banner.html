@@ -1,0 +1,7 @@
+{% if message %}
+  <div class="banner banner-{{ kind|default('info') }}"
+       role="{% if kind == 'danger' %}alert{% else %}status{% endif %}">
+    {{ message }}
+  </div>
+{% endif %}
+

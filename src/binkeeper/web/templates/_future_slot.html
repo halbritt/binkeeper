@@ -1,0 +1,12 @@
+<section class="future-slot" data-future="true" aria-disabled="true">
+  <span class="status-chip" data-status="future-backlog" title="Not yet implemented. Tracked in {{ references|default('RFC ref') }}.">
+    <span aria-hidden="true">←</span>
+    Future / backlog
+  </span>
+  <h2>{{ title|default("Future work") }}</h2>
+  {% if subtitle %}
+    <p>{{ subtitle }}</p>
+  {% endif %}
+  <p class="muted">Phase 4 work is not yet built. Tracked in RFC 0021 / D044 / D069 / D079.</p>
+</section>
+

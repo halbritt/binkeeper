@@ -5,14 +5,18 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import psycopg
 from psycopg.types.json import Jsonb
 
 
-class PersonalCaptureConflict(RuntimeError):
+class PersonalMemoryError(RuntimeError):
+    """Base error for the narrow standalone capture seam."""
+
+
+class PersonalCaptureConflict(PersonalMemoryError):
     """An idempotency key exists with different capture evidence."""
 
 
@@ -25,8 +29,8 @@ class CaptureRequest:
     source_label: str
     idempotency_key: str
     metadata: dict[str, object]
-    tenant_id: str
-    corpus_id: str
+    tenant_id: str = "personal"
+    corpus_id: str = "personal"
 
 
 @dataclass(frozen=True)
@@ -42,12 +46,21 @@ class PersonalMemoryService:
         self._conn = conn
 
     def capture(self, request: CaptureRequest) -> CaptureResult:
-        external_id = "capture:" + hashlib.sha256(request.idempotency_key.encode()).hexdigest()
+        identity = "\0".join(
+            (request.tenant_id, request.corpus_id, request.idempotency_key)
+        ).encode()
+        external_id = "capture:" + hashlib.sha256(identity).hexdigest()
+        observed_at = request.observed_at.astimezone(UTC)
         payload = {
+            "schema_version": "binkeeper.capture.v1",
             "text": request.text,
             "capture_type": request.capture_type,
+            "source_label": request.source_label,
             "metadata": request.metadata,
             "idempotency_key": request.idempotency_key,
+            "observed_at": observed_at.isoformat().replace("+00:00", "Z"),
+            "tenant_id": request.tenant_id,
+            "corpus_id": request.corpus_id,
         }
         row = self._conn.execute(
             "SELECT id::text, payload FROM capture_evidence WHERE external_id = %s",
@@ -60,13 +73,14 @@ class PersonalMemoryService:
         inserted = self._conn.execute(
             """
             INSERT INTO capture_evidence (
-                external_id, captured_at, content_text, payload, privacy_class, provenance
-            ) VALUES (%s, %s, %s, %s, %s, %s)
+                external_id, captured_at, content_text, payload, privacy_class,
+                provenance, tenant_id, corpus_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id::text
             """,
             (
                 external_id,
-                request.observed_at,
+                observed_at,
                 request.text,
                 Jsonb(payload),
                 f"tier-{request.privacy_tier}",
@@ -77,6 +91,8 @@ class PersonalMemoryService:
                         "corpus_id": request.corpus_id,
                     }
                 ),
+                request.tenant_id,
+                request.corpus_id,
             ),
         ).fetchone()
         assert inserted is not None
