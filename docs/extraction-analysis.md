@@ -193,20 +193,22 @@ are removed.
 
 ## Work breakdown
 
-The Plane epic and children are the execution authority. The intended order is:
+`BINK-1` is the parent campaign work item. Its children are:
 
-1. extraction ADR and preservation contract;
-2. standalone package and green baseline;
-3. owned persistence and blob authority;
-4. deterministic exporter/importer and manifest;
-5. domain, CLI, and MCP extraction;
-6. photo, vision, label, catalog, and management extraction;
-7. owned search plus optional Engram liveness adapter;
-8. standalone service, tailnet route, and compatibility shims;
-9. backup/restore and cutover rehearsal;
-10. live cutover;
-11. Praxis consumer update;
-12. Engram retirement and decision supersession.
+| Item | Slice | Blocked by |
+|---|---|---|
+| `BINK-2` | Accept the extraction ADR and freeze the preservation contract | — |
+| `BINK-3` | Scaffold the standalone package and preservation test harness | `BINK-2` |
+| `BINK-4` | Create BinKeeper-owned database, roles, migrations, and blob authority | `BINK-2` |
+| `BINK-5` | Build deterministic Engram export and BinKeeper import manifests | `BINK-4` |
+| `BINK-6` | Extract domain modules, CLI, and MCP into BinKeeper | `BINK-3`, `BINK-4` |
+| `BINK-7` | Extract photo, vision, label, catalog, and management surfaces | `BINK-4`, `BINK-6` |
+| `BINK-8` | Own inventory search and isolate transcript liveness behind an Engram adapter | `BINK-4`, `BINK-6` |
+| `BINK-9` | Deploy standalone BinKeeper with tailnet HTTPS and compatibility shims | `BINK-7`, `BINK-8` |
+| `BINK-10` | Add backup, restore-smoke, monitoring, and cutover runbooks | `BINK-4`, `BINK-7`, `BINK-9` |
+| `BINK-11` | Rehearse and execute the one-writer production cutover | `BINK-5`, `BINK-9`, `BINK-10` |
+| `BINK-12` | Move Praxis to the standalone BinKeeper witness contract | `BINK-9` |
+| `BINK-13` | Retire Engram BinKeeper runtime wiring and supersede Engram decisions | `BINK-11`, `BINK-12` |
 
 Items that alter live authority must remain blocked until their prerequisites
 are accepted. Passing tests verifies implementation behavior; it does not by
