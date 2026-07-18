@@ -3,14 +3,19 @@
 BinKeeper is a local-first system for tracking physical storage bins, their
 contents, locations, photos, movement history, and placement recommendations.
 
-Status: repository and extraction planning only. The working implementation
-still lives in [halbritt/engram](https://github.com/halbritt/engram). Do not
-deploy this repository or treat it as the data authority until the cutover work
-in the BinKeeper Plane project is complete.
+Status: extraction decision accepted; implementation and cutover remain in
+progress. The working implementation and data authority still live in
+[halbritt/engram](https://github.com/halbritt/engram). Do not deploy this
+repository or treat it as the data authority until the verified one-writer
+cutover in `BINK-11` succeeds.
 
 The extraction plan is in
 [docs/extraction-analysis.md](docs/extraction-analysis.md). Work is tracked in
 the private Proximal Plane workspace under project `BINK`.
+
+Architecture decisions use short, sequential records under
+[`docs/adr/`](docs/adr/). The accepted standalone-authority decision is
+[ADR 0001](docs/adr/0001-standalone-authority.md).
 
 ## Invariants
 

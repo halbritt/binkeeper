@@ -1,6 +1,6 @@
 # BinKeeper extraction analysis
 
-Status: planning baseline
+Status: extraction accepted; implementation pending
 
 Date: 2026-07-18
 
@@ -9,6 +9,9 @@ Source baseline: Engram `a4b2b489c80370256d82256527428bd2b7714d6a`
 Target repository: `https://github.com/halbritt/binkeeper`
 
 Plane project: `BinKeeper` (`BINK`)
+
+Accepted decision: [ADR 0001](adr/0001-standalone-authority.md), with owner
+acceptance and operating defaults recorded in Plane `BINK-2`.
 
 ## Decision summary
 
@@ -195,31 +198,38 @@ are removed.
 
 `BINK-1` is the parent campaign work item. Its children are:
 
-| Item | Slice | Blocked by |
-|---|---|---|
-| `BINK-2` | Accept the extraction ADR and freeze the preservation contract | — |
-| `BINK-3` | Scaffold the standalone package and preservation test harness | `BINK-2` |
-| `BINK-4` | Create BinKeeper-owned database, roles, migrations, and blob authority | `BINK-2` |
-| `BINK-5` | Build deterministic Engram export and BinKeeper import manifests | `BINK-4` |
-| `BINK-6` | Extract domain modules, CLI, and MCP into BinKeeper | `BINK-3`, `BINK-4` |
-| `BINK-7` | Extract photo, vision, label, catalog, and management surfaces | `BINK-4`, `BINK-6` |
-| `BINK-8` | Own inventory search and isolate transcript liveness behind an Engram adapter | `BINK-4`, `BINK-6` |
-| `BINK-9` | Deploy standalone BinKeeper with tailnet HTTPS and compatibility shims | `BINK-7`, `BINK-8` |
-| `BINK-10` | Add backup, restore-smoke, monitoring, and cutover runbooks | `BINK-4`, `BINK-7`, `BINK-9` |
-| `BINK-11` | Rehearse and execute the one-writer production cutover | `BINK-5`, `BINK-9`, `BINK-10` |
-| `BINK-12` | Move Praxis to the standalone BinKeeper witness contract | `BINK-9` |
-| `BINK-13` | Retire Engram BinKeeper runtime wiring and supersede Engram decisions | `BINK-11`, `BINK-12` |
+| Item | Slice | Change class | Blocked by |
+|---|---|---|---|
+| `BINK-2` | Accept the extraction ADR and freeze the preservation contract | Decision | — |
+| `BINK-3` | Scaffold the standalone package and preservation test harness | Structural | `BINK-2` |
+| `BINK-4` | Create BinKeeper-owned database, roles, migrations, and blob authority | Structural | `BINK-2` |
+| `BINK-5` | Build deterministic Engram export and BinKeeper import manifests | Data migration | `BINK-4` |
+| `BINK-6` | Extract domain modules, CLI, and MCP into BinKeeper | Structural | `BINK-3`, `BINK-4` |
+| `BINK-7` | Extract photo, vision, label, catalog, and management surfaces | Structural | `BINK-4`, `BINK-6` |
+| `BINK-8` | Own inventory search and isolate transcript liveness behind an Engram adapter | Semantic | `BINK-4`, `BINK-6` |
+| `BINK-9` | Deploy standalone BinKeeper with tailnet HTTPS and compatibility shims | Deployment | `BINK-7`, `BINK-8` |
+| `BINK-10` | Add backup, restore-smoke, monitoring, and cutover runbooks | Deployment | `BINK-4`, `BINK-7`, `BINK-9` |
+| `BINK-11` | Rehearse and execute the one-writer production cutover | Cutover and live data migration | `BINK-5`, `BINK-9`, `BINK-10` |
+| `BINK-12` | Move Praxis to the standalone BinKeeper witness contract | Consumer migration | `BINK-9` |
+| `BINK-13` | Retire Engram BinKeeper runtime wiring and supersede Engram decisions | Retirement | `BINK-11`, `BINK-12` |
 
 Items that alter live authority must remain blocked until their prerequisites
 are accepted. Passing tests verifies implementation behavior; it does not by
 itself accept a cutover.
 
-## Risks and unresolved decisions
+## Accepted operating defaults and unresolved decisions
 
-- The final compatibility-window duration is not yet accepted.
-- The standalone tailnet URL and port are not yet selected.
-- Blob key custody may require key reuse, rewrap, or re-encryption. The cutover
-  work must choose one and prove restore behavior before moving live authority.
+- Engram compatibility shims remain until `BINK-12` probes pass, with a hard
+  maximum of 30 days after production cutover. Extension requires a new owner
+  decision.
+- The standalone tailnet host is `proximal.tail0ecc2e.ts.net`; the dedicated
+  HTTPS and loopback ports remain to be selected and frozen before `BINK-9`.
+- The four current bin-linked blobs will be re-encrypted under a
+  BinKeeper-owned key. Migration and backup/restore must verify plaintext
+  hashes before authority moves.
+- The owner or executing operator may restore the Engram writer during the
+  verification window after a manifest mismatch, incorrect protected
+  projection, failed physical-action path, or failed backup/restore check.
 - Engram search currently provides contents discovery. The standalone minimum
   is exact and lexical search; semantic search should be added only if owner
   queries demonstrate a need.
