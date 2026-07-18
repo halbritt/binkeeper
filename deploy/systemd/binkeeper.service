@@ -29,6 +29,7 @@ RestrictRealtime=true
 LockPersonality=true
 MemoryDenyWriteExecute=true
 CapabilityBoundingSet=
+ReadWritePaths=/var/lib/binkeeper/blobs
 UMask=0077
 
 [Install]

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -9,6 +11,14 @@ from binkeeper.service import (
     create_app,
     operational_readiness,
 )
+
+
+def test_production_service_can_write_only_its_blob_root() -> None:
+    unit = Path("deploy/systemd/binkeeper.service").read_text(encoding="utf-8")
+
+    assert "ProtectSystem=strict" in unit
+    assert "ReadWritePaths=/var/lib/binkeeper/blobs" in unit
+    assert "ReadWritePaths=/var/lib/binkeeper/backups" not in unit
 
 
 def test_frozen_owner_endpoint_is_collision_free_port() -> None:

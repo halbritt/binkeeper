@@ -9,7 +9,9 @@ Install the wheel into `/opt/binkeeper/venv`, copy the reviewed unit from
 `deploy/systemd/binkeeper.service`, and create `/etc/binkeeper/binkeeper.env`
 from the example with owner-only permissions. Blob keys stay in the separate
 owner-local vault configuration; they never belong in the environment file or
-repository.
+repository. The service sandbox keeps the host filesystem read-only except for
+the dedicated `/var/lib/binkeeper/blobs` vault root; backup artifacts remain
+writable only by the separate backup unit.
 
 `BINKEEPER_WRITES_ENABLED` defaults to `0`. In that state every non-safe HTTP
 method returns HTTP 503 before an authoring handler runs, the catalog hides
