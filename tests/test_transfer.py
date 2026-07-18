@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import base64
 import copy
+import hashlib
 from collections.abc import Callable
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from binkeeper.blob_vault import InMemoryBlobStore, content_object_key
 from binkeeper.transfer import (
     SCHEMA_VERSION,
     TABLE_ORDER,
     TransferMismatchError,
     build_manifest,
+    stage_reencrypted_blobs,
+    verify_blob_migration,
     verify_snapshot,
 )
 
@@ -117,3 +123,103 @@ def test_data_drift_fails_closed(dimension: str, mutate: Callable[[dict[str, Any
     mutate(snapshot["tables"])  # type: ignore[arg-type]
     with pytest.raises(TransferMismatchError, match="manifest mismatch"):
         verify_snapshot(snapshot)
+
+
+def test_blob_staging_reencrypts_and_preserves_logical_evidence() -> None:
+    source_key = b"s" * 32
+    target_key = b"t" * 32
+    plaintext = b"synthetic owner-free blob"
+    digest = hashlib.sha256(plaintext).hexdigest()
+    object_key = content_object_key(digest)
+    source_nonce = b"n" * 12
+    source_ciphertext = AESGCM(source_key).encrypt(source_nonce, plaintext, None)
+    source_store = InMemoryBlobStore()
+    source_store.put(object_key, source_ciphertext)
+    target_store = InMemoryBlobStore()
+    snapshot = empty_snapshot()
+    tables = snapshot["tables"]
+    assert isinstance(tables, dict)
+    tables["evidence_blobs"] = [
+        {
+            "id": "blob-1",
+            "seq": 1,
+            "plaintext_sha256": digest,
+            "byte_size": len(plaintext),
+            "content_type": "image/jpeg",
+            "storage_backend": "garage-s3",
+            "object_key": object_key,
+            "encryption_algorithm": "AES-256-GCM",
+            "ciphertext_sha256": hashlib.sha256(source_ciphertext).hexdigest(),
+            "nonce": base64.b64encode(source_nonce).decode("ascii"),
+            "key_ref": "synthetic-source-key",
+            "created_at": "2026-07-18T00:00:00+00:00",
+            "privacy_class": "private",
+            "provenance": {"fixture": True},
+        }
+    ]
+    snapshot["manifest"] = build_manifest(snapshot)
+
+    staged = stage_reencrypted_blobs(
+        snapshot,
+        source_store=source_store,
+        source_key=source_key,
+        target_store=target_store,
+        target_key=target_key,
+        target_key_ref="synthetic-target-key",
+        nonce_source=lambda size: b"z" * size,
+    )
+
+    verify_blob_migration(snapshot, staged)
+    staged_tables = staged["tables"]
+    assert isinstance(staged_tables, dict)
+    row = staged_tables["evidence_blobs"][0]
+    assert row["id"] == "blob-1"
+    assert row["plaintext_sha256"] == digest
+    assert row["key_ref"] == "synthetic-target-key"
+    target_ciphertext = target_store.get(object_key)
+    assert target_ciphertext != source_ciphertext
+    assert AESGCM(target_key).decrypt(b"z" * 12, target_ciphertext, None) == plaintext
+
+
+def test_blob_staging_refuses_same_key_and_logical_drift() -> None:
+    snapshot = empty_snapshot()
+    store = InMemoryBlobStore()
+    with pytest.raises(TransferMismatchError, match="must differ"):
+        stage_reencrypted_blobs(
+            snapshot,
+            source_store=store,
+            source_key=b"k" * 32,
+            target_store=store,
+            target_key=b"k" * 32,
+            target_key_ref="synthetic-target-key",
+        )
+    with pytest.raises(TransferMismatchError, match="stores must be distinct"):
+        stage_reencrypted_blobs(
+            snapshot,
+            source_store=store,
+            source_key=b"s" * 32,
+            target_store=store,
+            target_key=b"t" * 32,
+            target_key_ref="synthetic-target-key",
+        )
+
+    staged = copy.deepcopy(snapshot)
+    manifest = snapshot["manifest"]
+    assert isinstance(manifest, dict)
+    staged["source_manifest"] = copy.deepcopy(manifest)
+    staged["blob_migration"] = {
+        "schema_version": "binkeeper-blob-migration/1",
+        "blob_count": 0,
+        "source_overall_sha256": manifest["overall_sha256"],
+        "target_overall_sha256": manifest["overall_sha256"],
+        "source_blob_hashes_sha256": manifest["blob_hashes_sha256"],
+        "target_blob_hashes_sha256": manifest["blob_hashes_sha256"],
+        "target_key_ref": "synthetic-target-key",
+    }
+    verify_blob_migration(snapshot, staged)
+    staged_tables = staged["tables"]
+    assert isinstance(staged_tables, dict)
+    staged_tables["capture_evidence"] = [{"id": "drift"}]
+    staged["manifest"] = build_manifest(staged)
+    with pytest.raises(TransferMismatchError, match="protected table"):
+        verify_blob_migration(snapshot, staged)

@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
+import ipaddress
 import json
 import os
+import urllib.error
+import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urlparse
 
 import psycopg
 from cryptography.exceptions import InvalidTag
@@ -32,6 +37,7 @@ class BlobVaultError(ValueError):
 
 class BlobStore(Protocol):
     backend_name: str
+    storage_identity: str
 
     def put(self, object_key: str, data: bytes) -> None: ...
 
@@ -47,6 +53,7 @@ class InMemoryBlobStore:
 
     def __init__(self) -> None:
         self._objects: dict[str, bytes] = {}
+        self.storage_identity = f"memory:{id(self)}"
 
     def put(self, object_key: str, data: bytes) -> None:
         self._objects[object_key] = bytes(data)
@@ -68,6 +75,7 @@ class FilesystemBlobStore:
 
     def __init__(self, root: Path | str) -> None:
         self._root = Path(root)
+        self.storage_identity = f"filesystem:{self._root.expanduser().resolve()}"
 
     def _path(self, object_key: str) -> Path:
         digest = object_key.rsplit("/", 1)[-1]
@@ -90,6 +98,103 @@ class FilesystemBlobStore:
 
     def exists(self, object_key: str) -> bool:
         return self._path(object_key).exists()
+
+
+class GarageObjectStore:
+    """Ciphertext reader/writer for an explicitly local Garage S3 endpoint."""
+
+    backend_name = "garage-s3"
+
+    def __init__(
+        self,
+        *,
+        endpoint: str,
+        region: str,
+        bucket: str,
+        access_key_id: str,
+        secret_access_key: str,
+        timeout_seconds: float = 30.0,
+    ) -> None:
+        _require_local_endpoint(endpoint)
+        self._endpoint = endpoint.rstrip("/")
+        self._region = _required_text(region, "s3_region")
+        self._bucket = _required_text(bucket, "bucket")
+        self._access_key_id = _required_text(access_key_id, "access_key_id")
+        self._secret_access_key = _required_text(secret_access_key, "secret_access_key")
+        self._timeout_seconds = timeout_seconds
+        self.storage_identity = f"garage-s3:{self._endpoint}/{self._bucket}"
+
+    def _url(self, object_key: str) -> str:
+        digest = object_key.rsplit("/", 1)[-1]
+        if object_key != content_object_key(digest):
+            raise BlobVaultError(f"refusing non-content-addressed key {object_key!r}")
+        return f"{self._endpoint}/{self._bucket}/{object_key}"
+
+    def _request(self, method: str, object_key: str, body: bytes = b"") -> bytes:
+        request = urllib.request.Request(
+            self._url(object_key), data=body if method == "PUT" else None, method=method
+        )
+        for name, value in self._signed_headers(method, object_key, body).items():
+            request.add_header(name, value)
+        try:
+            with urllib.request.urlopen(request, timeout=self._timeout_seconds) as response:
+                return response.read()
+        except urllib.error.HTTPError as exc:
+            if method == "GET" and exc.code == 404:
+                raise BlobVaultError(f"object {object_key!r} not found") from exc
+            raise BlobVaultError(f"garage {method} refused object access: {exc.code}") from exc
+        except urllib.error.URLError as exc:
+            raise BlobVaultError(f"garage {method} endpoint is unreachable") from exc
+
+    def _signed_headers(self, method: str, object_key: str, body: bytes) -> dict[str, str]:
+        from datetime import UTC, datetime
+
+        now = datetime.now(UTC)
+        amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+        date_stamp = now.strftime("%Y%m%d")
+        host = urlparse(self._endpoint).netloc
+        payload_hash = hashlib.sha256(body).hexdigest()
+        canonical_uri = f"/{self._bucket}/{object_key}"
+        canonical_headers = (
+            f"host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n"
+        )
+        signed_headers = "host;x-amz-content-sha256;x-amz-date"
+        canonical_request = "\n".join(
+            [method, canonical_uri, "", canonical_headers, signed_headers, payload_hash]
+        )
+        scope = f"{date_stamp}/{self._region}/s3/aws4_request"
+        string_to_sign = "\n".join(
+            [
+                "AWS4-HMAC-SHA256",
+                amz_date,
+                scope,
+                hashlib.sha256(canonical_request.encode()).hexdigest(),
+            ]
+        )
+        signing_key = _sigv4_signing_key(self._secret_access_key, date_stamp, self._region)
+        signature = hmac.new(signing_key, string_to_sign.encode(), hashlib.sha256).hexdigest()
+        return {
+            "Host": host,
+            "x-amz-date": amz_date,
+            "x-amz-content-sha256": payload_hash,
+            "Authorization": (
+                f"AWS4-HMAC-SHA256 Credential={self._access_key_id}/{scope}, "
+                f"SignedHeaders={signed_headers}, Signature={signature}"
+            ),
+        }
+
+    def put(self, object_key: str, data: bytes) -> None:
+        self._request("PUT", object_key, data)
+
+    def get(self, object_key: str) -> bytes:
+        return self._request("GET", object_key)
+
+    def exists(self, object_key: str) -> bool:
+        try:
+            self._request("HEAD", object_key)
+        except BlobVaultError:
+            return False
+        return True
 
 
 @dataclass(frozen=True)
@@ -232,9 +337,48 @@ def blob_store_from_config(config: Mapping[str, object] | None = None) -> BlobSt
     """Build the explicitly configured on-box ciphertext store."""
     selected = config if config is not None else load_vault_config()
     backend = selected.get("backend", "filesystem")
-    if backend != "filesystem":
-        raise BlobVaultError(f"unsupported local blob-vault backend {backend!r}")
-    return FilesystemBlobStore(_required_text(selected.get("filesystem_root"), "filesystem_root"))
+    if backend == "filesystem":
+        return FilesystemBlobStore(
+            _required_text(selected.get("filesystem_root"), "filesystem_root")
+        )
+    if backend in {"garage", "garage-s3"}:
+        return GarageObjectStore(
+            endpoint=_required_text(selected.get("s3_endpoint"), "s3_endpoint"),
+            region=_required_text(selected.get("s3_region"), "s3_region"),
+            bucket=_required_text(selected.get("bucket"), "bucket"),
+            access_key_id=_required_text(selected.get("access_key_id"), "access_key_id"),
+            secret_access_key=_required_text(
+                selected.get("secret_access_key"), "secret_access_key"
+            ),
+        )
+    raise BlobVaultError(f"unsupported local blob-vault backend {backend!r}")
+
+
+def _sigv4_signing_key(secret: str, date_stamp: str, region: str) -> bytes:
+    def sign(key: bytes, message: str) -> bytes:
+        return hmac.new(key, message.encode(), hashlib.sha256).digest()
+
+    date_key = sign(f"AWS4{secret}".encode(), date_stamp)
+    region_key = sign(date_key, region)
+    service_key = sign(region_key, "s3")
+    return sign(service_key, "aws4_request")
+
+
+def _require_local_endpoint(endpoint: str) -> None:
+    parsed = urlparse(endpoint)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise BlobVaultError("Garage endpoint must be an absolute local HTTP(S) URL")
+    hostname = parsed.hostname
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        if hostname != "localhost" and not hostname.endswith(".ts.net"):
+            raise BlobVaultError(
+                "Garage endpoint must remain on loopback, private IP, or tailnet"
+            ) from None
+    else:
+        if not (address.is_loopback or address.is_private):
+            raise BlobVaultError("Garage endpoint must remain on loopback or a private IP")
 
 
 def _required_text(value: object, field_name: str) -> str:

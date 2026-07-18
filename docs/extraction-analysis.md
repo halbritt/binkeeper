@@ -1,6 +1,6 @@
 # BinKeeper extraction analysis
 
-Status: standalone deployment and durability boundaries implemented; authority unchanged
+Status: cutover rehearsal in progress; authority unchanged
 
 Date: 2026-07-18
 
@@ -19,6 +19,9 @@ and durability boundaries. The frozen owner endpoint is loopback
 `127.0.0.1:8766`, paired with tailnet HTTPS at
 `https://proximal.tail0ecc2e.ts.net:8766`. Engram remains the runtime and data
 authority until the owner-gated `BINK-11` cutover.
+The service writer now fails closed by default, and the cutover transfer can
+re-encrypt source blobs under a distinct BinKeeper key while preserving source
+and target manifests. Neither change opens the production writer.
 
 ## Decision summary
 
@@ -214,7 +217,12 @@ are removed.
    disposable restore drill, local scheduling templates, and exact
    backup/cutover/rollback/retirement runbooks are implemented. Rehearse a full
    cutover and rollback using synthetic fixtures, then a read-only copy of live
-   data.
+   data. **BINK-11 rehearsal preparation:** blob staging verifies and decrypts
+   the local Engram source, re-encrypts under a distinct BinKeeper key, and
+   preserves separate source and target manifests. The standalone HTTP writer
+   is frozen by default and refuses every non-safe method before dispatch.
+   Current live-snapshot rehearsal does not authorize the production freeze,
+   writer switch, or compatibility activation.
 7. Freeze Engram BinKeeper writes, run the final export/import, compare the
    manifest, switch the owner surface, and observe a bounded verification
    window. Roll back by restoring the Engram writer if any protected projection

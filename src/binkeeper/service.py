@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import argparse
 import os
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import timedelta
 from pathlib import Path
 from typing import Final
 
 import psycopg
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
 from binkeeper.backup import BackupError, backup_key_from_config, check_backup_freshness
@@ -73,10 +73,27 @@ def create_app(
     *,
     readiness_probe: ReadinessProbe = operational_readiness,
     passport_loader: PassportLoader | None = None,
+    writes_enabled: bool | None = None,
 ) -> FastAPI:
     """Compose health, catalog, media, and reviewed authoring on one loopback port."""
     paired = (("https", FROZEN_TAILNET_HOST),)
+    writer_open = (
+        writes_enabled
+        if writes_enabled is not None
+        else os.environ.get("BINKEEPER_WRITES_ENABLED", "0") == "1"
+    )
     app = FastAPI(title="BinKeeper", docs_url=None, redoc_url=None, openapi_url=None)
+
+    @app.middleware("http")
+    async def require_writer_authority(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and not writer_open:
+            return JSONResponse(
+                {"status": "unavailable", "detail": "BinKeeper writer is frozen"},
+                status_code=503,
+            )
+        return await call_next(request)
 
     @app.get("/healthz")
     def health() -> dict[str, str]:
@@ -93,7 +110,7 @@ def create_app(
         port=FROZEN_PORT,
         base_path="/bins",
         allowed_paired_origins=paired,
-        authoring_enabled=True,
+        authoring_enabled=writer_open,
         passport_loader=passport_loader,
     )
     authoring = create_authoring_app(

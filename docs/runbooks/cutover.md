@@ -17,10 +17,14 @@ approval.
 2. Confirm BinKeeper code, migrations, service unit, backup timer, and restore
    timer match the accepted SHAs; `/readyz` must be green on the rehearsal DB.
 3. Run a fresh authenticated backup and disposable restore drill.
-4. Run the read-only Engram exporter and compare all 8 captures, 5 move events,
-   4 blobs, latest projections, trip checksums, passports, and route receipts to
-   the rehearsal manifest. Counts are a floor, not a substitute for hashes.
-5. Dry-run catalog, manage, media, CLI, MCP, and one non-committing physical
+4. Run the read-only Engram exporter, then `binkeeper-transfer stage-blobs`
+   with distinct Engram and BinKeeper keys. Compare all 8 captures, 5 move
+   events, 4 blobs, latest projections, trip checksums, passports, and route
+   receipts to the source and staged manifests. Decrypt every staged blob and
+   verify its original plaintext hash. Counts are a floor, not a substitute
+   for hashes.
+5. Keep `BINKEEPER_WRITES_ENABLED=0` and prove a POST returns HTTP 503 before
+   dry-running catalog, manage, media, CLI, MCP, and one non-committing physical
    action path through tailnet HTTPS `:8766`.
 
 Stop after any stale backup, restore mismatch, manifest drift, origin failure,
@@ -36,14 +40,16 @@ owner.
    import to prove idempotency.
 3. Compare the full manifest and decrypt all four blob copies under the
    BinKeeper-owned key. Do not delete or rewrite the Engram originals.
-4. Start BinKeeper on loopback `127.0.0.1:8766`; verify local and tailnet
+4. Start BinKeeper on loopback `127.0.0.1:8766` with writes still disabled;
+   verify local and tailnet
    `/healthz`, `/readyz`, catalog, authoring, media, CLI, and MCP.
 5. Configure the dormant Engram compatibility variables to the absolute
    BinKeeper CLI and exact `https://proximal.tail0ecc2e.ts.net:8766` origin,
    restart Engram, and prove legacy names reach only BinKeeper. Engram remains
    on `:8765`; the existing `:8766` tailnet mapping is not recreated.
-6. Open the BinKeeper writer only after the old writer refusal and all read-path
-   comparisons are recorded. Record the first BinKeeper evidence watermark.
+6. Set `BINKEEPER_WRITES_ENABLED=1` and restart BinKeeper only after the old
+   writer refusal and all read-path comparisons are recorded. Prove the old
+   writer is still refused, then record the first BinKeeper evidence watermark.
 
 There is no dual-write step.
 

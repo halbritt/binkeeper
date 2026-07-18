@@ -17,9 +17,11 @@ new BinKeeper-owned AES-256-GCM key. BinKeeper records the new ciphertext hash,
 nonce, and opaque key reference. It never stores key material in PostgreSQL or
 Git.
 
-This slice implements and tests the destination path with synthetic bytes and
-a disposable key. It does not read Engram blobs, reuse its key, or establish
-production key custody.
+The cutover transfer now implements this path with separate source and target
+manifests. Synthetic tests cover its failure boundaries; BINK-11 may exercise
+it against a current read-only local snapshot and a disposable target key. It
+does not reuse the Engram key, establish production key custody, or authorize
+the production writer switch.
 
 ## Consequences
 

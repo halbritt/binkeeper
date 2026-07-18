@@ -8,7 +8,7 @@ import copy
 import hashlib
 import json
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -16,10 +16,19 @@ from typing import Any, LiteralString, cast
 from uuid import UUID
 
 import psycopg
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from psycopg import sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from binkeeper.blob_vault import (
+    BlobStore,
+    blob_store_from_config,
+    content_object_key,
+    load_vault_config,
+    vault_key_from_config,
+)
 from binkeeper.migrations import migrate
 
 SCHEMA_VERSION = "binkeeper-transfer/1"
@@ -444,6 +453,200 @@ def read_snapshot(path: Path) -> dict[str, Any]:
     return parsed
 
 
+def stage_reencrypted_blobs(
+    snapshot: Mapping[str, Any],
+    *,
+    source_store: BlobStore,
+    source_key: bytes,
+    target_store: BlobStore,
+    target_key: bytes,
+    target_key_ref: str,
+    nonce_source: Callable[[int], bytes] = os.urandom,
+) -> dict[str, Any]:
+    """Build a target manifest while preserving every logical blob identity."""
+    verify_snapshot(snapshot)
+    if len(source_key) != 32 or len(target_key) != 32:
+        raise TransferMismatchError("blob migration keys must each be 32 bytes")
+    if source_key == target_key:
+        raise TransferMismatchError("BinKeeper blob key must differ from the Engram key")
+    if source_store.storage_identity == target_store.storage_identity:
+        raise TransferMismatchError("source and target blob stores must be distinct")
+    if not target_key_ref.strip():
+        raise TransferMismatchError("target blob key reference is required")
+
+    staged = copy.deepcopy(dict(snapshot))
+    tables = staged.get("tables")
+    if not isinstance(tables, dict):
+        raise TransferMismatchError("snapshot tables are missing")
+    blob_rows = tables.get("evidence_blobs")
+    if not isinstance(blob_rows, list):
+        raise TransferMismatchError("tables.evidence_blobs is not a row sequence")
+    for raw_row in blob_rows:
+        if not isinstance(raw_row, dict):
+            raise TransferMismatchError("evidence_blobs row is not an object")
+        _reencrypt_blob_row(
+            raw_row,
+            source_store=source_store,
+            source_key=source_key,
+            target_store=target_store,
+            target_key=target_key,
+            target_key_ref=target_key_ref.strip(),
+            nonce_source=nonce_source,
+        )
+
+    source_manifest = snapshot.get("manifest")
+    if not isinstance(source_manifest, Mapping):
+        raise TransferMismatchError("source manifest is missing")
+    staged["source_manifest"] = copy.deepcopy(dict(source_manifest))
+    staged["manifest"] = build_manifest(staged)
+    target_manifest = staged["manifest"]
+    assert isinstance(target_manifest, dict)
+    staged["blob_migration"] = {
+        "schema_version": "binkeeper-blob-migration/1",
+        "blob_count": len(blob_rows),
+        "source_overall_sha256": source_manifest.get("overall_sha256"),
+        "target_overall_sha256": target_manifest["overall_sha256"],
+        "source_blob_hashes_sha256": source_manifest.get("blob_hashes_sha256"),
+        "target_blob_hashes_sha256": target_manifest["blob_hashes_sha256"],
+        "target_key_ref": target_key_ref.strip(),
+    }
+    verify_blob_migration(snapshot, staged)
+    return staged
+
+
+def verify_blob_migration(source: Mapping[str, Any], staged: Mapping[str, Any]) -> None:
+    """Require re-encryption to change only the blob encryption envelope."""
+    verify_snapshot(source)
+    verify_snapshot(staged)
+    source_tables = source.get("tables")
+    staged_tables = staged.get("tables")
+    if not isinstance(source_tables, Mapping) or not isinstance(staged_tables, Mapping):
+        raise TransferMismatchError("blob migration tables are missing")
+    for table in TABLE_ORDER:
+        if table != "evidence_blobs" and source_tables.get(table) != staged_tables.get(table):
+            raise TransferMismatchError(f"blob migration changed protected table {table}")
+    source_rows = source_tables.get("evidence_blobs")
+    staged_rows = staged_tables.get("evidence_blobs")
+    if not isinstance(source_rows, Sequence) or not isinstance(staged_rows, Sequence):
+        raise TransferMismatchError("blob migration rows are invalid")
+    if len(source_rows) != len(staged_rows):
+        raise TransferMismatchError("blob migration changed the blob count")
+    mutable = {
+        "storage_backend",
+        "encryption_algorithm",
+        "ciphertext_sha256",
+        "nonce",
+        "key_ref",
+    }
+    for source_row, staged_row in zip(source_rows, staged_rows, strict=True):
+        if not isinstance(source_row, Mapping) or not isinstance(staged_row, Mapping):
+            raise TransferMismatchError("blob migration row is invalid")
+        source_logical = {key: value for key, value in source_row.items() if key not in mutable}
+        staged_logical = {key: value for key, value in staged_row.items() if key not in mutable}
+        if source_logical != staged_logical:
+            raise TransferMismatchError("blob migration changed logical blob evidence")
+        if source_row.get("ciphertext_sha256") == staged_row.get("ciphertext_sha256"):
+            raise TransferMismatchError("blob migration did not replace a ciphertext envelope")
+
+    migration = staged.get("blob_migration")
+    source_manifest = staged.get("source_manifest")
+    target_manifest = staged.get("manifest")
+    if not isinstance(migration, Mapping) or not isinstance(target_manifest, Mapping):
+        raise TransferMismatchError("blob migration receipt is missing")
+    if source_manifest != source.get("manifest"):
+        raise TransferMismatchError("blob migration source manifest differs")
+    target_key_ref = migration.get("target_key_ref")
+    if not isinstance(target_key_ref, str) or not target_key_ref.strip():
+        raise TransferMismatchError("blob migration target key reference is missing")
+    if any(
+        not isinstance(row, Mapping)
+        or row.get("key_ref") != target_key_ref
+        or row.get("encryption_algorithm") != "AES-256-GCM"
+        for row in staged_rows
+    ):
+        raise TransferMismatchError("blob migration receipt differs from target envelopes")
+    expected_receipt = {
+        "schema_version": "binkeeper-blob-migration/1",
+        "blob_count": len(staged_rows),
+        "source_overall_sha256": source_manifest.get("overall_sha256")
+        if isinstance(source_manifest, Mapping)
+        else None,
+        "target_overall_sha256": target_manifest.get("overall_sha256"),
+        "source_blob_hashes_sha256": source_manifest.get("blob_hashes_sha256")
+        if isinstance(source_manifest, Mapping)
+        else None,
+        "target_blob_hashes_sha256": target_manifest.get("blob_hashes_sha256"),
+        "target_key_ref": target_key_ref,
+    }
+    if dict(migration) != expected_receipt:
+        raise TransferMismatchError("blob migration receipt differs from the manifests")
+
+
+def _reencrypt_blob_row(
+    row: dict[str, Any],
+    *,
+    source_store: BlobStore,
+    source_key: bytes,
+    target_store: BlobStore,
+    target_key: bytes,
+    target_key_ref: str,
+    nonce_source: Callable[[int], bytes],
+) -> None:
+    digest = row.get("plaintext_sha256")
+    object_key = row.get("object_key")
+    expected_ciphertext = row.get("ciphertext_sha256")
+    encoded_nonce = row.get("nonce")
+    byte_size = row.get("byte_size")
+    if (
+        not isinstance(digest, str)
+        or not isinstance(object_key, str)
+        or not isinstance(expected_ciphertext, str)
+        or not isinstance(encoded_nonce, str)
+        or not isinstance(byte_size, int)
+    ):
+        raise TransferMismatchError("blob migration metadata is invalid")
+    try:
+        expected_object_key = content_object_key(digest)
+    except ValueError as exc:
+        raise TransferMismatchError("blob migration plaintext hash is invalid") from exc
+    if object_key != expected_object_key:
+        raise TransferMismatchError("blob migration object key is not content-addressed")
+    if row.get("encryption_algorithm") != "AES-256-GCM":
+        raise TransferMismatchError("blob migration source encryption is unsupported")
+    try:
+        source_nonce = base64.b64decode(encoded_nonce, validate=True)
+    except ValueError as exc:
+        raise TransferMismatchError("blob migration source nonce is invalid") from exc
+    if len(source_nonce) != 12:
+        raise TransferMismatchError("blob migration source nonce has the wrong length")
+    source_ciphertext = source_store.get(object_key)
+    if hashlib.sha256(source_ciphertext).hexdigest() != expected_ciphertext:
+        raise TransferMismatchError("blob migration source ciphertext hash differs")
+    try:
+        plaintext = AESGCM(source_key).decrypt(source_nonce, source_ciphertext, None)
+    except InvalidTag as exc:
+        raise TransferMismatchError("blob migration source authentication failed") from exc
+    if hashlib.sha256(plaintext).hexdigest() != digest or len(plaintext) != byte_size:
+        raise TransferMismatchError("blob migration source plaintext identity differs")
+    target_nonce = nonce_source(12)
+    if len(target_nonce) != 12:
+        raise TransferMismatchError("blob migration nonce source returned the wrong length")
+    target_ciphertext = AESGCM(target_key).encrypt(target_nonce, plaintext, None)
+    target_store.put(object_key, target_ciphertext)
+    stored_target = target_store.get(object_key)
+    if stored_target != target_ciphertext:
+        raise TransferMismatchError("blob migration target ciphertext read-back differs")
+    row.update(
+        {
+            "storage_backend": target_store.backend_name,
+            "encryption_algorithm": "AES-256-GCM",
+            "ciphertext_sha256": hashlib.sha256(target_ciphertext).hexdigest(),
+            "nonce": base64.b64encode(target_nonce).decode("ascii"),
+            "key_ref": target_key_ref,
+        }
+    )
+
+
 def _assert_source_schema(conn: psycopg.Connection) -> None:
     rows = conn.execute(
         """
@@ -582,6 +785,11 @@ def main() -> None:
     import_parser = subparsers.add_parser("import")
     import_parser.add_argument("snapshot", type=Path)
     import_parser.add_argument("target_url")
+    stage_parser = subparsers.add_parser("stage-blobs")
+    stage_parser.add_argument("snapshot", type=Path)
+    stage_parser.add_argument("source_config", type=Path)
+    stage_parser.add_argument("target_config", type=Path)
+    stage_parser.add_argument("output", type=Path)
     args = parser.parse_args()
     if args.command == "export":
         with psycopg.connect(args.source_url) as conn:
@@ -589,8 +797,24 @@ def main() -> None:
             conn.rollback()
         write_snapshot(args.output, snapshot)
         print(snapshot["manifest"]["overall_sha256"])
-    else:
+    elif args.command == "import":
         snapshot = read_snapshot(args.snapshot)
         with psycopg.connect(args.target_url) as conn:
             import_snapshot(conn, snapshot)
         print(snapshot["manifest"]["overall_sha256"])
+    else:
+        snapshot = read_snapshot(args.snapshot)
+        source_config = load_vault_config(args.source_config)
+        target_config = load_vault_config(args.target_config)
+        source_key, _source_key_ref = vault_key_from_config(source_config)
+        target_key, target_key_ref = vault_key_from_config(target_config)
+        staged = stage_reencrypted_blobs(
+            snapshot,
+            source_store=blob_store_from_config(source_config),
+            source_key=source_key,
+            target_store=blob_store_from_config(target_config),
+            target_key=target_key,
+            target_key_ref=target_key_ref,
+        )
+        write_snapshot(args.output, staged)
+        print(staged["manifest"]["overall_sha256"])

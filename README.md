@@ -28,6 +28,8 @@ Engram baseline and keeps unported behavior explicitly deferred.
 re-encryption under a BinKeeper-owned key.
 The [transfer contract](docs/transfer.md) describes the read-only exporter,
 isolated importer, and fail-closed manifest.
+It also stages the authority-cutover blob envelopes under a distinct
+BinKeeper-owned key while retaining both source and target manifests.
 
 ## Invariants
 
@@ -61,6 +63,9 @@ package or reaches its database. The web app factories are
 `binkeeper-serve`, frozen to `127.0.0.1:8766` and documented in
 [docs/deployment.md](docs/deployment.md); enabling it as the production writer
 remains gated to BINK-11.
+The packaged service is fail-closed for writes unless
+`BINKEEPER_WRITES_ENABLED=1`; opening that gate is an owner-approved cutover
+action, not a deployment default.
 Durability operations and exact recovery stop conditions are documented in
 [docs/runbooks/backup-restore.md](docs/runbooks/backup-restore.md). The cutover
 and compatibility-retirement procedures remain authority-gated runbooks, not

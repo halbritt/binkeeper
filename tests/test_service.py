@@ -52,3 +52,22 @@ def test_catalog_and_authoring_are_mounted_without_hosted_assets() -> None:
     assert client.get("/bins/").status_code == 200
     assert client.get("/").status_code == 200
     assert client.get("/shared-static/binkeeper.css").status_code == 200
+
+
+def test_writer_is_fail_closed_until_cutover_authority_is_opened() -> None:
+    client = TestClient(
+        create_app(
+            readiness_probe=lambda: (True, "ready"),
+            passport_loader=lambda: [],
+            writes_enabled=False,
+        ),
+        base_url="http://127.0.0.1:8766",
+    )
+
+    response = client.post("/", headers={"Origin": "http://127.0.0.1:8766"})
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "unavailable",
+        "detail": "BinKeeper writer is frozen",
+    }
+    assert "Add a bin" not in client.get("/bins/").text
