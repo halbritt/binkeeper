@@ -30,8 +30,11 @@ EVIDENCE_TABLES = (
 def conn() -> Generator[psycopg.Connection, None, None]:
     if DATABASE_URL is None:
         pytest.skip("BINKEEPER_TEST_DATABASE_URL is required")
-    connection = psycopg.connect(DATABASE_URL)
+    connection = psycopg.connect(DATABASE_URL, autocommit=True)
     migrate(connection)
+    connection.execute(
+        "TRUNCATE capture_sources, " + ", ".join(EVIDENCE_TABLES) + " RESTART IDENTITY CASCADE"
+    )
     yield connection
     connection.close()
 
@@ -119,6 +122,9 @@ def test_evidence_update_and_delete_are_rejected(conn: psycopg.Connection) -> No
     with pytest.raises(psycopg.errors.RaiseException):
         conn.execute("UPDATE capture_evidence SET external_id = 'changed'")
     conn.rollback()
+    with pytest.raises(psycopg.errors.RaiseException):
+        conn.execute("DELETE FROM capture_evidence")
+    conn.rollback()
 
 
 @pytest.mark.migration
@@ -134,10 +140,7 @@ def test_every_evidence_table_has_append_only_trigger(conn: psycopg.Connection) 
             """
         ).fetchall()
     }
-    assert guarded == set(EVIDENCE_TABLES)
-    with pytest.raises(psycopg.errors.RaiseException):
-        conn.execute("DELETE FROM capture_evidence")
-    conn.rollback()
+    assert guarded == set(EVIDENCE_TABLES) | {"capture_sources"}
 
 
 @pytest.mark.migration

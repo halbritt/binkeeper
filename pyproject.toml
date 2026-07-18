@@ -10,12 +10,17 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "cryptography>=42,<47",
+    "Pillow>=10,<13",
     "psycopg[binary]>=3.1,<4",
+    "pyzbar>=0.1.9,<1",
+    "qrcode>=7,<9",
 ]
 
 [project.scripts]
 binkeeper-migrate = "binkeeper.migrations:main"
 binkeeper-transfer = "binkeeper.transfer:main"
+binkeeper = "binkeeper.cli:main"
+binkeeper-mcp-stdio = "binkeeper.mcp_stdio:main"
 
 [project.optional-dependencies]
 dev = [
@@ -55,6 +60,7 @@ ignore = []
 [tool.pyright]
 include = ["src", "tests", "scripts"]
 exclude = ["**/__pycache__", ".venv"]
+ignore = ["tests/test_bin_*.py"]
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.11"

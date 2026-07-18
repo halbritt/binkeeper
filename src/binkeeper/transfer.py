@@ -132,6 +132,50 @@ SOURCE_QUERIES = {
 
 JSON_COLUMNS = {"payload", "provenance", "item_card", "route_result"}
 BYTE_COLUMNS = {"nonce"}
+TARGET_SELECTS = {
+    "capture_evidence": """SELECT id, seq, external_id, source_external_id, captured_at,
+        recorded_at, content_text, payload, privacy_class, provenance
+        FROM capture_evidence ORDER BY seq""",
+    "bin_trip_events": """SELECT id, seq, external_id, event_kind, trip_id, bin_code,
+        from_site, to_site, site, occurred_at, recorded_at, raw_payload AS payload,
+        privacy_class, provenance FROM bin_trip_events ORDER BY seq""",
+    "location_observations": """SELECT id, seq, external_id, bin_code, observed_site,
+        source_kind, observation_strength, evidence_ref, observed_at, recorded_at, payload,
+        privacy_class, provenance FROM location_observations ORDER BY seq""",
+    "bin_presence_events": """SELECT id, seq, external_id, event_kind, site, occurred_at,
+        recorded_at, accuracy_m, raw_payload AS payload, privacy_class, provenance
+        FROM bin_presence_events ORDER BY seq""",
+    "bin_resting_order_events": """SELECT id, seq, external_id, event_kind, order_id, site,
+        bin_code, action_kind, instruction, cleared_reason, priority, occurred_at, recorded_at,
+        raw_payload AS payload, privacy_class, provenance
+        FROM bin_resting_order_events ORDER BY seq""",
+    "bin_routing_requests": """SELECT id, seq, external_id, input_text, site, requested_at,
+        recorded_at, router_version, item_card_json AS item_card,
+        route_result_json AS route_result, route_result_sha256, raw_payload AS payload,
+        privacy_class, provenance FROM bin_routing_requests ORDER BY seq""",
+    "bin_placement_decisions": """SELECT id, seq, external_id, routing_request_id,
+        decision_kind, recommended_bin_code, selected_bin_code, actor, decided_at, recorded_at,
+        reason, decision_payload AS payload, privacy_class, provenance
+        FROM bin_placement_decisions ORDER BY seq""",
+    "bin_item_liveness": """SELECT id, seq, external_id, phrase_norm, item_phrase,
+        source_kind, source_ref, mentioned_at, harvested_at, harvester_version,
+        raw_payload AS payload, privacy_class, provenance FROM bin_item_liveness ORDER BY seq""",
+    "evidence_blobs": """SELECT id, seq, plaintext_sha256, byte_size, content_type,
+        storage_backend, object_key, encryption_algorithm, ciphertext_sha256, nonce, key_ref,
+        created_at, privacy_class, provenance FROM evidence_blobs ORDER BY seq""",
+}
+PHYSICAL_COLUMNS: dict[str, dict[str, str]] = {
+    "bin_trip_events": {"payload": "raw_payload"},
+    "bin_presence_events": {"payload": "raw_payload"},
+    "bin_resting_order_events": {"payload": "raw_payload"},
+    "bin_routing_requests": {
+        "item_card": "item_card_json",
+        "route_result": "route_result_json",
+        "payload": "raw_payload",
+    },
+    "bin_placement_decisions": {"payload": "decision_payload"},
+    "bin_item_liveness": {"payload": "raw_payload"},
+}
 SOURCE_COLUMNS = {
     "captures": (
         "id",
@@ -303,7 +347,7 @@ def snapshot_binkeeper(conn: psycopg.Connection) -> dict[str, Any]:
     tables: dict[str, list[dict[str, Any]]] = {}
     with conn.cursor(row_factory=dict_row) as cursor:
         for table in TABLE_ORDER:
-            cursor.execute(sql.SQL("SELECT * FROM {} ORDER BY seq").format(sql.Identifier(table)))
+            cursor.execute(cast(LiteralString, TARGET_SELECTS[table]))
             tables[table] = [
                 _normalize({key: value for key, value in dict(row).items() if key != "seq"})
                 | ({"seq": _normalize(row["seq"])} if "seq" in row else {})
@@ -329,7 +373,14 @@ def import_snapshot(conn: psycopg.Connection, snapshot: Mapping[str, Any]) -> No
                 _insert_row(conn, table, row)
         actual = snapshot_binkeeper(conn)
         if actual["manifest"] != snapshot["manifest"]:
-            raise TransferMismatchError("imported target manifest differs from source manifest")
+            changed = sorted(
+                key
+                for key, value in actual["manifest"].items()
+                if value != snapshot["manifest"].get(key)
+            )
+            raise TransferMismatchError(
+                "imported target manifest differs from source manifest: " + ", ".join(changed)
+            )
         conn.commit()
     except Exception:
         conn.rollback()
@@ -427,10 +478,15 @@ def _insert_row(conn: psycopg.Connection, table: str, raw_row: object) -> None:
         "INSERT INTO {} ({}) OVERRIDING SYSTEM VALUE VALUES ({}) ON CONFLICT DO NOTHING"
     ).format(
         sql.Identifier(table),
-        sql.SQL(", ").join(map(sql.Identifier, columns)),
+        sql.SQL(", ").join(sql.Identifier(_physical_column(table, name)) for name in columns),
         sql.SQL(", ").join(sql.Placeholder() for _ in values),
     )
     conn.execute(statement, values)
+
+
+def _physical_column(table: str, canonical: str) -> str:
+    mapping = PHYSICAL_COLUMNS.get(table)
+    return mapping[canonical] if mapping is not None and canonical in mapping else canonical
 
 
 def _projections(tables: Mapping[str, Any]) -> dict[str, Any]:

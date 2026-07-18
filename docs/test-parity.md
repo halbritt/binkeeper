@@ -12,18 +12,16 @@ The row-level inventory is [test-parity.csv](test-parity.csv).
 
 | Classification | Count | Meaning |
 |---|---:|---|
-| Ported | 5 | The pure location fold and trip reconciliation behaviors run in this repository with deterministic synthetic events. |
+| Ported | 133 | Direct domain and persistence tests now cover location, confidence, presence, orders, sweep, passports, volume, routing, placement receipts, and feedback. |
 | Replaced | 1 | Stable explicit idempotency keys are covered through the standalone `EventIdentity` value interface instead of Engram's eight-parameter helper. |
-| Deferred | 289 | Engram remains authoritative; the row names its extraction work item. |
+| Deferred | 161 | Owner web/media, search-adapter, and deployment behavior remains assigned to later extraction items. |
 | Engram compatibility | 0 | Compatibility shims and their contract tests start in later work items. |
 | **Total** | **295** | Every collected baseline node id appears exactly once. |
 
 ## Residual risk
 
-The ported tests protect only the pure, in-memory core of the move ledger.
-Database constraints and roles, capture storage, photos, printing, vision,
-catalog and management flows, placement, search, CLI/MCP dispatch, and
-tailnet-fronted behavior still execute only in Engram. Their rows stay
-`deferred` until the named work items port or replace them and record new
-verification evidence. A passing BinKeeper scaffold suite is not parity for
-those behaviors and does not authorize a writer or route change.
+The BINK-6 rows now run directly in this package, including their disposable
+PostgreSQL paths. Photos, printing, vision, catalog and management flows,
+owned lexical search, the offline liveness adapter, and tailnet-fronted
+deployment remain deferred to BINK-7 through BINK-10. This parity evidence does
+not authorize a writer or route change.
