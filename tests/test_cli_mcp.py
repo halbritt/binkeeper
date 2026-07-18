@@ -53,7 +53,46 @@ def test_mcp_stdio_error_responses_are_stable() -> None:
     }
 
 
-def test_cli_and_mcp_share_idempotent_trip_behavior(conn: psycopg.Connection) -> None:
+def test_cli_write_refuses_before_mutating_when_writer_authority_is_closed(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("BINKEEPER_WRITES_ENABLED", raising=False)
+    args = build_parser().parse_args(
+        ["trip-scan", "--action", "place", "--bin", "TST-FROZEN", "--site", "site-a"]
+    )
+
+    with pytest.raises(RuntimeError, match="writer is frozen"):
+        execute(args, conn)
+
+    assert conn.execute(
+        "SELECT count(*) FROM bin_trip_events WHERE bin_code = 'TST-FROZEN'"
+    ).fetchone() == (0,)
+
+
+def test_mcp_write_uses_the_same_frozen_writer_gate(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("BINKEEPER_WRITES_ENABLED", raising=False)
+
+    with pytest.raises(RuntimeError, match="writer is frozen"):
+        call_tool(
+            conn,
+            "binkeeper.trip_scan",
+            {"action": "place", "bin_code": "TST-MCP-FROZEN", "site": "site-a"},
+        )
+
+    assert conn.execute(
+        "SELECT count(*) FROM bin_trip_events WHERE bin_code = 'TST-MCP-FROZEN'"
+    ).fetchone() == (0,)
+
+
+def test_cli_and_mcp_share_idempotent_trip_behavior(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BINKEEPER_WRITES_ENABLED", "1")
     args = build_parser().parse_args(
         [
             "trip-scan",
@@ -85,7 +124,9 @@ def test_cli_and_mcp_share_idempotent_trip_behavior(conn: psycopg.Connection) ->
 
 def test_compat_trip_arrive_without_bin_reconciles_every_loaded_bin(
     conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("BINKEEPER_WRITES_ENABLED", "1")
     for argv in (
         ["trip-scan", "--action", "open", "--trip", "TRIP-COMPAT", "--to-site", "site-b"],
         ["trip-scan", "--action", "load", "--trip", "TRIP-COMPAT", "--bin", "TST-A"],

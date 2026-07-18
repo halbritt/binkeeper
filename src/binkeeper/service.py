@@ -19,6 +19,7 @@ from binkeeper.bin_catalog_web import create_app as create_catalog_app
 from binkeeper.bin_photo_web import create_app as create_authoring_app
 from binkeeper.blob_vault import BlobVaultError, load_vault_config
 from binkeeper.database import ServingRoleUnavailableError, connect
+from binkeeper.write_authority import writes_enabled as writer_authority_enabled
 
 FROZEN_HOST: Final[str] = "127.0.0.1"
 FROZEN_PORT: Final[int] = 8766
@@ -80,7 +81,7 @@ def create_app(
     writer_open = (
         writes_enabled
         if writes_enabled is not None
-        else os.environ.get("BINKEEPER_WRITES_ENABLED", "0") == "1"
+        else writer_authority_enabled()
     )
     app = FastAPI(title="BinKeeper", docs_url=None, redoc_url=None, openapi_url=None)
 

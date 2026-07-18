@@ -12,10 +12,12 @@ owner-local vault configuration; they never belong in the environment file or
 repository.
 
 `BINKEEPER_WRITES_ENABLED` defaults to `0`. In that state every non-safe HTTP
-method returns HTTP 503 before an authoring handler runs, and the catalog hides
-authoring links. Starting the process for a rehearsal therefore does not start
-a second writer. Set it to `1` only at BINK-11's approved one-writer step after
-the Engram writer has been frozen and its refusal recorded.
+method returns HTTP 503 before an authoring handler runs, the catalog hides
+authoring links, and standalone CLI or MCP mutation commands fail before
+appending evidence. Starting the process for a rehearsal therefore does not
+start a second writer, including through an Engram compatibility subprocess.
+Set it to `1` only at BINK-11's approved one-writer step after the Engram writer
+has been frozen and its refusal recorded.
 
 `/healthz` proves only that the process can answer. `/readyz` additionally
 checks the read-only serving database path and requires an authenticated backup

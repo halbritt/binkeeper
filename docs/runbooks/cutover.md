@@ -23,9 +23,9 @@ approval.
    receipts to the source and staged manifests. Decrypt every staged blob and
    verify its original plaintext hash. Counts are a floor, not a substitute
    for hashes.
-5. Keep `BINKEEPER_WRITES_ENABLED=0` and prove a POST returns HTTP 503 before
-   dry-running catalog, manage, media, CLI, MCP, and one non-committing physical
-   action path through tailnet HTTPS `:8766`.
+5. Keep `BINKEEPER_WRITES_ENABLED=0` and prove a POST returns HTTP 503 and a
+   CLI/MCP mutation refuses before dry-running catalog, manage, media, reads,
+   and one non-committing physical action path through tailnet HTTPS `:8766`.
 
 Stop after any stale backup, restore mismatch, manifest drift, origin failure,
 unavailable media, projection difference, unaccounted trip, or unclear rollback

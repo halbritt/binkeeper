@@ -16,6 +16,7 @@ from binkeeper.bin_route import bin_route
 from binkeeper.bin_sweep import BIN_SWEEP_DEFAULT_LIMIT, bin_sweep
 from binkeeper.database import connect
 from binkeeper.search import search_inventory
+from binkeeper.write_authority import require_writer_authority
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -81,6 +82,8 @@ def _scope(parser: argparse.ArgumentParser) -> None:
 
 
 def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any]:
+    if args.command in {"trip-scan", "bin-placement-decision"}:
+        require_writer_authority()
     common = {"tenant_id": args.tenant, "corpus_id": args.corpus}
     if args.command == "trip-scan":
         if args.action == "arrive" and args.bin_code is None:

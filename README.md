@@ -65,7 +65,9 @@ package or reaches its database. The web app factories are
 remains gated to BINK-11.
 The packaged service is fail-closed for writes unless
 `BINKEEPER_WRITES_ENABLED=1`; opening that gate is an owner-approved cutover
-action, not a deployment default.
+action, not a deployment default. The same process-wide gate protects the CLI
+and MCP mutation paths, so compatibility subprocesses cannot bypass the frozen
+HTTP writer.
 Durability operations and exact recovery stop conditions are documented in
 [docs/runbooks/backup-restore.md](docs/runbooks/backup-restore.md). The cutover
 and compatibility-retirement procedures remain authority-gated runbooks, not
