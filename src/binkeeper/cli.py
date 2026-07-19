@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime
 from typing import Any
 
@@ -13,6 +14,7 @@ from binkeeper.bin_inventory import arrive_all, bin_belief, bin_where, record_ev
 from binkeeper.bin_passport import bin_passport
 from binkeeper.bin_placement import PlacementDecisionAppend, record_placement_decision
 from binkeeper.bin_route import bin_route
+from binkeeper.bin_stash import stash_route_batch
 from binkeeper.bin_sweep import BIN_SWEEP_DEFAULT_LIMIT, bin_sweep
 from binkeeper.database import connect
 from binkeeper.search import search_inventory
@@ -83,6 +85,13 @@ def build_parser() -> argparse.ArgumentParser:
     sweep.add_argument("--site")
     sweep.add_argument("--limit", type=int)
     _scope(sweep)
+    stash = subparsers.add_parser(
+        "bin-stash-route", help="route a batch of item texts and print the wave plan"
+    )
+    stash.add_argument("--site", required=True)
+    stash.add_argument("--item", action="append", dest="items", default=[])
+    stash.add_argument("--items-file", help="one item per line; '-' reads stdin")
+    _scope(stash)
     return parser
 
 
@@ -156,6 +165,16 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
             limit=args.limit if args.limit is not None else BIN_SWEEP_DEFAULT_LIMIT,
             **common,
         ).to_json()
+    if args.command == "bin-stash-route":
+        items = list(args.items)
+        if args.items_file == "-":
+            items.extend(line.strip() for line in sys.stdin if line.strip())
+        elif args.items_file:
+            with open(args.items_file, encoding="utf-8") as stream:
+                items.extend(line.strip() for line in stream if line.strip())
+        if not items:
+            raise ValueError("bin-stash-route needs --item or --items-file")
+        return stash_route_batch(conn, items=items, site=args.site, **common).to_json()
     raise ValueError(f"unsupported command {args.command!r}")
 
 
@@ -172,6 +191,7 @@ def main() -> None:
         "bin-search",
         "bin-route",
         "bin-sweep",
+        "bin-stash-route",
     }
     with connect(role="serving" if read_only else "owner") as conn:
         print(json.dumps(execute(args, conn), sort_keys=True))
