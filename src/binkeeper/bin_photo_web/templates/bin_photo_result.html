@@ -100,6 +100,15 @@
       <textarea id="create_contents" name="contents">{{ proposed_contents }}</textarea>
     {% endcall %}
 
+    <fieldset class="field-stack">
+      <legend>Labels to print</legend>
+      <div class="grid-fit-180">
+        <label><input type="radio" name="label_count" value="1" checked> 1 label</label>
+        <label><input type="radio" name="label_count" value="2"> 2 labels</label>
+      </div>
+      <p class="field-help">Used only when you choose “Create and print.”</p>
+    </fieldset>
+
     <div class="action-bar bin-photo-action-row">
       <button type="submit" name="print_label" value="0" data-submit-button
               data-busy-label="Creating bin…">

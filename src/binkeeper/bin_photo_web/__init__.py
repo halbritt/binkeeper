@@ -186,6 +186,12 @@ def create_app(
         _origin: None = Depends(strict_origin_check),
     ) -> object:
         form_data = await request.form()
+        print_requested = _clean(form_data.get("print_label")) == "1"
+        label_count = (
+            2
+            if print_requested and _clean(form_data.get("label_count")) == "2"
+            else int(print_requested)
+        )
         view = await run_in_threadpool(
             _register_confirmed,
             bin_code=_clean(form_data.get("bin_code")),
@@ -197,7 +203,7 @@ def create_app(
             accuracy_m=_float(form_data.get("accuracy_m")),
             photo_sha256=_clean(form_data.get("photo_sha256")),
             code_source=_clean(form_data.get("code_source")),
-            print_label=_clean(form_data.get("print_label")) == "1",
+            label_count=label_count,
         )
         return _render_register(view)
 
@@ -420,7 +426,7 @@ def _register_confirmed(
     accuracy_m: float | None,
     photo_sha256: str | None,
     code_source: str | None = None,
-    print_label: bool = False,
+    label_count: int = 0,
 ) -> dict[str, object]:
     """Finish a registration after the owner picked the site; establish its anchor."""
     if not bin_code or not site:
@@ -450,7 +456,7 @@ def _register_confirmed(
         contents=contents,
         code_source=code_source or "",
         theme=theme,
-        print_label=print_label,
+        label_count=label_count,
     )
 
 
@@ -463,7 +469,7 @@ def _register_and_view(
     contents: str | None,
     code_source: str = "",
     theme: str | None = None,
-    print_label: bool = False,
+    label_count: int = 0,
 ) -> dict[str, object]:
     try:
         from binkeeper.bin_register import register_bin
@@ -492,7 +498,7 @@ def _register_and_view(
     printed = False
     print_target = ""
     print_error: str | None = None
-    if print_label:
+    if label_count:
         from binkeeper.bin_label import (
             BIN_LABEL_CUPS_QUEUE,
             BinLabelError,
@@ -514,6 +520,7 @@ def _register_and_view(
                     theme=theme,
                     site=result.site,
                     contents=contents,
+                    copies=label_count,
                 )
                 plan = send_to_printer(tspl, cups_queue=BIN_LABEL_CUPS_QUEUE)
                 printed = True
@@ -531,7 +538,8 @@ def _register_and_view(
         "lon": lon if lon is not None else "",
         "accuracy_m": accuracy if accuracy is not None else "",
         "photo_stored": bool(photo_sha),
-        "print_requested": print_label,
+        "print_requested": label_count > 0,
+        "label_count": label_count,
         "printed": printed,
         "print_target": print_target,
         "print_error": print_error,

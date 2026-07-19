@@ -19,6 +19,23 @@ repository. The service sandbox keeps the host filesystem read-only except for
 the dedicated `/var/lib/binkeeper/blobs` vault root; backup artifacts remain
 writable only by the separate backup unit.
 
+Browser label printing remains unavailable until
+`BINKEEPER_BIN_LABEL_CUPS_QUEUE` names an explicit local raw CUPS queue. During
+reviewed registration, the owner may choose one or two labels; BinKeeper sends
+that choice as one bounded TSPL job and never turns a replayed registration into
+another printer attempt.
+
+For the deployed 4-by-6-inch stock, this TSPL command advances the raw
+`OmezizyD450` queue to the beginning of the next label without printing:
+
+```sh
+printf 'SIZE 4,6\r\nFORMFEED\r\n' | lp -d OmezizyD450 -o raw
+```
+
+It physically consumes one feed step. `FORMFEED` is not sensor calibration; if
+the printer repeatedly misses label boundaries, calibrate the loaded stock at
+the printer before resuming BinKeeper jobs.
+
 `BINKEEPER_WRITES_ENABLED` defaults to `0`. In that state every non-safe HTTP
 method returns HTTP 503 before an authoring handler runs, the catalog hides
 authoring links, and standalone CLI or MCP mutation commands fail before

@@ -17,7 +17,7 @@
 
 {% if print_requested %}
   {% if printed %}
-  <p class="banner banner-ok" role="status"><strong>Label sent to {{ print_target }}.</strong>
+  <p class="banner banner-ok" role="status"><strong>{{ label_count }} label{% if label_count != 1 %}s{% endif %} sent to {{ print_target }}.</strong>
     The bin record was saved before the local print job was submitted.</p>
   {% else %}
   <p class="banner banner-warn" role="status"><strong>The bin was registered, but the label was not printed.</strong>

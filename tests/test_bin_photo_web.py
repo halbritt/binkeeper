@@ -738,6 +738,26 @@ def test_proposal_offers_reviewed_create_and_print_action(
     assert body.index('name="print_label" value="0"') < body.index('name="print_label" value="1"')
 
 
+def test_proposal_offers_one_or_two_label_choice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bin_photo_web, "_analyze", lambda **_: _canned_view())
+
+    response = _client().post(
+        "/",
+        files={"photos": ("bin.jpg", _ONE_PIXEL_JPEG, "image/jpeg")},
+        headers=_LOOPBACK_ORIGIN,
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "Labels to print" in body
+    assert 'type="radio" name="label_count" value="1" checked' in body
+    assert 'type="radio" name="label_count" value="2"' in body
+    assert "1 label" in body
+    assert "2 labels" in body
+
+
 def test_proposal_confirmation_exposes_pending_feedback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -922,7 +942,42 @@ def test_confirm_route_carries_reviewed_theme_and_print_intent(
     assert len(submissions) == 1
     assert '"HAND TOOLS"' in submissions[0]
     assert '"hex keys"' in submissions[0]
-    assert "Label sent to OmezizyD450" in resp.text
+    assert "1 label sent to OmezizyD450" in resp.text
+
+
+def test_confirm_route_prints_two_reviewed_labels_in_one_submission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import bin_label, bin_register, db
+
+    monkeypatch.setattr(db, "connect", lambda: nullcontext(object()))
+    monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
+    monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
+    submissions: list[str] = []
+
+    def fake_send(data: str, **_kwargs: object) -> PrintPlan:
+        submissions.append(data)
+        return PrintPlan("cups", "OmezizyD450", len(data.encode("utf-8")))
+
+    monkeypatch.setattr(bin_label, "send_to_printer", fake_send)
+
+    response = _client().post(
+        "/register/confirm",
+        data={
+            "bin_code": "AGR-014",
+            "site": "alameda-garage",
+            "theme": "hand tools",
+            "contents": "hex keys",
+            "print_label": "1",
+            "label_count": "2",
+        },
+        headers=_LOOPBACK_ORIGIN,
+    )
+
+    assert response.status_code == 200
+    assert len(submissions) == 1
+    assert "PRINT 1,2" in submissions[0]
+    assert "2 labels sent to OmezizyD450" in response.text
 
 
 def test_confirm_route_persists_the_reviewed_theme(
@@ -983,7 +1038,7 @@ def test_explicit_print_renders_reviewed_label_and_submits_once(
         photo_sha="deadbeef",
         contents="hex keys",
         theme="hand tools",
-        print_label=True,
+        label_count=1,
     )
 
     assert view["mode"] == "done"
@@ -1018,7 +1073,7 @@ def test_print_failure_does_not_hide_successful_registration(
         photo_sha="deadbeef",
         contents="hex keys",
         theme="hand tools",
-        print_label=True,
+        label_count=1,
     )
 
     assert view["mode"] == "done"
@@ -1053,7 +1108,7 @@ def test_replayed_registration_does_not_submit_a_second_label(
         "photo_sha": "deadbeef",
         "contents": "hex keys",
         "theme": "hand tools",
-        "print_label": True,
+        "label_count": 1,
     }
 
     first = bin_photo_web._register_and_view(**kwargs)
@@ -1084,7 +1139,7 @@ def test_registration_without_print_intent_never_submits_a_label(
         gps=None,
         photo_sha="deadbeef",
         contents="hex keys",
-        print_label=False,
+        label_count=0,
     )
 
     assert view["mode"] == "done"
