@@ -23,9 +23,14 @@ Browser label printing remains unavailable until
 `BINKEEPER_BIN_LABEL_CUPS_QUEUE` names an explicit local raw CUPS queue. During
 reviewed registration, the owner may choose one or two labels; BinKeeper sends
 that choice as one bounded TSPL job and never turns a replayed registration into
-another printer attempt.
+another printer attempt. The adjacent **Align label** button makes a separate,
+strict-origin `POST /printer/align` request and disables itself while the one
+feed job is pending. A timeout is reported as an unknown label position, so the
+owner checks the stock before trying again; BinKeeper never retries the feed
+automatically.
 
-For the deployed 4-by-6-inch stock, this TSPL command advances the raw
+The button uses the configured label size. For the deployed 4-by-6-inch stock,
+this equivalent TSPL command advances the raw
 `OmezizyD450` queue to the beginning of the next label without printing:
 
 ```sh

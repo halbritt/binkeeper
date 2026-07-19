@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Final
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import FormData, UploadFile
 
@@ -132,6 +133,7 @@ def create_app(
                 "bin_photo_result.html",
                 new_href=surface_path(normalized_base_path, "/"),
                 confirm_action=surface_path(normalized_base_path, "/register/confirm"),
+                align_action=surface_path(normalized_base_path, "/printer/align"),
                 catalog_url="/bins/",
                 photo_url=surface_path(normalized_base_path, "/"),
                 register_url=surface_path(normalized_base_path, "/register"),
@@ -207,6 +209,36 @@ def create_app(
         )
         return _render_register(view)
 
+    @app.post("/printer/align")
+    async def align_label(_origin: None = Depends(strict_origin_check)) -> object:
+        from binkeeper.bin_label import BinLabelError
+
+        try:
+            target = await run_in_threadpool(_align_label)
+        except BinLabelError as exc:
+            import subprocess
+
+            if isinstance(exc.__cause__, subprocess.TimeoutExpired):
+                return JSONResponse(
+                    {
+                        "status": "unknown",
+                        "detail": (
+                            "Alignment status is unknown. Check the label position before "
+                            "trying again."
+                        ),
+                    },
+                    status_code=504,
+                )
+            return JSONResponse(
+                {"status": "unavailable", "detail": str(exc)},
+                status_code=503,
+            )
+        return {
+            "status": "aligned",
+            "detail": "Label advanced to the next boundary.",
+            "target": target,
+        }
+
     from binkeeper.bin_manage import BinActionScope
 
     install_manage_routes(
@@ -222,6 +254,16 @@ def create_app(
     )
 
     return app
+
+
+def _align_label() -> str:
+    from binkeeper import bin_label
+
+    queue = bin_label.BIN_LABEL_CUPS_QUEUE.strip()
+    if not queue:
+        raise bin_label.BinLabelError("No local CUPS queue is configured for BinKeeper labels.")
+    plan = bin_label.send_to_printer(bin_label.render_formfeed_tspl(), cups_queue=queue)
+    return plan.target
 
 
 async def _first_photo(form_data: FormData) -> bytes | None:

@@ -322,6 +322,12 @@ def render_tspl(
     return "\r\n".join(lines) + "\r\n"
 
 
+def render_formfeed_tspl() -> str:
+    """Render the bounded TSPL job that advances the configured stock one label."""
+    label = label_for(BIN_LABEL_DEFAULT_SIZE)
+    return f"SIZE {label.width_in:g},{label.height_in:g}\r\nFORMFEED\r\n"
+
+
 # --- IO: send raw TSPL to the printer ---------------------------------------
 
 

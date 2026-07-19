@@ -758,6 +758,95 @@ def test_proposal_offers_one_or_two_label_choice(
     assert "2 labels" in body
 
 
+def test_proposal_offers_label_alignment_beside_print(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bin_photo_web, "_analyze", lambda **_: _canned_view())
+
+    response = _client().post(
+        "/",
+        files={"photos": ("bin.jpg", _ONE_PIXEL_JPEG, "image/jpeg")},
+        headers=_LOOPBACK_ORIGIN,
+    )
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'type="button" data-align-label data-align-action="/printer/align"' in body
+    assert "Align label" in body
+    assert body.index("Align label") < body.index("Create and print label")
+    assert 'id="label-align-status"' in body
+
+
+def test_align_label_route_advances_one_label_without_printing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import bin_label
+
+    monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
+    submissions: list[tuple[str, str | None]] = []
+
+    def fake_send(
+        data: str,
+        *,
+        cups_queue: str | None = None,
+        **_kwargs: object,
+    ) -> PrintPlan:
+        submissions.append((data, cups_queue))
+        return PrintPlan("cups", cups_queue or "", len(data.encode("utf-8")))
+
+    monkeypatch.setattr(bin_label, "send_to_printer", fake_send)
+
+    response = _client().post("/printer/align", headers=_LOOPBACK_ORIGIN)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "aligned",
+        "detail": "Label advanced to the next boundary.",
+        "target": "OmezizyD450",
+    }
+    assert submissions == [("SIZE 4,6\r\nFORMFEED\r\n", "OmezizyD450")]
+
+
+def test_align_label_route_requires_an_explicit_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import bin_label
+
+    def fail_if_called(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("printer boundary must not be called")
+
+    monkeypatch.setattr(bin_label, "send_to_printer", fail_if_called)
+
+    response = _client().post("/printer/align")
+
+    assert response.status_code == 403
+
+
+def test_align_label_timeout_reports_unknown_position(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import subprocess
+
+    from binkeeper import bin_label
+
+    monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
+
+    def time_out(*_args: object, **_kwargs: object) -> None:
+        raise bin_label.BinLabelError("alignment handoff timed out") from subprocess.TimeoutExpired(
+            ["lp", "-d", "OmezizyD450"], 15
+        )
+
+    monkeypatch.setattr(bin_label, "send_to_printer", time_out)
+
+    response = _client().post("/printer/align", headers=_LOOPBACK_ORIGIN)
+
+    assert response.status_code == 504
+    assert response.json() == {
+        "status": "unknown",
+        "detail": "Alignment status is unknown. Check the label position before trying again.",
+    }
+
+
 def test_proposal_confirmation_exposes_pending_feedback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

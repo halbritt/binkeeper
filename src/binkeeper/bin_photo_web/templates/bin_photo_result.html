@@ -114,12 +114,17 @@
               data-busy-label="Creating bin…">
         <span data-button-label>Create without printing</span>
       </button>
+      <button type="button" data-align-label data-align-action="{{ align_action }}">
+        Align label
+      </button>
       <button type="submit" class="bin-photo-primary" name="print_label" value="1"
               data-submit-button data-busy-label="Creating and printing…">
         <span data-button-label>Create and print label</span>
       </button>
       <span class="field-help bin-photo-action-note">Printing happens only after this explicit confirmation.</span>
     </div>
+
+    <p id="label-align-status" class="field-help" role="status" aria-live="polite"></p>
 
     <p class="bin-photo-progress" data-submit-progress hidden role="status"
        aria-live="polite" aria-atomic="true">
@@ -128,6 +133,37 @@
     </p>
   </form>
 </section>
+
+<script>
+(function () {
+  var button = document.querySelector("[data-align-label]");
+  var status = document.getElementById("label-align-status");
+  if (!button || !status) { return; }
+
+  button.addEventListener("click", function () {
+    button.disabled = true;
+    button.textContent = "Aligning…";
+    status.textContent = "Advancing to the next label boundary…";
+
+    fetch(button.getAttribute("data-align-action"), {
+      method: "POST",
+      headers: {"Accept": "application/json"}
+    }).then(function (response) {
+      return response.json().then(function (payload) {
+        if (!response.ok) { throw new Error(payload.detail || "Alignment failed."); }
+        return payload;
+      });
+    }).then(function (payload) {
+      status.textContent = payload.detail;
+    }).catch(function (error) {
+      status.textContent = error.message;
+    }).finally(function () {
+      button.disabled = false;
+      button.textContent = "Align label";
+    });
+  });
+})();
+</script>
 {% endif %}
 
 <div class="action-bar">
