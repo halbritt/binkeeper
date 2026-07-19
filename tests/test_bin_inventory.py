@@ -112,6 +112,21 @@ def test_validate_contradict_requires_bin_no_site_no_trip():
         validate_event(event_kind="contradict", trip_id=None, bin_code=None, site=None)
 
 
+def test_validate_fetch_and_not_found_require_bin_and_site_no_trip():
+    assert (
+        validate_event(event_kind="fetch", trip_id=None, bin_code="ALA-1", site="garage") == "fetch"
+    )
+    assert (
+        validate_event(event_kind="not_found", trip_id=None, bin_code="ALA-1", site="garage")
+        == "not_found"
+    )
+    for kind in ("fetch", "not_found"):
+        with pytest.raises(BinInventoryError):
+            validate_event(event_kind=kind, trip_id=None, bin_code="ALA-1", site=None)
+        with pytest.raises(BinInventoryError):
+            validate_event(event_kind=kind, trip_id=None, bin_code=None, site="garage")
+
+
 # --- pure: fold_bin_location ------------------------------------------------
 
 
@@ -356,6 +371,57 @@ def test_compute_belief_contradiction_shocks_below_floor():
     assert belief.location.site == "garage"  # location unchanged by a contradiction
 
 
+def test_fold_fetch_confirms_at_site_and_not_found_never_relocates():
+    events = [
+        _move(1, "place", NOW, site="garage"),
+        _move(2, "fetch", NOW + DAY, site="garage"),
+        _move(3, "not_found", NOW + 2 * DAY, site="garage"),
+    ]
+    location = fold_bin_location("ALA-1", events)
+    assert (location.status, location.site) == ("at_site", "garage")
+    assert location.last_event_seq == 2  # fetch bears location; not_found never does
+
+
+def test_compute_belief_fetch_resets():
+    events = [
+        _move(1, "place", NOW, site="garage"),
+        _move(2, "fetch", NOW + 400 * DAY, site="garage"),
+    ]
+    belief = compute_belief("ALA-1", events, now=NOW + 400 * DAY, floor=0.5)
+    assert belief.abstained is False
+    assert belief.confidence == 1.0
+
+
+def test_compute_belief_not_found_shocks_below_floor():
+    events = [
+        _move(1, "place", NOW, site="garage"),
+        _move(2, "not_found", NOW, site="garage"),
+    ]
+    belief = compute_belief("ALA-1", events, now=NOW, floor=0.5)
+    assert belief.confidence == pytest.approx(0.4)  # base 1.0 - shock 0.6
+    assert belief.abstained is True
+    assert belief.location.site == "garage"  # a miss never relocates the bin
+
+
+def test_pre_v2_ledger_folds_are_unchanged():
+    """A ledger holding only pre-v2 kinds folds byte-identically after BINK-19."""
+    events = [
+        _move(1, "place", NOW, site="garage"),
+        _move(2, "confirm", NOW + 30 * DAY, site="garage"),
+        _move(3, "contradict", NOW + 31 * DAY),
+    ]
+    assert fold_bin_location("ALA-1", events).to_json() == {
+        "bin_code": "ALA-1",
+        "status": "at_site",
+        "site": "garage",
+        "trip_id": None,
+        "last_event_seq": 2,
+        "last_event_at": (NOW + 30 * DAY).isoformat(),
+    }
+    belief = compute_belief("ALA-1", events, now=NOW + 31 * DAY, floor=0.5)
+    assert belief.confidence == pytest.approx(max(0.0, 0.5 ** (1 / 120) - 0.6))
+
+
 # --- IO T3: belief against the migrated test DB -----------------------------
 
 
@@ -384,6 +450,22 @@ def test_bin_belief_db_contradict_drops_confidence(conn: psycopg.Connection):
     record_event(conn, event_kind="contradict", bin_code="BEL-003")
     after = bin_belief(conn, "BEL-003").confidence
     assert after < before
+
+
+def test_bin_belief_db_fetch_refreshes_and_not_found_shocks(conn: psycopg.Connection):
+    old = datetime(2020, 1, 1, tzinfo=UTC)
+    record_event(
+        conn, event_kind="place", bin_code="BEL-004", site="alameda-garage", occurred_at=old
+    )
+    assert bin_belief(conn, "BEL-004").abstained is True
+    record_event(conn, event_kind="fetch", bin_code="BEL-004", site="alameda-garage")
+    refreshed = bin_belief(conn, "BEL-004")
+    assert refreshed.abstained is False
+    assert refreshed.location.site == "alameda-garage"
+    record_event(conn, event_kind="not_found", bin_code="BEL-004", site="alameda-garage")
+    shocked = bin_belief(conn, "BEL-004")
+    assert shocked.confidence < refreshed.confidence
+    assert shocked.location.site == "alameda-garage"
 
 
 # --- pure T3b: observations corroborate, never relocate ---------------------

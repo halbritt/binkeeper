@@ -14,6 +14,12 @@ Immutable evidence that a bin was placed, opened, loaded, arrived, or closed as
 part of a physical move.
 _Avoid_: Location update
 
+**Retrieval outcome**:
+Immutable evidence that the owner physically found (`fetch`) or failed to find
+(`not_found`) a bin at a site; it re-confirms or shocks location confidence and
+never relocates the bin.
+_Avoid_: Not-found flag, retrieval log
+
 **Current location**:
 The latest location projected by folding a bin's ordered move events; it is not
 stored as editable truth.

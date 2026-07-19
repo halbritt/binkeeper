@@ -26,7 +26,17 @@ def build_parser() -> argparse.ArgumentParser:
     trip.add_argument(
         "--action",
         required=True,
-        choices=("place", "open", "load", "arrive", "close", "confirm", "contradict"),
+        choices=(
+            "place",
+            "open",
+            "load",
+            "arrive",
+            "close",
+            "confirm",
+            "contradict",
+            "fetch",
+            "not_found",
+        ),
     )
     trip.add_argument("--bin", dest="bin_code")
     trip.add_argument("--trip", dest="trip_id")

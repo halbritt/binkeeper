@@ -34,9 +34,11 @@ from psycopg.types.json import Jsonb
 DEFAULT_BIN_TENANT_ID: Final[str] = os.environ.get("BINKEEPER_BIN_TENANT_ID", "personal")
 DEFAULT_BIN_CORPUS_ID: Final[str] = os.environ.get("BINKEEPER_BIN_CORPUS_ID", "personal")
 DEFAULT_BIN_SOURCE_LABEL: Final[str] = "manual"
-TRIP_EVENT_SCHEMA_VERSION: Final[str] = "bin_trip_event.v1"
+TRIP_EVENT_SCHEMA_VERSION: Final[str] = "bin_trip_event.v2"
 
-EventKind = Literal["place", "open", "load", "arrive", "close", "confirm", "contradict"]
+EventKind = Literal[
+    "place", "open", "load", "arrive", "close", "confirm", "contradict", "fetch", "not_found"
+]
 EVENT_KINDS: Final[tuple[EventKind, ...]] = (
     "place",
     "open",
@@ -45,9 +47,14 @@ EVENT_KINDS: Final[tuple[EventKind, ...]] = (
     "close",
     "confirm",
     "contradict",
+    "fetch",
+    "not_found",
 )
 # Events that assert where a bin currently rests (the fold's location-bearing set).
-LOCATION_EVENT_KINDS: Final[tuple[EventKind, ...]] = ("place", "load", "arrive", "confirm")
+# A `fetch` is a successful retrieval: the owner had the bin in hand at that site,
+# so it re-confirms location exactly as `confirm` does. A `not_found` asserts where
+# the bin is NOT and is deliberately excluded — it shocks confidence instead.
+LOCATION_EVENT_KINDS: Final[tuple[EventKind, ...]] = ("place", "load", "arrive", "confirm", "fetch")
 # Events that count as an actual physical MOVE — used to learn a per-bin half-life;
 # a `confirm` re-verifies a bin in place and is deliberately excluded.
 MOVE_EVENT_KINDS: Final[tuple[EventKind, ...]] = ("place", "load", "arrive")
@@ -227,9 +234,10 @@ def validate_event(
         raise BinInventoryError(f"event_kind {kind!r} requires a bin_code")
     if not bin_required and bin_code:
         raise BinInventoryError(f"event_kind {kind!r} must not carry a bin_code")
-    if kind not in ("place", "confirm", "contradict") and not (trip_id and trip_id.strip()):
+    trip_free = ("place", "confirm", "contradict", "fetch", "not_found")
+    if kind not in trip_free and not (trip_id and trip_id.strip()):
         raise BinInventoryError(f"event_kind {kind!r} requires a trip_id")
-    if kind in ("place", "arrive", "confirm") and not (site and site.strip()):
+    if kind in ("place", "arrive", "confirm", "fetch", "not_found") and not (site and site.strip()):
         raise BinInventoryError(f"event_kind {kind!r} requires a site")
     return kind
 
@@ -424,9 +432,17 @@ def decayed_confidence(
 
 
 def _contradiction_shock(events: Sequence[TripEvent], *, after_seq: int) -> float:
-    """Total confidence shock from `contradict` events after the last location event."""
+    """Total confidence shock from post-placement contradiction evidence.
+
+    Both `contradict` (a harvester's cross-site disagreement) and `not_found`
+    (the owner looked where the fold claims and the bin was not there) count:
+    each is direct evidence against the current location claim, applied after
+    the last location-bearing event.
+    """
     contradictions = sum(
-        1 for event in events if event.event_kind == "contradict" and event.seq > after_seq
+        1
+        for event in events
+        if event.event_kind in ("contradict", "not_found") and event.seq > after_seq
     )
     return contradictions * BIN_CONTRADICTION_SHOCK
 
@@ -444,9 +460,10 @@ def compute_belief(
     """Fold location + time-decayed confidence + the RFC 0087 abstain gate. Pure.
 
     A bin with no location-bearing event is unknown and always abstains. Otherwise
-    confidence decays from the latest place/load/arrive/confirm by a per-bin
-    half-life, minus any post-placement contradiction shock, and the (reused)
-    absolute gate abstains when it falls below ``floor``.
+    confidence decays from the latest place/load/arrive/confirm/fetch by a per-bin
+    half-life, minus any post-placement contradiction shock (`contradict` or
+    `not_found`), and the (reused) absolute gate abstains when it falls below
+    ``floor``.
 
     T3b: ``observations`` that CORROBORATE the folded site (same site) can *refresh*
     confidence — an observation's contribution is the product of its source's learned
