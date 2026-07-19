@@ -45,3 +45,22 @@ repository.
 - Use Plane, not GitHub Issues, for extraction work, reviews, and acceptance.
 - Record the repository, branch or worktree, base SHA, verification evidence,
   data authority, and rollback scope in each implementation work item.
+
+## Parallel work: one worktree per branch
+
+When more than one agent works this repo at once, do not share a working
+directory — give each unit of work its own git worktree. A branch can be
+checked out in only one worktree at a time, so concurrent edits to shared
+files (Makefile, configs, generated/golden files) become impossible.
+
+- One worktree per branch, one agent per worktree; name the dir after the branch.
+- Siblings, not nested: create worktrees OUTSIDE this checkout
+  (`../binkeeper-wt/<branch>`), never inside it — recursive globs, file-count/hash
+  gates, and IDE indexers must not scan across worktrees.
+- Lifecycle: `git worktree add ../binkeeper-wt/<branch> -b <branch>` /
+  `git worktree list` / `git worktree remove <path>` after merge /
+  `git worktree prune`. Agents with worktree isolation get this for free.
+- Shared object store and build caches are fine; worktrees do NOT isolate
+  ports, databases, or local services — coordinate those separately.
+- Regenerate, don't merge, generated artifacts (golden files, compiled
+  indexes): merge the source change, then regenerate once on the merged tree.
