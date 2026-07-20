@@ -38,6 +38,8 @@ def test_mcp_schema_snapshot_uses_only_binkeeper_names() -> None:
         "binkeeper.bin_stash_route",
         "binkeeper.bin_stash_run",
         "binkeeper.bin_placement_decision",
+        "binkeeper.bin_virtual_define",
+        "binkeeper.bin_virtual_list",
         "binkeeper.bin_sweep",
     ]
     rendered = json.dumps(schemas, sort_keys=True)

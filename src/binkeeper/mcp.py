@@ -153,6 +153,31 @@ def tool_schemas() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "binkeeper.bin_virtual_define",
+            "description": "Save (or retire, with an empty query) one virtual bin.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "query": {"type": "string"},
+                    "action_id": {"type": "string"},
+                    **scope,
+                },
+                "required": ["name", "query", "action_id"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "binkeeper.bin_virtual_list",
+            "description": "List virtual bins (saved queries) with computed members.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {**scope},
+                "required": [],
+                "additionalProperties": False,
+            },
+        },
+        {
             "name": "binkeeper.bin_sweep",
             "description": "List the stalest bins to re-confirm, regret-ranked.",
             "inputSchema": {

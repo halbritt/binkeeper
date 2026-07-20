@@ -327,6 +327,7 @@ def test_default_catalog_photo_source_reads_the_capture_linked_local_vault(
         base_path="/bins",
         passport_loader=lambda: [_passport()],
         containment_loader=lambda: {},
+        virtual_loader=lambda: [],
     )
 
     with TestClient(app, base_url="http://127.0.0.1:8765") as client:
@@ -610,3 +611,30 @@ def test_catalog_abstained_shelf_tier_stays_silent() -> None:
     with TestClient(app, base_url="http://127.0.0.1:8765") as client:
         response = client.get("/")
     assert "Witnessed shelf" not in response.text
+
+
+def test_catalog_renders_virtual_bins_section() -> None:
+    virtual = [
+        {
+            "name": "soldering",
+            "query": "soldering flux",
+            "member_count": 2,
+            "members": [
+                {"bin_code": "AGR-020", "site": "alameda-garage", "theme": "Soldering"},
+                {"bin_code": "OFE-001", "site": "oakland-fab-east", "theme": "Electronics"},
+            ],
+        }
+    ]
+    app = create_app(
+        base_path="/bins",
+        passport_loader=lambda: [_passport()],
+        containment_loader=lambda: {},
+        virtual_loader=lambda: virtual,
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+        response = client.get("/")
+    body = response.text
+    assert "Virtual bins" in body
+    assert "soldering" in body
+    assert "AGR-020" in body and "OFE-001" in body
+    assert "Alameda Garage" in body or "Alameda garage" in body

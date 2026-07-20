@@ -223,6 +223,7 @@ def create_app(
     passport_loader: PassportLoader | None = None,
     photo_source: BinCatalogPhotoSource | None = None,
     containment_loader: ContainmentLoader | None = None,
+    virtual_loader: VirtualLoader | None = None,
 ) -> FastAPI:
     """Build the loopback-bound, paired-tailnet-safe BinKeeper catalog app."""
     normalized_host = host.strip()
@@ -264,6 +265,11 @@ def create_app(
     )
     load_containment = containment_loader or partial(
         _load_containment,
+        tenant_id=tenant_id,
+        corpus_id=corpus_id,
+    )
+    load_virtual = virtual_loader or partial(
+        _load_virtual_bins,
         tenant_id=tenant_id,
         corpus_id=corpus_id,
     )
@@ -310,6 +316,10 @@ def create_app(
             except BinCatalogUnavailableError:
                 witnessed = {}
             try:
+                virtual_bins = load_virtual()
+            except BinCatalogUnavailableError:
+                virtual_bins = []
+            try:
                 linked_photo_bins = catalog_photos.linked_bin_codes(
                     [passport.bin_code for passport in passports]
                 )
@@ -354,6 +364,7 @@ def create_app(
                     total_count=0,
                     contents_count=0,
                     visibility_pct=0,
+                    virtual_bins=[],
                     query=query,
                     selected_site=selected_site,
                     catalog_unavailable=True,
@@ -379,6 +390,7 @@ def create_app(
                 total_count=len(all_entries),
                 contents_count=contents_count,
                 visibility_pct=_visibility_pct(all_entries, site_key=selected_site or None),
+                virtual_bins=virtual_bins,
                 query=query,
                 selected_site=selected_site,
                 catalog_unavailable=False,
@@ -548,6 +560,21 @@ def _confidence_label(confidence: float) -> str:
 
 
 ContainmentLoader = Callable[[], "Mapping[str, ContainmentBelief]"]
+VirtualLoader = Callable[[], list[dict[str, object]]]
+
+
+def _load_virtual_bins(*, tenant_id: str, corpus_id: str) -> list[dict[str, object]]:
+    """Compute virtual bins through the least-privilege serving role."""
+    from binkeeper.bin_virtual import list_virtual_bins
+
+    try:
+        with connect(role="serving") as conn:
+            return [
+                bin.to_json()
+                for bin in list_virtual_bins(conn, tenant_id=tenant_id, corpus_id=corpus_id)
+            ]
+    except (ServingRoleUnavailableError, psycopg.Error) as exc:
+        raise BinCatalogUnavailableError("could not load virtual bins") from exc
 
 
 def _anchor_label(belief: ContainmentBelief | None) -> str | None:

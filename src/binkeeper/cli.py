@@ -18,6 +18,12 @@ from binkeeper.bin_placement import PlacementDecisionAppend, record_placement_de
 from binkeeper.bin_route import bin_route
 from binkeeper.bin_stash import record_stash_run, stash_route_batch
 from binkeeper.bin_sweep import BIN_SWEEP_DEFAULT_LIMIT, bin_sweep
+from binkeeper.bin_virtual import (
+    define_virtual_bin,
+    list_virtual_bins,
+    load_virtual_definitions,
+    matching_virtual_names,
+)
 from binkeeper.database import connect
 from binkeeper.search import search_inventory
 from binkeeper.write_authority import require_writer_authority
@@ -110,6 +116,17 @@ def build_parser() -> argparse.ArgumentParser:
     anchor.add_argument("--action-id", dest="action_id", required=True)
     anchor.add_argument("--text", dest="label_text")
     _scope(anchor)
+    vdefine = subparsers.add_parser(
+        "bin-virtual-define", help="save (or retire, with an empty query) one virtual bin"
+    )
+    vdefine.add_argument("--name", required=True)
+    vdefine.add_argument("--query", required=True)
+    vdefine.add_argument("--action-id", dest="action_id", required=True)
+    _scope(vdefine)
+    vlist = subparsers.add_parser(
+        "bin-virtual-list", help="list virtual bins with their computed members"
+    )
+    _scope(vlist)
     return parser
 
 
@@ -124,6 +141,7 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
         "bin-placement-decision",
         "bin-stash-run",
         "bin-anchor-label",
+        "bin-virtual-define",
     }:
         require_writer_authority()
     common = {"tenant_id": args.tenant, "corpus_id": args.corpus}
@@ -169,7 +187,11 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
     if args.command == "bin-passport":
         return bin_passport(conn, args.bin_code, **common).to_json()
     if args.command == "bin-search":
-        return search_inventory(conn, args.query, limit=args.limit, **common).to_json()
+        payload = search_inventory(conn, args.query, limit=args.limit, **common).to_json()
+        payload["virtual_bins"] = matching_virtual_names(
+            args.query, load_virtual_definitions(conn, **common)
+        )
+        return payload
     if args.command == "bin-route":
         return bin_route(conn, text=args.text, site=args.site, **common).to_json()
     if args.command == "bin-placement-decision":
@@ -214,6 +236,13 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
             label_text=args.label_text,
             **common,
         ).to_json()
+    if args.command == "bin-virtual-define":
+        appended = define_virtual_bin(
+            conn, name=args.name, query=args.query, action_id=args.action_id, **common
+        )
+        return {"name": args.name.strip().lower(), "already_existed": not appended}
+    if args.command == "bin-virtual-list":
+        return {"virtual_bins": [bin.to_json() for bin in list_virtual_bins(conn, **common)]}
     raise ValueError(f"unsupported command {args.command!r}")
 
 
@@ -241,6 +270,7 @@ def main() -> None:
         "bin-route",
         "bin-sweep",
         "bin-stash-route",
+        "bin-virtual-list",
     }
     with connect(role="serving" if read_only else "owner") as conn:
         print(json.dumps(execute(args, conn), sort_keys=True))

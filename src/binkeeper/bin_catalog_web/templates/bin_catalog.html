@@ -375,6 +375,28 @@
       {% endfor %}
     </div>
 
+    {% if virtual_bins %}
+    <section class="panel panel-padded stack" aria-labelledby="virtual-heading" data-virtual-bins>
+      <h2 id="virtual-heading">Virtual bins</h2>
+      <p class="muted">Saved queries spanning physical bins — the index reorganized without moving atoms.</p>
+      {% for vbin in virtual_bins %}
+      <div class="stack" data-virtual-bin>
+        <h3>{{ vbin.name }} <span class="chip">{{ vbin.member_count }} bin{% if vbin.member_count != 1 %}s{% endif %}</span></h3>
+        <p class="muted">“{{ vbin.query }}”</p>
+        {% if vbin.members %}
+        <ul>
+          {% for member in vbin.members %}
+          <li><code>{{ member.bin_code }}</code> — {{ member.theme or "No theme" }} · {{ (member.site or "unknown")|replace('-', ' ')|title }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">No current passports match.</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
     <div class="panel panel-padded stack bin-catalog-no-match" data-no-matches{% if entries %} hidden{% endif %}>
       <h2>No matching bins</h2>
       <p>Try a different code, content word, theme, or site.</p>
