@@ -155,3 +155,87 @@ def test_stash_runs_are_append_only(conn: psycopg.Connection) -> None:
 def test_record_stash_run_rejects_an_empty_batch(conn: psycopg.Connection) -> None:
     with pytest.raises(StashRunError):
         record_stash_run(conn, items=["  ", ""], site="alameda-garage")
+
+
+# --- IO: wave plan + completion evidence (BINK-27) ----------------------------
+
+
+def _decide(conn: psycopg.Connection, request_id: str, kind: str, selected: str | None) -> None:
+    from binkeeper.bin_placement import PlacementDecisionAppend, record_placement_decision
+
+    record_placement_decision(
+        conn,
+        PlacementDecisionAppend(
+            routing_request_id=request_id,
+            decision_kind=kind,  # type: ignore[arg-type]
+            selected_bin_code=selected,
+        ),
+    )
+
+
+def test_wave_plan_groups_placed_decisions_by_bin(conn: psycopg.Connection) -> None:
+    from binkeeper.bin_stash import wave_plan_for_run
+
+    run = record_stash_run(
+        conn,
+        items=["usb cable", "hdmi adapter", "zip ties", "mystery"],
+        site="alameda-garage",
+        idempotency_key="wave-1",
+    )
+    receipts = {r["seq"]: r for r in run.receipts}
+    ordered = [receipts[k]["routing_request_id"] for k in sorted(receipts)]
+    _decide(conn, str(ordered[0]), "override", "AGR-002")
+    _decide(conn, str(ordered[1]), "override", "AGR-002")
+    _decide(conn, str(ordered[2]), "override", "AGR-001")
+    _decide(conn, str(ordered[3]), "not_an_item", None)
+
+    plan = wave_plan_for_run(conn, stash_run_id=run.stash_run_id)
+
+    assert [stop.bin_code for stop in plan.stops] == ["AGR-001", "AGR-002"]
+    by_code = {stop.bin_code: stop for stop in plan.stops}
+    assert by_code["AGR-002"].item_texts == ("usb cable", "hdmi adapter")
+    assert by_code["AGR-001"].item_texts == ("zip ties",)
+    assert plan.completed_count == 0
+    assert all(stop.completed is False for stop in plan.stops)
+
+
+def test_completing_a_stop_is_idempotent_and_enriches_contents(
+    conn: psycopg.Connection,
+) -> None:
+    from datetime import UTC, datetime
+
+    from binkeeper.bin_passport import bin_passport
+    from binkeeper.bin_register import register_bin
+    from binkeeper.bin_stash import complete_wave_stop, wave_plan_for_run
+
+    register_bin(
+        conn,
+        bin_code="AGR-001",
+        site="alameda-garage",
+        observed_at=datetime(2026, 7, 13, 10, tzinfo=UTC),
+    )
+    run = record_stash_run(
+        conn, items=["zip ties", "usb cable"], site="alameda-garage", idempotency_key="wave-2"
+    )
+    ordered = sorted(run.receipts, key=lambda r: int(r["seq"]))
+    for receipt in ordered:
+        _decide(conn, str(receipt["routing_request_id"]), "override", "AGR-001")
+
+    assert complete_wave_stop(conn, stash_run_id=run.stash_run_id, bin_code="AGR-001") is True
+    assert complete_wave_stop(conn, stash_run_id=run.stash_run_id, bin_code="AGR-001") is False
+
+    plan = wave_plan_for_run(conn, stash_run_id=run.stash_run_id)
+    assert plan.completed_count == 1
+    assert plan.stops[0].completed is True
+    passport = bin_passport(conn, "AGR-001")
+    assert "zip ties; usb cable" in passport.sibling_contents
+
+
+def test_completing_an_unknown_stop_raises(conn: psycopg.Connection) -> None:
+    from binkeeper.bin_stash import complete_wave_stop
+
+    run = record_stash_run(
+        conn, items=["usb cable"], site="alameda-garage", idempotency_key="wave-3"
+    )
+    with pytest.raises(StashRunError):
+        complete_wave_stop(conn, stash_run_id=run.stash_run_id, bin_code="AGR-999")

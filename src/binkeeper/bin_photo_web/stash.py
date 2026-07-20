@@ -93,6 +93,14 @@ class StashRunLister(Protocol):
     def __call__(self, *, tenant_id: str, corpus_id: str) -> list[StashRunSummary]: ...
 
 
+class WavePlanLoader(Protocol):
+    """Loader seam for one run's compiled wave plan (template-ready mapping)."""
+
+    def __call__(
+        self, *, stash_run_id: str, tenant_id: str, corpus_id: str
+    ) -> dict[str, object]: ...
+
+
 @dataclass(frozen=True)
 class StashDecision:
     """One tapped verdict over one receipt."""
@@ -116,6 +124,7 @@ class StashRunStart:
 
 StashDecisionRecorder = Callable[[StashDecision, BinActionScope], None]
 StashRunCreator = Callable[[StashRunStart, BinActionScope], str]
+WaveStopCompleter = Callable[[str, str, BinActionScope], None]
 
 
 @dataclass(frozen=True)
@@ -131,6 +140,8 @@ class StashRouteConfig:
     list_runs: StashRunLister | None = None
     create_run: StashRunCreator | None = None
     record_decision: StashDecisionRecorder | None = None
+    load_wave: WavePlanLoader | None = None
+    complete_stop: WaveStopCompleter | None = None
 
 
 def install_stash_routes(app: FastAPI, config: StashRouteConfig) -> None:
@@ -162,6 +173,21 @@ def install_stash_routes(app: FastAPI, config: StashRouteConfig) -> None:
         _origin: None = Depends(strict_origin),
     ) -> RedirectResponse:
         return await _decide_response(request, stash_run_id, config)
+
+    @app.get("/stash/{stash_run_id}/wave")
+    def stash_wave(
+        stash_run_id: str = ApiPath(min_length=1, max_length=120),
+        notice: str = "",
+    ) -> object:
+        return _wave_page(config, stash_run_id, notice)
+
+    @app.post("/stash/{stash_run_id}/wave/complete")
+    async def stash_wave_complete(
+        request: Request,
+        stash_run_id: str = ApiPath(min_length=1, max_length=120),
+        _origin: None = Depends(strict_origin),
+    ) -> RedirectResponse:
+        return await _wave_complete_response(request, stash_run_id, config)
 
 
 def _start_page(config: StashRouteConfig, notice: str) -> object:
@@ -275,6 +301,55 @@ async def _decide_response(
         _LOGGER.warning("BinKeeper stash decision failed")
         return _deck_redirect(config.base_path, stash_run_id, "decide-failed")
     return _deck_redirect(config.base_path, stash_run_id, f"decided-{decision_kind}")
+
+
+def _wave_page(config: StashRouteConfig, stash_run_id: str, notice: str) -> object:
+    load_wave = config.load_wave or load_wave_plan
+    try:
+        view = load_wave(
+            stash_run_id=stash_run_id,
+            tenant_id=config.scope.tenant_id,
+            corpus_id=config.scope.corpus_id,
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="stash run not found") from None
+    except (psycopg.Error, ServingRoleUnavailableError):
+        _LOGGER.warning("BinKeeper could not load a wave plan")
+        raise HTTPException(status_code=503, detail="wave plan is unavailable") from None
+    run_path = surface_path(config.base_path, f"/stash/{quote(stash_run_id, safe='')}")
+    return page_response(
+        config.chrome.render(
+            "bin_stash_wave.html",
+            **view,
+            complete_action=f"{run_path}/wave/complete",
+            run_url=run_path,
+            stash_url=surface_path(config.base_path, "/stash"),
+            notice=_stash_notice(notice),
+            catalog_url="/bins/",
+            photo_url=surface_path(config.base_path, "/"),
+            register_url=surface_path(config.base_path, "/register"),
+            binkeeper_section="photo",
+            surface_label="Wave plan",
+        )
+    )
+
+
+async def _wave_complete_response(
+    request: Request,
+    stash_run_id: str,
+    config: StashRouteConfig,
+) -> RedirectResponse:
+    form = await request.form()
+    bin_code = _form_text(form.get("bin_code"))
+    if not bin_code.strip():
+        return _wave_redirect(config.base_path, stash_run_id, "stop-invalid")
+    complete = config.complete_stop or complete_wave_stop_io
+    try:
+        await run_in_threadpool(complete, stash_run_id, bin_code.strip(), config.scope)
+    except (StashRunError, psycopg.Error, RuntimeError):
+        _LOGGER.warning("BinKeeper wave-stop completion failed")
+        return _wave_redirect(config.base_path, stash_run_id, "stop-failed")
+    return _wave_redirect(config.base_path, stash_run_id, "stop-done")
 
 
 # --- production IO ------------------------------------------------------------
@@ -441,6 +516,43 @@ def list_recent_stash_runs(*, tenant_id: str, corpus_id: str) -> list[StashRunSu
     ]
 
 
+def load_wave_plan(*, stash_run_id: str, tenant_id: str, corpus_id: str) -> dict[str, object]:
+    """Compile the wave plan on the serving role. Read-only."""
+    from binkeeper.bin_stash import wave_plan_for_run
+    from binkeeper.db import connect
+
+    with connect(role="serving") as conn:
+        plan = wave_plan_for_run(
+            conn, stash_run_id=stash_run_id, tenant_id=tenant_id, corpus_id=corpus_id
+        )
+    return {
+        "stash_run_id": plan.stash_run_id,
+        "site": plan.site,
+        "stops": [stop.to_json() for stop in plan.stops],
+        "completed_count": plan.completed_count,
+    }
+
+
+def complete_wave_stop_io(stash_run_id: str, bin_code: str, scope: BinActionScope) -> None:
+    """Append one wave-stop completion capture on the owner connection."""
+    from binkeeper.bin_stash import complete_wave_stop
+    from binkeeper.db import connect
+
+    with connect() as conn:
+        complete_wave_stop(
+            conn,
+            stash_run_id=stash_run_id,
+            bin_code=bin_code,
+            tenant_id=scope.tenant_id,
+            corpus_id=scope.corpus_id,
+        )
+
+
+def _wave_redirect(base_path: str, stash_run_id: str, notice: str) -> RedirectResponse:
+    path = surface_path(base_path, f"/stash/{quote(stash_run_id, safe='')}/wave")
+    return RedirectResponse(f"{path}?notice={quote(notice, safe='')}", status_code=303)
+
+
 def _start_redirect(base_path: str, notice: str) -> RedirectResponse:
     path = surface_path(base_path, "/stash")
     return RedirectResponse(f"{path}?notice={quote(notice, safe='')}", status_code=303)
@@ -465,6 +577,9 @@ def _stash_notice(key: str) -> dict[str, str] | None:
         "decided-override": ("ok", "Recorded your pick over the recommendation."),
         "decided-reject": ("info", "Recorded the rejection. The item stays unplaced."),
         "decided-not_an_item": ("info", "Recorded — not an item. Card dismissed."),
+        "stop-invalid": ("error", "That stop is not on this wave."),
+        "stop-failed": ("error", "The stop was not recorded. Try again."),
+        "stop-done": ("ok", "Stop recorded — the items joined the bin's contents history."),
     }
     found = notices.get(key)
     return {"kind": found[0], "message": found[1]} if found else None

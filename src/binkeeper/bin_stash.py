@@ -323,6 +323,220 @@ def record_stash_run(
     )
 
 
+_PLACED_DECISION_KINDS = frozenset({"accept", "override", "create_new_bin"})
+WAVE_STOP_SCHEMA_VERSION = "wave_stop.v1"
+
+
+@dataclass(frozen=True)
+class WavePlanStop:
+    """One destination bin on the walkable wave, opened exactly once."""
+
+    bin_code: str
+    capacity_state: str
+    item_texts: tuple[str, ...]
+    completed: bool
+
+    def to_json(self) -> dict[str, object]:
+        """Return the stable JSON shape for one wave stop."""
+        return {
+            "bin_code": self.bin_code,
+            "capacity_state": self.capacity_state,
+            "item_texts": list(self.item_texts),
+            "completed": self.completed,
+        }
+
+
+@dataclass(frozen=True)
+class WavePlanView:
+    """The walkable put-away plan compiled from a run's owner decisions."""
+
+    stash_run_id: str
+    site: str
+    stops: tuple[WavePlanStop, ...]
+
+    @property
+    def completed_count(self) -> int:
+        """Return how many stops already carry completion evidence."""
+        return sum(1 for stop in self.stops if stop.completed)
+
+    def to_json(self) -> dict[str, object]:
+        """Return the stable JSON shape for the wave plan."""
+        return {
+            "stash_run_id": self.stash_run_id,
+            "site": self.site,
+            "stop_count": len(self.stops),
+            "completed_count": self.completed_count,
+            "stops": [stop.to_json() for stop in self.stops],
+        }
+
+
+def wave_plan_for_run(
+    conn: psycopg.Connection,
+    *,
+    stash_run_id: str,
+    tenant_id: str = DEFAULT_BIN_TENANT_ID,
+    corpus_id: str = DEFAULT_BIN_CORPUS_ID,
+) -> WavePlanView:
+    """Compile the wave from the run's placed decisions. Read-only.
+
+    Groups every placed decision (accept, override, create_new_bin) by its
+    selected bin so each destination is opened exactly once, orders stops by
+    bin code (within-site walk order is campaign-C scope), annotates each with
+    the passport's capacity state, and marks stops whose completion capture
+    already exists.
+    """
+    run = conn.execute(
+        """
+        SELECT id::text, site FROM stash_runs
+        WHERE tenant_id = %s AND corpus_id = %s AND id::text = %s
+        """,
+        (tenant_id, corpus_id, stash_run_id),
+    ).fetchone()
+    if run is None:
+        raise LookupError(f"unknown stash run {stash_run_id!r}")
+    placed = _placed_items(conn, stash_run_id, tenant_id=tenant_id, corpus_id=corpus_id)
+    capacity = _capacity_by_bin(conn, tenant_id=tenant_id, corpus_id=corpus_id)
+    completed = _completed_stops(conn, stash_run_id, tenant_id=tenant_id, corpus_id=corpus_id)
+    stops = tuple(
+        WavePlanStop(
+            bin_code=bin_code,
+            capacity_state=capacity.get(bin_code, "unknown"),
+            item_texts=tuple(texts),
+            completed=bin_code in completed,
+        )
+        for bin_code, texts in sorted(placed.items())
+    )
+    return WavePlanView(stash_run_id=str(run[0]), site=str(run[1]), stops=stops)
+
+
+def complete_wave_stop(
+    conn: psycopg.Connection,
+    *,
+    stash_run_id: str,
+    bin_code: str,
+    tenant_id: str = DEFAULT_BIN_TENANT_ID,
+    corpus_id: str = DEFAULT_BIN_CORPUS_ID,
+) -> bool:
+    """Append the completion evidence for one wave stop. Idempotent.
+
+    The capture is an additive content note on the destination bin — the
+    placed item texts join the bin's recorded contents, enriching its
+    passport vocabulary — plus a wave marker used to mark the stop done.
+    Returns True when the capture is new, False on a replay.
+    """
+    from binkeeper.personal_memory import CaptureRequest, PersonalMemoryService
+
+    placed = _placed_items(conn, stash_run_id, tenant_id=tenant_id, corpus_id=corpus_id)
+    items = placed.get(bin_code)
+    if not items:
+        raise StashRunError(f"stash run has no placed items for bin {bin_code!r}")
+    idempotency_key = f"wavestop:{stash_run_id}:{bin_code}"
+    observed_at = _stable_wave_time(conn, idempotency_key, tenant_id=tenant_id, corpus_id=corpus_id)
+    result = PersonalMemoryService(conn).capture(
+        CaptureRequest(
+            text="; ".join(items),
+            capture_type="observation",
+            privacy_tier=2,
+            observed_at=observed_at,
+            source_label="stash-wave",
+            idempotency_key=idempotency_key,
+            metadata={
+                "kind": "bin_capture",
+                "schema_version": WAVE_STOP_SCHEMA_VERSION,
+                "bin_code": bin_code,
+                "captured_at": observed_at.isoformat(),
+                "wave": {"stash_run_id": stash_run_id},
+            },
+            tenant_id=tenant_id,
+            corpus_id=corpus_id,
+        )
+    )
+    return not result.already_existed
+
+
+def _stable_wave_time(
+    conn: psycopg.Connection,
+    idempotency_key: str,
+    *,
+    tenant_id: str,
+    corpus_id: str,
+) -> datetime:
+    """Use now() on first write and the stored time on a replay (bin_manage pattern)."""
+    row = conn.execute(
+        """
+        SELECT observed_at FROM captures
+        WHERE tenant_id = %s AND corpus_id = %s
+          AND raw_payload->>'source_label' = 'stash-wave'
+          AND raw_payload->>'idempotency_key' = %s
+        LIMIT 1
+        """,
+        (tenant_id, corpus_id, idempotency_key),
+    ).fetchone()
+    if row is not None and isinstance(row[0], datetime):
+        return row[0]
+    return datetime.now(UTC)
+
+
+def _placed_items(
+    conn: psycopg.Connection,
+    stash_run_id: str,
+    *,
+    tenant_id: str,
+    corpus_id: str,
+) -> dict[str, list[str]]:
+    rows = conn.execute(
+        """
+        SELECT r.input_text, d.decision_kind, d.selected_bin_code
+        FROM bin_routing_requests r
+        JOIN LATERAL (
+            SELECT decision_kind, selected_bin_code
+            FROM bin_placement_decisions d
+            WHERE d.tenant_id = r.tenant_id
+              AND d.corpus_id = r.corpus_id
+              AND d.routing_request_id = r.id
+            ORDER BY d.seq DESC
+            LIMIT 1
+        ) d ON TRUE
+        WHERE r.tenant_id = %s AND r.corpus_id = %s AND r.stash_run_id = %s
+        ORDER BY r.seq
+        """,
+        (tenant_id, corpus_id, stash_run_id),
+    ).fetchall()
+    placed: dict[str, list[str]] = {}
+    for text, kind, selected in rows:
+        if str(kind) in _PLACED_DECISION_KINDS and selected:
+            placed.setdefault(str(selected), []).append(str(text))
+    return placed
+
+
+def _capacity_by_bin(conn: psycopg.Connection, *, tenant_id: str, corpus_id: str) -> dict[str, str]:
+    from binkeeper.bin_passport import load_bin_passports
+
+    return {
+        passport.bin_code: passport.capacity_state
+        for passport in load_bin_passports(conn, tenant_id=tenant_id, corpus_id=corpus_id)
+    }
+
+
+def _completed_stops(
+    conn: psycopg.Connection,
+    stash_run_id: str,
+    *,
+    tenant_id: str,
+    corpus_id: str,
+) -> frozenset[str]:
+    rows = conn.execute(
+        """
+        SELECT raw_payload->'metadata'->>'bin_code'
+        FROM captures
+        WHERE tenant_id = %s AND corpus_id = %s
+          AND raw_payload->'metadata'->'wave'->>'stash_run_id' = %s
+        """,
+        (tenant_id, corpus_id, stash_run_id),
+    ).fetchall()
+    return frozenset(str(row[0]) for row in rows if row[0])
+
+
 def _existing_stash_run(
     conn: psycopg.Connection,
     external_id: str,

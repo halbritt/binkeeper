@@ -37,6 +37,8 @@ from binkeeper.bin_photo_web.stash import (
     StashRouteConfig,
     StashRunCreator,
     StashRunLister,
+    WavePlanLoader,
+    WaveStopCompleter,
     install_stash_routes,
 )
 from binkeeper.sites import SITE_PREFIXES
@@ -69,6 +71,8 @@ def create_app(
     stash_run_lister: StashRunLister | None = None,
     stash_run_creator: StashRunCreator | None = None,
     stash_decision_recorder: StashDecisionRecorder | None = None,
+    wave_plan_loader: WavePlanLoader | None = None,
+    wave_stop_completer: WaveStopCompleter | None = None,
 ) -> FastAPI:
     """Build the loopback-bound bin-photo-drop app."""
     if host.strip() not in _LOOPBACK_HOSTS:
@@ -276,6 +280,8 @@ def create_app(
             list_runs=stash_run_lister,
             create_run=stash_run_creator,
             record_decision=stash_decision_recorder,
+            load_wave=wave_plan_loader,
+            complete_stop=wave_stop_completer,
         ),
     )
 

@@ -1666,3 +1666,55 @@ def test_stash_run_round_trips_receipts_and_decisions(
     ).fetchone()
     assert row == ("not_an_item",)
     assert "usb cable — not an item" in after.text.replace("</code>", "")
+
+
+def test_wave_page_lists_stops_and_completion_taps(monkeypatch: pytest.MonkeyPatch) -> None:
+    completions: list[tuple[str, str]] = []
+
+    def load_wave(*, stash_run_id: str, tenant_id: str, corpus_id: str) -> dict[str, object]:
+        return {
+            "stash_run_id": stash_run_id,
+            "site": "alameda-garage",
+            "completed_count": 1,
+            "stops": [
+                {
+                    "bin_code": "AGR-001",
+                    "capacity_state": "full",
+                    "item_texts": ["zip ties"],
+                    "completed": False,
+                },
+                {
+                    "bin_code": "AGR-002",
+                    "capacity_state": "half",
+                    "item_texts": ["usb cable"],
+                    "completed": True,
+                },
+            ],
+        }
+
+    def complete(stash_run_id: str, bin_code: str, scope: object) -> None:
+        completions.append((stash_run_id, bin_code))
+
+    app = bin_photo_web.create_app(
+        host="127.0.0.1",
+        port=8765,
+        wave_plan_loader=load_wave,
+        wave_stop_completer=complete,
+    )
+    with TestClient(app) as client:
+        page = client.get("/stash/run-9/wave")
+        done = client.post(
+            "/stash/run-9/wave/complete",
+            data={"bin_code": "AGR-001"},
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+
+    assert page.status_code == 200
+    body = page.text
+    assert body.count("Placed — record it") == 1  # only the incomplete stop offers the tap
+    assert "consider a decant or split" in body  # the full bin is flagged
+    assert "Done — recorded into the bin" in body
+    assert done.status_code == 303
+    assert "notice=stop-done" in done.headers["location"]
+    assert completions == [("run-9", "AGR-001")]

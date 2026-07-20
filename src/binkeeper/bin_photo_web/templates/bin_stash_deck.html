@@ -126,7 +126,10 @@
 <section class="panel panel-padded stack bin-photo-card">
   <h2>Deck cleared</h2>
   <p>Every card in this run is decided. Time to walk the wave.</p>
+  <div class="action-bar"><a class="button" href="{{ run_url }}/wave">Open the wave plan</a></div>
 </section>
+{% else %}
+<div class="action-bar"><a class="button" href="{{ run_url }}/wave">Wave plan so far</a></div>
 {% endif %}
 {% endblock %}
 

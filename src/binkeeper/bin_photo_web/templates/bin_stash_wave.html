@@ -1,0 +1,73 @@
+{% extends "bin_photo_base.html" %}
+
+{% block title %}Wave plan · BinKeeper{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+  .wave-stop { border-top: 3px solid var(--color-accent); }
+  .wave-stop[data-completed="true"] { opacity: 0.6; border-top-color: var(--color-border-strong); }
+  .wave-stop-head { display: flex; justify-content: space-between; gap: var(--space-3); align-items: center; }
+  .wave-stop-code { font-size: var(--type-heading); }
+  .wave-items { margin: 0; }
+  .wave-capacity-warn { color: var(--color-fg-muted); font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block bin_photo_main %}
+<a href="{{ run_url }}">← Back to the deck</a>
+<header class="bin-photo-hero">
+  <div class="bin-photo-heading-row">
+    <div>
+      <span class="bin-photo-kicker">BinKeeper</span>
+      <h1>Walk the wave</h1>
+    </div>
+    <span class="chip">{{ site|replace('-', ' ')|title }}</span>
+  </div>
+  <p class="bin-photo-intro">
+    {{ stops|length }} stop{{ '' if stops|length == 1 else 's' }}, each bin opened exactly once —
+    {{ completed_count }} done. Checking a stop off records the items into that bin's contents history.
+  </p>
+</header>
+
+{% if notice %}
+<div class="banner banner-{{ notice.kind }}" tabindex="-1" role="status" data-wave-notice>{{ notice.message }}</div>
+{% endif %}
+
+{% for stop in stops %}
+<section class="panel panel-padded stack bin-photo-card wave-stop" data-wave-stop
+         data-completed="{{ 'true' if stop.completed else 'false' }}">
+  <div class="wave-stop-head">
+    <h2><code class="wave-stop-code">{{ stop.bin_code }}</code></h2>
+    <span class="chip">{{ stop.capacity_state|replace('_', ' ')|capitalize }}</span>
+  </div>
+  {% if stop.capacity_state in ('tight', 'full', 'overfull') %}
+  <p class="wave-capacity-warn">This bin reads {{ stop.capacity_state }} — consider a decant or split before adding more.</p>
+  {% endif %}
+  <ul class="wave-items">
+    {% for item in stop.item_texts %}<li>{{ item }}</li>{% endfor %}
+  </ul>
+  {% if stop.completed %}
+  <p class="muted">Done — recorded into the bin's contents history.</p>
+  {% else %}
+  <form method="post" action="{{ complete_action }}" data-submit-form>
+    <input type="hidden" name="bin_code" value="{{ stop.bin_code }}">
+    <button type="submit" class="bin-photo-primary">Placed — record it</button>
+  </form>
+  {% endif %}
+</section>
+{% endfor %}
+
+{% if not stops %}
+<section class="panel panel-padded stack bin-photo-card">
+  <h2>No stops yet</h2>
+  <p>No decisions on this run selected a destination bin. Deal the deck first.</p>
+  <div class="action-bar"><a class="button" href="{{ run_url }}">Back to the deck</a></div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block body_extra %}
+{{ super() }}
+{% if notice %}<script>document.querySelector('[data-wave-notice]')?.focus();</script>{% endif %}
+{% endblock %}
