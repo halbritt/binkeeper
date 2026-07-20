@@ -26,6 +26,8 @@ from starlette.datastructures import FormData, UploadFile
 from binkeeper.bin_photo_web.manage import (
     ManageLoader,
     ManageRouteConfig,
+    RetrievalRecorder,
+    TriageLoader,
     install_manage_routes,
     load_manage_view,
 )
@@ -53,6 +55,8 @@ def create_app(
     tenant_id: str = "personal",
     corpus_id: str = "personal",
     manage_loader: ManageLoader | None = None,
+    triage_loader: TriageLoader | None = None,
+    retrieval_recorder: RetrievalRecorder | None = None,
 ) -> FastAPI:
     """Build the loopback-bound bin-photo-drop app."""
     if host.strip() not in _LOOPBACK_HOSTS:
@@ -243,6 +247,8 @@ def create_app(
             sites=tuple(_SITE_PREFIXES),
             load_view=load_manage,
             strict_origin=strict_origin_check,
+            load_triage=triage_loader,
+            record_retrieval=retrieval_recorder,
         ),
     )
 

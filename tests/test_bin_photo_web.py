@@ -1388,3 +1388,135 @@ def test_register_flow_asks_when_no_code_can_be_read(monkeypatch) -> None:
     view = bin_photo_web._register_flow(image=b"x", bin_code=None, contents=None)
     assert view["mode"] == "form"
     assert "couldn't read a bin code" in str(view["error"])
+
+
+def _triage_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> bin_manage_web.ManageView:
+    return {
+        "bin_code": bin_code,
+        "theme": "Power tools",
+        "contents": "",
+        "home_site": "alameda-garage",
+        "current_site": "oakland-fab-east",
+        "catalog_photo_url": None,
+    }
+
+
+def test_manage_not_found_records_the_miss_and_opens_triage() -> None:
+    recorded: list[tuple[str, str, str]] = []
+
+    def record(action: bin_manage_web.RetrievalAction, scope: object) -> None:
+        recorded.append((action.outcome, action.bin_code, action.site))
+
+    def load_triage(
+        *, bin_code: str, site: str, tenant_id: str, corpus_id: str
+    ) -> list[bin_manage_web.TriageCandidate]:
+        assert (bin_code, site) == ("AGR-014", "oakland-fab-east")
+        return [{"bin_code": "OFE-002", "confidence_label": "41%", "stale": True}]
+
+    app = bin_photo_web.create_app(
+        host="127.0.0.1",
+        port=8765,
+        manage_loader=_triage_view,
+        triage_loader=load_triage,
+        retrieval_recorder=record,
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/manage/AGR-014/not-found",
+            data={"action_id": "nf-1", "site": "oakland-fab-east"},
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == "/manage/AGR-014/triage?notice=not-found-recorded"
+        assert recorded == [("not_found", "AGR-014", "oakland-fab-east")]
+
+        page = client.get("/manage/AGR-014/triage", params={"notice": "not-found-recorded"})
+
+    assert page.status_code == 200
+    body = page.text
+    assert "Where else at Oakland Fab East?" in body
+    assert "OFE-002" in body
+    assert "Seen it" in body
+    assert "Not here either" in body
+    assert "Found it after all" in body
+    assert "mark each bin you actually see" in body.lower()
+
+
+def test_triage_marks_emit_exactly_one_event_each() -> None:
+    recorded: list[tuple[str, str, str]] = []
+
+    def record(action: bin_manage_web.RetrievalAction, scope: object) -> None:
+        recorded.append((action.outcome, action.bin_code, action.site))
+
+    app = bin_photo_web.create_app(
+        host="127.0.0.1",
+        port=8765,
+        manage_loader=_triage_view,
+        triage_loader=lambda **_: [],
+        retrieval_recorder=record,
+    )
+    common = {"site": "oakland-fab-east", "action_id": "mk-1"}
+    with TestClient(app) as client:
+        seen = client.post(
+            "/manage/AGR-014/triage/mark",
+            data={**common, "target_bin": "OFE-002", "verdict": "seen"},
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+        missing = client.post(
+            "/manage/AGR-014/triage/mark",
+            data={**common, "target_bin": "OFE-003", "verdict": "missing"},
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+        found = client.post(
+            "/manage/AGR-014/triage/mark",
+            data={**common, "verdict": "found"},
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+
+    assert recorded == [
+        ("confirm", "OFE-002", "oakland-fab-east"),
+        ("not_found", "OFE-003", "oakland-fab-east"),
+        ("fetch", "AGR-014", "oakland-fab-east"),
+    ]
+    assert seen.headers["location"].endswith("/triage?notice=candidate-confirmed")
+    assert missing.headers["location"].endswith("/triage?notice=candidate-missing")
+    assert found.headers["location"] == "/manage/AGR-014?notice=found-recorded"
+
+
+def test_retrieval_outcome_round_trips_to_the_trip_ledger(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import db
+    from binkeeper.bin_inventory import bin_belief
+    from binkeeper.bin_register import register_bin
+
+    register_bin(
+        conn,
+        bin_code="AGR-014",
+        site="alameda-garage",
+        observed_at=datetime(2026, 7, 13, 10, tzinfo=UTC),
+    )
+    monkeypatch.setattr(db, "connect", lambda **_kwargs: nullcontext(conn))
+    before = bin_belief(conn, "AGR-014").confidence
+
+    with _client() as client:
+        response = client.post(
+            "/manage/AGR-014/not-found",
+            data={"action_id": "nf-db-1", "site": "alameda-garage"},
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 303
+    after = bin_belief(conn, "AGR-014")
+    assert after.confidence < before
+    row = conn.execute(
+        "SELECT event_kind, site, source_label FROM bin_trip_events "
+        "WHERE bin_code = 'AGR-014' AND event_kind = 'not_found'"
+    ).fetchone()
+    assert row == ("not_found", "alameda-garage", "manage-web")

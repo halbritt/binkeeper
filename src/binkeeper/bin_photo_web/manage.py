@@ -65,6 +65,44 @@ class ManageLoader(Protocol):
     ) -> ManageView: ...
 
 
+class TriageCandidate(TypedDict):
+    """One same-site bin worth checking while the owner is already searching."""
+
+    bin_code: str
+    confidence_label: str
+    stale: bool
+
+
+class TriageLoader(Protocol):
+    """Loader seam for the not-found triage candidate list."""
+
+    def __call__(
+        self,
+        *,
+        bin_code: str,
+        site: str,
+        tenant_id: str,
+        corpus_id: str,
+    ) -> list[TriageCandidate]: ...
+
+
+RetrievalOutcome = Literal["fetch", "not_found", "confirm"]
+
+
+@dataclass(frozen=True)
+class RetrievalAction:
+    """One owner retrieval verdict destined for the append-only trip ledger."""
+
+    bin_code: str
+    site: str
+    outcome: RetrievalOutcome
+    action_id: str
+    received_at: datetime
+
+
+RetrievalRecorder = Callable[["RetrievalAction", BinActionScope], None]
+
+
 @dataclass(frozen=True)
 class ManageRouteConfig:
     """Dependencies shared by the contextual management routes."""
@@ -75,6 +113,8 @@ class ManageRouteConfig:
     sites: tuple[str, ...]
     load_view: ManageLoader
     strict_origin: OriginCheck
+    load_triage: TriageLoader | None = None
+    record_retrieval: RetrievalRecorder | None = None
 
 
 @dataclass(frozen=True)
@@ -161,6 +201,29 @@ def install_manage_routes(app: FastAPI, config: ManageRouteConfig) -> None:
         _origin: None = Depends(strict_origin),
     ) -> RedirectResponse:
         return await _print_response(request, bin_code, config)
+
+    @app.post("/manage/{bin_code}/not-found")
+    async def manage_not_found(
+        request: Request,
+        bin_code: str = ApiPath(min_length=1, max_length=120),
+        _origin: None = Depends(strict_origin),
+    ) -> RedirectResponse:
+        return await _not_found_response(request, bin_code, config)
+
+    @app.get("/manage/{bin_code}/triage")
+    def manage_triage(
+        bin_code: str = ApiPath(min_length=1, max_length=120),
+        notice: str = "",
+    ) -> object:
+        return _triage_page(config, bin_code, notice)
+
+    @app.post("/manage/{bin_code}/triage/mark")
+    async def manage_triage_mark(
+        request: Request,
+        bin_code: str = ApiPath(min_length=1, max_length=120),
+        _origin: None = Depends(strict_origin),
+    ) -> RedirectResponse:
+        return await _triage_mark_response(request, bin_code, config)
 
 
 def _manage_page(config: ManageRouteConfig, bin_code: str, notice: str) -> object:
@@ -292,6 +355,153 @@ async def _print_response(
         "unknown": "print-unknown",
     }[outcome]
     return _redirect(config.base_path, bin_code, notice)
+
+
+async def _not_found_response(
+    request: Request,
+    bin_code: str,
+    config: ManageRouteConfig,
+) -> RedirectResponse:
+    form = await request.form()
+    site = _form_text(form.get("site"))
+    if not site.strip():
+        return _redirect(config.base_path, bin_code, "retrieval-needs-site")
+    action = RetrievalAction(
+        bin_code=bin_code,
+        site=site,
+        outcome="not_found",
+        action_id=_form_text(form.get("action_id")),
+        received_at=datetime.now(UTC),
+    )
+    record = config.record_retrieval or record_retrieval_outcome
+    try:
+        await run_in_threadpool(record, action, config.scope)
+    except (BinInventoryError, BinManageError, psycopg.Error):
+        _LOGGER.warning("BinKeeper not-found record failed")
+        return _redirect(config.base_path, bin_code, "retrieval-failed")
+    return _triage_redirect(config.base_path, bin_code, "not-found-recorded")
+
+
+def _triage_page(config: ManageRouteConfig, bin_code: str, notice: str) -> object:
+    try:
+        view = config.load_view(
+            bin_code=bin_code,
+            tenant_id=config.scope.tenant_id,
+            corpus_id=config.scope.corpus_id,
+        )
+    except BinManageNotFoundError:
+        raise HTTPException(status_code=404, detail="bin not found") from None
+    except (psycopg.Error, ServingRoleUnavailableError):
+        _LOGGER.warning("BinKeeper could not load a triage page")
+        raise HTTPException(status_code=503, detail="bin details are unavailable") from None
+    site = view["current_site"]
+    load_triage = config.load_triage or load_triage_view
+    candidates: list[TriageCandidate] = []
+    if site:
+        try:
+            candidates = load_triage(
+                bin_code=bin_code,
+                site=site,
+                tenant_id=config.scope.tenant_id,
+                corpus_id=config.scope.corpus_id,
+            )
+        except (psycopg.Error, ServingRoleUnavailableError):
+            _LOGGER.warning("BinKeeper could not load triage candidates")
+            raise HTTPException(status_code=503, detail="triage is unavailable") from None
+    code = quote(bin_code, safe="")
+    return page_response(
+        config.chrome.render(
+            "bin_triage.html",
+            bin_code=view["bin_code"],
+            site=site,
+            candidates=candidates,
+            mark_action=surface_path(config.base_path, f"/manage/{code}/triage/mark"),
+            mark_action_id=str(uuid4()),
+            manage_url=surface_path(config.base_path, f"/manage/{code}"),
+            notice=_manage_notice(notice),
+            catalog_url="/bins/",
+            photo_url=surface_path(config.base_path, "/"),
+            register_url=surface_path(config.base_path, "/register"),
+            binkeeper_section="catalog",
+            surface_label="Where else?",
+        )
+    )
+
+
+async def _triage_mark_response(
+    request: Request,
+    bin_code: str,
+    config: ManageRouteConfig,
+) -> RedirectResponse:
+    form = await request.form()
+    site = _form_text(form.get("site"))
+    target = _form_text(form.get("target_bin")) or bin_code
+    verdict = _form_text(form.get("verdict"))
+    outcomes: dict[str, RetrievalOutcome] = {
+        "seen": "confirm",
+        "missing": "not_found",
+        "found": "fetch",
+    }
+    outcome = outcomes.get(verdict)
+    if outcome is None or not site.strip():
+        return _triage_redirect(config.base_path, bin_code, "retrieval-failed")
+    action = RetrievalAction(
+        bin_code=bin_code if verdict == "found" else target,
+        site=site,
+        outcome=outcome,
+        action_id=_form_text(form.get("action_id")),
+        received_at=datetime.now(UTC),
+    )
+    record = config.record_retrieval or record_retrieval_outcome
+    try:
+        await run_in_threadpool(record, action, config.scope)
+    except (BinInventoryError, BinManageError, psycopg.Error):
+        _LOGGER.warning("BinKeeper triage mark failed")
+        return _triage_redirect(config.base_path, bin_code, "retrieval-failed")
+    if verdict == "found":
+        return _redirect(config.base_path, bin_code, "found-recorded")
+    notice = "candidate-confirmed" if verdict == "seen" else "candidate-missing"
+    return _triage_redirect(config.base_path, bin_code, notice)
+
+
+def record_retrieval_outcome(action: RetrievalAction, scope: BinActionScope) -> None:
+    """Append one retrieval outcome to the trip ledger on the owner connection."""
+    from binkeeper.bin_inventory import record_event
+    from binkeeper.db import connect
+
+    with connect() as conn:
+        record_event(
+            conn,
+            event_kind=action.outcome,
+            bin_code=action.bin_code,
+            site=action.site,
+            occurred_at=action.received_at,
+            source_label="manage-web",
+            idempotency_key=action.action_id or None,
+            tenant_id=scope.tenant_id,
+            corpus_id=scope.corpus_id,
+        )
+
+
+def load_triage_view(
+    *, bin_code: str, site: str, tenant_id: str, corpus_id: str
+) -> list[TriageCandidate]:
+    """Rank the other bins believed at this site by expected regret. Read-only."""
+    from binkeeper.bin_priority import reconfirm_priorities
+    from binkeeper.db import connect
+
+    with connect(role="serving") as conn:
+        ranked = reconfirm_priorities(conn, tenant_id=tenant_id, corpus_id=corpus_id)
+    candidates: list[TriageCandidate] = [
+        TriageCandidate(
+            bin_code=candidate.bin_code,
+            confidence_label=f"{round(candidate.confidence * 100)}%",
+            stale=candidate.abstained,
+        )
+        for candidate in ranked
+        if candidate.site == site and candidate.bin_code != bin_code
+    ]
+    return candidates[:12]
 
 
 def load_manage_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> ManageView:
@@ -526,8 +736,14 @@ def _action_urls(base_path: str, bin_code: str) -> dict[str, str]:
             ("location_action", "location"),
             ("photo_action", "photo"),
             ("print_action", "print"),
+            ("not_found_action", "not-found"),
         )
     }
+
+
+def _triage_redirect(base_path: str, bin_code: str, notice: str) -> RedirectResponse:
+    path = surface_path(base_path, f"/manage/{quote(bin_code, safe='')}/triage")
+    return RedirectResponse(f"{path}?notice={quote(notice, safe='')}", status_code=303)
 
 
 def _redirect(base_path: str, bin_code: str, notice: str) -> RedirectResponse:
@@ -556,6 +772,19 @@ def _manage_notice(key: str) -> dict[str, str] | None:
         "print-unknown": (
             "error",
             "Print status is unknown. Check the printer before trying again.",
+        ),
+        "not-found-recorded": (
+            "info",
+            "Recorded that the bin was not where the map claimed. "
+            "While you are searching, mark each bin you actually see.",
+        ),
+        "candidate-confirmed": ("ok", "Thanks — that sighting re-confirmed the bin's location."),
+        "candidate-missing": ("info", "Recorded another miss. Its location confidence dropped."),
+        "found-recorded": ("ok", "Recorded the successful retrieval. Location re-confirmed."),
+        "retrieval-failed": ("error", "Nothing was recorded. Try again."),
+        "retrieval-needs-site": (
+            "error",
+            "This bin has no claimed site to contradict; set its location first.",
         ),
     }
     found = notices.get(key)

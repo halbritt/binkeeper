@@ -1,0 +1,92 @@
+{% extends "bin_photo_base.html" %}
+
+{% block title %}Where else? {{ bin_code }} · BinKeeper{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+  .bin-triage-list { display: grid; gap: var(--space-3); }
+  .bin-triage-row {
+    display: flex; flex-wrap: wrap; gap: var(--space-3);
+    justify-content: space-between; align-items: center;
+  }
+  .bin-triage-code { font-size: var(--type-heading); }
+  .bin-triage-actions { display: flex; gap: var(--space-2); }
+</style>
+{% endblock %}
+
+{% block bin_photo_main %}
+<a href="{{ manage_url }}">← Back to {{ bin_code }}</a>
+<header class="bin-photo-hero">
+  <div class="bin-photo-heading-row">
+    <div>
+      <span class="bin-photo-kicker">BinKeeper</span>
+      <h1>Where else at {{ site|replace('-', ' ')|title if site else 'this site' }}?</h1>
+    </div>
+    <span class="chip">Missing · <code>{{ bin_code }}</code></span>
+  </div>
+  <p class="bin-photo-intro">
+    You are already searching, so every bin you lay eyes on is free evidence.
+    Mark each one you actually see — and if {{ bin_code }} turns up, say so.
+  </p>
+</header>
+
+{% if notice %}
+<div class="banner banner-{{ notice.kind }}" tabindex="-1" data-triage-notice
+     {% if notice.kind == 'error' %}role="alert"{% else %}role="status"{% endif %}>
+  {{ notice.message }}
+</div>
+{% endif %}
+
+<section class="panel panel-padded stack bin-photo-card" aria-labelledby="found-heading">
+  <h2 id="found-heading">Found it after all?</h2>
+  <form method="post" action="{{ mark_action }}" data-submit-form>
+    <input type="hidden" name="action_id" value="{{ mark_action_id }}-found">
+    <input type="hidden" name="site" value="{{ site }}">
+    <input type="hidden" name="verdict" value="found">
+    <button type="submit">Yes — record the retrieval of {{ bin_code }}</button>
+  </form>
+</section>
+
+<section class="panel panel-padded stack bin-photo-card" aria-labelledby="candidates-heading">
+  <h2 id="candidates-heading">Bins believed at this site</h2>
+  {% if candidates %}
+  <div class="bin-triage-list">
+    {% for candidate in candidates %}
+    <div class="bin-triage-row" data-triage-candidate>
+      <div>
+        <code class="bin-triage-code">{{ candidate.bin_code }}</code>
+        <span class="chip">Location {{ candidate.confidence_label }}</span>
+        {% if candidate.stale %}<span class="chip">stale</span>{% endif %}
+      </div>
+      <div class="bin-triage-actions">
+        <form method="post" action="{{ mark_action }}" data-submit-form>
+          <input type="hidden" name="action_id" value="{{ mark_action_id }}-{{ candidate.bin_code }}-seen">
+          <input type="hidden" name="site" value="{{ site }}">
+          <input type="hidden" name="target_bin" value="{{ candidate.bin_code }}">
+          <input type="hidden" name="verdict" value="seen">
+          <button type="submit">Seen it</button>
+        </form>
+        <form method="post" action="{{ mark_action }}" data-submit-form>
+          <input type="hidden" name="action_id" value="{{ mark_action_id }}-{{ candidate.bin_code }}-missing">
+          <input type="hidden" name="site" value="{{ site }}">
+          <input type="hidden" name="target_bin" value="{{ candidate.bin_code }}">
+          <input type="hidden" name="verdict" value="missing">
+          <button type="submit" class="button">Not here either</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% elif site %}
+  <p class="muted">No other bins are believed at this site.</p>
+  {% else %}
+  <p class="muted">This bin has no claimed site, so there is nothing to triage.</p>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block body_extra %}
+{{ super() }}
+{% if notice %}<script>document.querySelector('[data-triage-notice]')?.focus();</script>{% endif %}
+{% endblock %}

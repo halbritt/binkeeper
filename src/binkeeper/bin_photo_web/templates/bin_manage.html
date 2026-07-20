@@ -110,6 +110,18 @@
         <span>Recording the current location for {{ bin_code }}…</span>
       </p>
     </form>
+    {% if current_site %}
+    <form method="post" action="{{ not_found_action }}" class="bin-photo-form" data-submit-form>
+      <input type="hidden" name="action_id" value="{{ not_found_action_id }}">
+      <input type="hidden" name="site" value="{{ current_site }}">
+      <div class="action-bar bin-photo-action-row">
+        <button type="submit" data-submit-button data-busy-label="Recording the miss…">
+          <span data-button-label>Not found here</span>
+        </button>
+        <span class="field-help">Went to {{ current_site|replace('-', ' ')|title }} and the bin was not there? One tap records the miss and opens a where-else checklist.</span>
+      </div>
+    </form>
+    {% endif %}
   </section>
 
   <section class="panel panel-padded stack bin-photo-card bin-manage-wide" aria-labelledby="print-heading">
