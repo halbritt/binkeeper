@@ -360,6 +360,7 @@
               <dt>Current site</dt><dd>{{ entry.current_site_label }}</dd>
               <dt>Home site</dt><dd>{{ entry.home_site_label }}</dd>
               <dt>Location confidence</dt><dd>{{ entry.location_confidence_label }}</dd>
+              {% if entry.anchor_label %}<dt>Witnessed shelf</dt><dd>{{ entry.anchor_label }}</dd>{% endif %}
               <dt>Profile confidence</dt><dd>{{ entry.passport_confidence_label }}</dd>
             </dl>
             {% if entry.physical_constraints %}

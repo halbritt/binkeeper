@@ -126,3 +126,91 @@ def test_harvest_without_anchor_appends_nothing(conn: psycopg.Connection) -> Non
     qrcode.make("AGR-001").save(buf, format="PNG")
     assert harvest_photo_colocations(conn, buf.getvalue()) == []
     assert conn.execute("SELECT count(*) FROM colocation_observations").fetchone() == (0,)
+
+
+# --- containment fold (BINK-32) ------------------------------------------------
+
+
+def _sighting(anchor: str, days_ago: float, strength: float = 1.0):
+    from datetime import UTC, datetime, timedelta
+
+    from binkeeper.bin_colocation import ColocationSighting
+
+    now = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
+    return now, ColocationSighting(
+        anchor_code=anchor, observed_at=now - timedelta(days=days_ago), strength=strength
+    )
+
+
+def test_fold_containment_fresh_sighting_wins_confidently() -> None:
+    from binkeeper.bin_colocation import fold_containment
+
+    now, sighting = _sighting("LOC-014", days_ago=9)
+    belief = fold_containment("AGR-001", [sighting], now=now)
+    assert belief.anchor_code == "LOC-014"
+    assert belief.abstained is False
+    assert belief.confidence > 0.9
+    assert belief.age_days is not None and round(belief.age_days) == 9
+    assert belief.to_json() is not None
+
+
+def test_fold_containment_decays_below_floor_and_abstains() -> None:
+    from binkeeper.bin_colocation import fold_containment
+
+    now, sighting = _sighting("LOC-014", days_ago=400)
+    belief = fold_containment("AGR-001", [sighting], now=now)
+    assert belief.abstained is True
+    assert belief.to_json() is None  # shelf tier falls back to site level
+
+
+def test_fold_containment_contradiction_shocks_the_winner() -> None:
+    from binkeeper.bin_colocation import fold_containment
+
+    now, old_home = _sighting("LOC-001", days_ago=5)
+    _, s2 = _sighting("LOC-001", days_ago=4)
+    _, elsewhere = _sighting("LOC-002", days_ago=1, strength=0.6)
+    belief = fold_containment("AGR-001", [old_home, s2, elsewhere], now=now)
+    # LOC-001 still holds more mass, but the later LOC-002 sighting shocks it.
+    assert belief.anchor_code == "LOC-001"
+    assert belief.confidence < 0.7
+
+
+def test_fold_containment_recent_mass_switches_the_winner() -> None:
+    from binkeeper.bin_colocation import fold_containment
+
+    now, faded = _sighting("LOC-001", days_ago=300)
+    _, fresh1 = _sighting("LOC-002", days_ago=2)
+    _, fresh2 = _sighting("LOC-002", days_ago=1)
+    belief = fold_containment("AGR-001", [faded, fresh1, fresh2], now=now)
+    assert belief.anchor_code == "LOC-002"
+    assert belief.abstained is False
+
+
+def test_bin_where_carries_the_shelf_tier(conn: psycopg.Connection) -> None:
+    import argparse
+    from datetime import UTC, datetime
+
+    from binkeeper.bin_inventory import record_event
+    from binkeeper.cli import execute
+
+    record_event(conn, event_kind="place", bin_code="AGR-001", site="alameda-garage")
+    record_colocation(
+        conn,
+        anchor_code="LOC-014",
+        member_code="AGR-001",
+        strength=1.0,
+        observed_at=datetime.now(UTC),
+        idempotency_key="where-1",
+    )
+    args = argparse.Namespace(
+        command="bin-where", bin_code="AGR-001", tenant="personal", corpus="personal"
+    )
+    payload = execute(args, conn)
+    assert payload["site"] == "alameda-garage"
+    assert payload["anchor"]["anchor_code"] == "LOC-014"
+    assert payload["anchor"]["confidence"] > 0.9
+
+    bare = argparse.Namespace(
+        command="bin-where", bin_code="AGR-999", tenant="personal", corpus="personal"
+    )
+    assert execute(bare, conn)["anchor"] is None

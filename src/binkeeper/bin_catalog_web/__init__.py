@@ -5,7 +5,7 @@ from __future__ import annotations
 import binascii
 import json
 import logging
-from collections.abc import Callable, Sequence, Set
+from collections.abc import Callable, Mapping, Sequence, Set
 from functools import partial
 from importlib import resources
 from pathlib import Path
@@ -18,6 +18,7 @@ from fastapi import Path as ApiPath
 from fastapi.responses import HTMLResponse, Response
 from PIL import Image
 
+from binkeeper.bin_colocation import ContainmentBelief, containment_by_bin
 from binkeeper.bin_inventory import BinInventoryError
 from binkeeper.bin_passport import (
     BIN_CAPTURE_KIND,
@@ -172,6 +173,7 @@ class BinCatalogEntry(TypedDict):
     photo_state: PhotoState
     photo_url: str | None
     manage_url: str | None
+    anchor_label: str | None
     search_text: str
 
 
@@ -220,6 +222,7 @@ def create_app(
     authoring_base_path: str = "/bin-photo",
     passport_loader: PassportLoader | None = None,
     photo_source: BinCatalogPhotoSource | None = None,
+    containment_loader: ContainmentLoader | None = None,
 ) -> FastAPI:
     """Build the loopback-bound, paired-tailnet-safe BinKeeper catalog app."""
     normalized_host = host.strip()
@@ -256,6 +259,11 @@ def create_app(
     )
     load_passports = passport_loader or partial(
         _load_passports,
+        tenant_id=tenant_id,
+        corpus_id=corpus_id,
+    )
+    load_containment = containment_loader or partial(
+        _load_containment,
         tenant_id=tenant_id,
         corpus_id=corpus_id,
     )
@@ -298,6 +306,10 @@ def create_app(
         try:
             passports = sorted(load_passports(), key=lambda passport: passport.bin_code.casefold())
             try:
+                witnessed = load_containment()
+            except BinCatalogUnavailableError:
+                witnessed = {}
+            try:
                 linked_photo_bins = catalog_photos.linked_bin_codes(
                     [passport.bin_code for passport in passports]
                 )
@@ -308,6 +320,7 @@ def create_app(
             all_entries = [
                 _passport_view(
                     passport,
+                    anchor_label=_anchor_label(witnessed.get(passport.bin_code)),
                     photo_state=(
                         "unavailable"
                         if photo_lookup_unavailable
@@ -416,6 +429,7 @@ def _passport_view(
     photo_state: PhotoState,
     photo_url: str | None,
     manage_url: str | None,
+    anchor_label: str | None = None,
 ) -> BinCatalogEntry:
     """Select and format only owner-safe fields for the catalog template."""
     contents = _unique(passport.sibling_contents)
@@ -447,6 +461,7 @@ def _passport_view(
         "photo_state": photo_state,
         "photo_url": photo_url,
         "manage_url": manage_url,
+        "anchor_label": anchor_label,
         "search_text": " ".join(searchable_values).casefold(),
     }
 
@@ -530,6 +545,30 @@ def _volume_label(profile: BinVolumeProfile | None) -> str:
 
 def _confidence_label(confidence: float) -> str:
     return f"{round(max(0.0, min(1.0, confidence)) * 100)}%"
+
+
+ContainmentLoader = Callable[[], "Mapping[str, ContainmentBelief]"]
+
+
+def _anchor_label(belief: ContainmentBelief | None) -> str | None:
+    """Render the shelf tier for the details list, or None when abstained."""
+    if belief is None:
+        return None
+    tier = belief.to_json()
+    if tier is None:
+        return None
+    age = tier["age_days"]
+    age_text = f", seen {age:g}d ago" if isinstance(age, int | float) else ""
+    return f"Last witnessed on {tier['anchor_code']} ({tier['confidence']:.0%}{age_text})"
+
+
+def _load_containment(*, tenant_id: str, corpus_id: str) -> Mapping[str, ContainmentBelief]:
+    """Fold witnessed shelves through the least-privilege serving role."""
+    try:
+        with connect(role="serving") as conn:
+            return containment_by_bin(conn, tenant_id=tenant_id, corpus_id=corpus_id)
+    except (ServingRoleUnavailableError, psycopg.Error) as exc:
+        raise BinCatalogUnavailableError("could not load witnessed shelves") from exc
 
 
 def _load_passports(*, tenant_id: str, corpus_id: str) -> Sequence[BinPassport]:

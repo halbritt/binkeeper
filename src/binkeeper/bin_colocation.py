@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -194,3 +195,160 @@ def harvest_photo_colocations(
             corpus_id=corpus_id,
         )
     return pairs
+
+
+# --- containment fold (BINK-32) -----------------------------------------------
+
+# Containment decays on its own clock: shelves reshuffle faster than sites.
+ANCHOR_HALF_LIFE_DAYS = float(os.environ.get("BINKEEPER_ANCHOR_HALF_LIFE_DAYS", "90"))
+# Below this confidence the shelf tier abstains and answers fall back to site.
+ANCHOR_CONTAINMENT_FLOOR = float(os.environ.get("BINKEEPER_ANCHOR_FLOOR", "0.5"))
+# Confidence drop per sighting under a DIFFERENT anchor after the winner's last.
+ANCHOR_CONTRADICTION_SHOCK = float(os.environ.get("BINKEEPER_ANCHOR_CONTRADICTION_SHOCK", "0.4"))
+
+
+@dataclass(frozen=True)
+class ColocationSighting:
+    """One loaded co-location row, as the fold sees it."""
+
+    anchor_code: str
+    observed_at: datetime
+    strength: float
+
+
+@dataclass(frozen=True)
+class ContainmentBelief:
+    """A bin's witnessed shelf, with decayed confidence and an abstain verdict."""
+
+    bin_code: str
+    anchor_code: str | None
+    confidence: float
+    age_days: float | None
+    observation_count: int
+    abstained: bool
+
+    def to_json(self) -> dict[str, object] | None:
+        """Return the shelf tier for a where-answer, or None when abstained."""
+        if self.abstained or self.anchor_code is None:
+            return None
+        return {
+            "anchor_code": self.anchor_code,
+            "confidence": round(self.confidence, 4),
+            "age_days": round(self.age_days, 2) if self.age_days is not None else None,
+            "observation_count": self.observation_count,
+        }
+
+
+def fold_containment(
+    bin_code: str,
+    sightings: Sequence[ColocationSighting],
+    *,
+    now: datetime,
+    half_life_days: float = ANCHOR_HALF_LIFE_DAYS,
+    floor: float = ANCHOR_CONTAINMENT_FLOOR,
+    shock: float = ANCHOR_CONTRADICTION_SHOCK,
+) -> ContainmentBelief:
+    """Fold witnessed sightings into the bin's current shelf. Pure.
+
+    The anchor with the highest decayed evidence mass wins; sightings under a
+    different anchor after the winner's latest sighting shock its confidence,
+    exactly as `contradict` shocks the site fold. Below the floor the tier
+    abstains — shelf answers must fall back to site level rather than guess,
+    and they never outrank the site fold.
+    """
+    if not sightings:
+        return ContainmentBelief(bin_code, None, 0.0, None, 0, True)
+    mass: dict[str, float] = {}
+    latest: dict[str, datetime] = {}
+    for sighting in sightings:
+        age_days = max(0.0, (now - sighting.observed_at).total_seconds() / 86400.0)
+        decayed = sighting.strength * (
+            0.5 ** (age_days / half_life_days) if half_life_days > 0 else 0.0
+        )
+        mass[sighting.anchor_code] = mass.get(sighting.anchor_code, 0.0) + decayed
+        seen = latest.get(sighting.anchor_code)
+        if seen is None or sighting.observed_at > seen:
+            latest[sighting.anchor_code] = sighting.observed_at
+    winner = max(mass, key=lambda code: (mass[code], latest[code]))
+    contradictions = sum(
+        1
+        for sighting in sightings
+        if sighting.anchor_code != winner and sighting.observed_at > latest[winner]
+    )
+    confidence = max(0.0, min(1.0, mass[winner]) - shock * contradictions)
+    age_days = (now - latest[winner]).total_seconds() / 86400.0
+    return ContainmentBelief(
+        bin_code=bin_code,
+        anchor_code=winner,
+        confidence=confidence,
+        age_days=age_days,
+        observation_count=len(sightings),
+        abstained=confidence < floor,
+    )
+
+
+def load_bin_sightings(
+    conn: psycopg.Connection,
+    bin_code: str,
+    *,
+    tenant_id: str = DEFAULT_BIN_TENANT_ID,
+    corpus_id: str = DEFAULT_BIN_CORPUS_ID,
+) -> list[ColocationSighting]:
+    """Load one bin's co-location rows in observation order. Read-only."""
+    rows = conn.execute(
+        """
+        SELECT anchor_code, observed_at, observation_strength
+        FROM colocation_observations
+        WHERE tenant_id = %s AND corpus_id = %s AND member_code = %s
+        ORDER BY seq
+        """,
+        (tenant_id, corpus_id, bin_code),
+    ).fetchall()
+    return [
+        ColocationSighting(anchor_code=str(row[0]), observed_at=row[1], strength=float(row[2]))
+        for row in rows
+    ]
+
+
+def bin_containment(
+    conn: psycopg.Connection,
+    bin_code: str,
+    *,
+    now: datetime | None = None,
+    tenant_id: str = DEFAULT_BIN_TENANT_ID,
+    corpus_id: str = DEFAULT_BIN_CORPUS_ID,
+) -> ContainmentBelief:
+    """Fold one bin's witnessed shelf from the ledger. Read-only."""
+    sightings = load_bin_sightings(conn, bin_code, tenant_id=tenant_id, corpus_id=corpus_id)
+    return fold_containment(bin_code, sightings, now=now or datetime.now(UTC))
+
+
+def containment_by_bin(
+    conn: psycopg.Connection,
+    *,
+    now: datetime | None = None,
+    tenant_id: str = DEFAULT_BIN_TENANT_ID,
+    corpus_id: str = DEFAULT_BIN_CORPUS_ID,
+) -> dict[str, ContainmentBelief]:
+    """Fold every witnessed bin's shelf in one pass. Read-only."""
+    rows = conn.execute(
+        """
+        SELECT member_code, anchor_code, observed_at, observation_strength
+        FROM colocation_observations
+        WHERE tenant_id = %s AND corpus_id = %s
+        ORDER BY seq
+        """,
+        (tenant_id, corpus_id),
+    ).fetchall()
+    grouped: dict[str, list[ColocationSighting]] = {}
+    for member, anchor, observed_at, strength in rows:
+        grouped.setdefault(str(member), []).append(
+            ColocationSighting(
+                anchor_code=str(anchor), observed_at=observed_at, strength=float(strength)
+            )
+        )
+    when = now or datetime.now(UTC)
+    return {
+        member: fold_containment(member, sightings, now=when)
+        for member, sightings in grouped.items()
+    }

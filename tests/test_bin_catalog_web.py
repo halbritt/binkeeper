@@ -323,7 +323,11 @@ def test_default_catalog_photo_source_reads_the_capture_linked_local_vault(
         raising=False,
     )
     monkeypatch.setattr(bin_catalog_web, "open_blob", fake_open_blob, raising=False)
-    app = create_app(base_path="/bins", passport_loader=lambda: [_passport()])
+    app = create_app(
+        base_path="/bins",
+        passport_loader=lambda: [_passport()],
+        containment_loader=lambda: {},
+    )
 
     with TestClient(app, base_url="http://127.0.0.1:8765") as client:
         page = client.get("/")
@@ -559,3 +563,50 @@ def test_catalog_fresh_confidence_renders_without_fog() -> None:
     assert 'data-fog="fresh"' in response.text
     assert "Location in fog" not in response.text
     assert "Location stale" not in response.text
+
+
+def test_catalog_shows_the_witnessed_shelf_line() -> None:
+    from binkeeper.bin_colocation import ContainmentBelief
+
+    witnessed = {
+        "AGR-014": ContainmentBelief(
+            bin_code="AGR-014",
+            anchor_code="LOC-014",
+            confidence=0.71,
+            age_days=9.0,
+            observation_count=3,
+            abstained=False,
+        )
+    }
+    app = create_app(
+        base_path="/bins",
+        passport_loader=lambda: [_passport()],
+        containment_loader=lambda: witnessed,
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+        response = client.get("/")
+    assert "Witnessed shelf" in response.text
+    assert "Last witnessed on LOC-014 (71%, seen 9d ago)" in response.text
+
+
+def test_catalog_abstained_shelf_tier_stays_silent() -> None:
+    from binkeeper.bin_colocation import ContainmentBelief
+
+    witnessed = {
+        "AGR-014": ContainmentBelief(
+            bin_code="AGR-014",
+            anchor_code="LOC-014",
+            confidence=0.2,
+            age_days=300.0,
+            observation_count=1,
+            abstained=True,
+        )
+    }
+    app = create_app(
+        base_path="/bins",
+        passport_loader=lambda: [_passport()],
+        containment_loader=lambda: witnessed,
+    )
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+        response = client.get("/")
+    assert "Witnessed shelf" not in response.text

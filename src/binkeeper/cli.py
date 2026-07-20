@@ -11,6 +11,7 @@ from typing import Any
 import psycopg
 
 from binkeeper.bin_anchor import print_anchor_label
+from binkeeper.bin_colocation import bin_containment
 from binkeeper.bin_inventory import arrive_all, bin_belief, bin_where, record_event, trip_status
 from binkeeper.bin_passport import bin_passport
 from binkeeper.bin_placement import PlacementDecisionAppend, record_placement_decision
@@ -160,7 +161,9 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
             payload["trip"] = trip_status(conn, args.trip_id, **common).to_json()
         return payload
     if args.command == "bin-where":
-        return bin_where(conn, args.bin_code, **common).to_json()
+        payload = bin_where(conn, args.bin_code, **common).to_json()
+        payload["anchor"] = bin_containment(conn, args.bin_code, **common).to_json()
+        return payload
     if args.command == "bin-belief":
         return bin_belief(conn, args.bin_code, **common).to_json()
     if args.command == "bin-passport":
