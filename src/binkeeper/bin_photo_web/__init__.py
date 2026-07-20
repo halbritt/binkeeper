@@ -31,6 +31,14 @@ from binkeeper.bin_photo_web.manage import (
     install_manage_routes,
     load_manage_view,
 )
+from binkeeper.bin_photo_web.stash import (
+    StashDecisionRecorder,
+    StashDeckLoader,
+    StashRouteConfig,
+    StashRunCreator,
+    StashRunLister,
+    install_stash_routes,
+)
 from binkeeper.sites import SITE_PREFIXES
 from binkeeper.web.chrome import build_surface_chrome, mount_shared_static, page_response
 from binkeeper.web.origin import install_origin_refusal_handler, require_origin
@@ -57,6 +65,10 @@ def create_app(
     manage_loader: ManageLoader | None = None,
     triage_loader: TriageLoader | None = None,
     retrieval_recorder: RetrievalRecorder | None = None,
+    stash_deck_loader: StashDeckLoader | None = None,
+    stash_run_lister: StashRunLister | None = None,
+    stash_run_creator: StashRunCreator | None = None,
+    stash_decision_recorder: StashDecisionRecorder | None = None,
 ) -> FastAPI:
     """Build the loopback-bound bin-photo-drop app."""
     if host.strip() not in _LOOPBACK_HOSTS:
@@ -249,6 +261,21 @@ def create_app(
             strict_origin=strict_origin_check,
             load_triage=triage_loader,
             record_retrieval=retrieval_recorder,
+        ),
+    )
+
+    install_stash_routes(
+        app,
+        StashRouteConfig(
+            base_path=normalized_base_path,
+            chrome=chrome,
+            scope=BinActionScope(tenant_id=tenant_id, corpus_id=corpus_id),
+            sites=tuple(_SITE_PREFIXES),
+            strict_origin=strict_origin_check,
+            load_deck=stash_deck_loader,
+            list_runs=stash_run_lister,
+            create_run=stash_run_creator,
+            record_decision=stash_decision_recorder,
         ),
     )
 

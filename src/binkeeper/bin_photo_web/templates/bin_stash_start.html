@@ -1,0 +1,56 @@
+{% extends "bin_photo_base.html" %}
+
+{% block title %}Stash run · BinKeeper{% endblock %}
+
+{% block bin_photo_main %}
+<header class="bin-photo-hero">
+  <div>
+    <span class="bin-photo-kicker">BinKeeper</span>
+    <h1>Sort a stash</h1>
+  </div>
+  <p class="bin-photo-intro">
+    Empty the inbox pile in one pass: list what is in front of you, one item per
+    line, and the router deals each as a card with a suggested bin.
+  </p>
+</header>
+
+{% if notice %}
+<div class="banner banner-{{ notice.kind }}" tabindex="-1" role="alert">{{ notice.message }}</div>
+{% endif %}
+
+<section class="panel panel-padded stack bin-photo-card" aria-labelledby="start-heading">
+  <h2 id="start-heading">Start a run</h2>
+  <form method="post" action="{{ stash_action }}" class="form-grid bin-photo-form" data-submit-form>
+    <input type="hidden" name="action_id" value="{{ range(10**12) | random }}-stash">
+    <label for="stash-site">Site
+      <select id="stash-site" name="site" required>
+        {% for site in sites %}<option value="{{ site }}">{{ site|replace('-', ' ')|title }}</option>{% endfor %}
+      </select>
+    </label>
+    <label for="stash-items">Items — one per line
+      <textarea id="stash-items" name="items" rows="8" required
+                placeholder="usb-c wall charger&#10;bag of zip ties&#10;small black plastic thing"></textarea>
+    </label>
+    <div class="action-bar">
+      <button type="submit" data-submit-button data-busy-label="Routing the batch…">
+        <span data-button-label>Deal the cards</span>
+      </button>
+    </div>
+  </form>
+</section>
+
+{% if runs %}
+<section class="panel panel-padded stack bin-photo-card" aria-labelledby="runs-heading">
+  <h2 id="runs-heading">Recent runs</h2>
+  <ul>
+    {% for run in runs %}
+    <li>
+      <a href="{{ stash_url }}/{{ run.stash_run_id }}">{{ run.requested_at_label }} · {{ run.site|replace('-', ' ')|title }}</a>
+      — {{ run.item_count }} item{{ '' if run.item_count == 1 else 's' }},
+      {{ run.undecided_count }} undecided
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

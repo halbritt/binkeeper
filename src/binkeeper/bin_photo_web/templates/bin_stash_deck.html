@@ -1,0 +1,136 @@
+{% extends "bin_photo_base.html" %}
+
+{% block title %}Stash deck · BinKeeper{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+  .stash-card { border-top: 3px solid var(--color-accent); }
+  .stash-card-text { font-size: var(--type-heading); margin: 0; }
+  .stash-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .stash-alternatives { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .stash-pending { opacity: 0.92; border-top-style: dashed; }
+  .stash-flags { color: var(--color-fg-muted); font-size: var(--type-meta); margin: 0; }
+</style>
+{% endblock %}
+
+{% block bin_photo_main %}
+<a href="{{ stash_url }}">← All stash runs</a>
+<header class="bin-photo-hero">
+  <div class="bin-photo-heading-row">
+    <div>
+      <span class="bin-photo-kicker">BinKeeper</span>
+      <h1>Stash deck</h1>
+    </div>
+    <span class="chip">{{ site|replace('-', ' ')|title }}</span>
+  </div>
+  <p class="bin-photo-intro">
+    {{ deck|length }} card{{ '' if deck|length == 1 else 's' }} to deal,
+    {{ pending|length }} pending, {{ decided|length }} decided.
+    Every tap records one owner decision over an immutable route receipt.
+  </p>
+</header>
+
+{% if notice %}
+<div class="banner banner-{{ notice.kind }}" tabindex="-1" role="status" data-stash-notice>{{ notice.message }}</div>
+{% endif %}
+
+{% for card in deck %}
+<section class="panel panel-padded stack bin-photo-card stash-card" data-stash-card="deck">
+  <p class="stash-card-text">{{ card.text }}</p>
+  <p>Suggested: <strong><code>{{ card.recommended_bin_code }}</code></strong>
+     <span class="chip">fit {{ card.recommended_score_label }}</span></p>
+  <div class="stash-actions">
+    <form method="post" action="{{ decide_action }}" data-submit-form>
+      <input type="hidden" name="routing_request_id" value="{{ card.routing_request_id }}">
+      <input type="hidden" name="action_id" value="{{ card.routing_request_id }}-accept">
+      <input type="hidden" name="decision" value="accept">
+      <button type="submit" class="bin-photo-primary">Put it in {{ card.recommended_bin_code }}</button>
+    </form>
+    <form method="post" action="{{ decide_action }}" data-submit-form>
+      <input type="hidden" name="routing_request_id" value="{{ card.routing_request_id }}">
+      <input type="hidden" name="action_id" value="{{ card.routing_request_id }}-reject">
+      <input type="hidden" name="decision" value="reject">
+      <button type="submit">None of these</button>
+    </form>
+    <form method="post" action="{{ decide_action }}" data-submit-form>
+      <input type="hidden" name="routing_request_id" value="{{ card.routing_request_id }}">
+      <input type="hidden" name="action_id" value="{{ card.routing_request_id }}-notitem">
+      <input type="hidden" name="decision" value="not_an_item">
+      <button type="submit">Not an item</button>
+    </form>
+  </div>
+  {% if card.alternatives %}
+  <div class="stash-alternatives">
+    {% for alt in card.alternatives %}
+    <form method="post" action="{{ decide_action }}" data-submit-form>
+      <input type="hidden" name="routing_request_id" value="{{ card.routing_request_id }}">
+      <input type="hidden" name="action_id" value="{{ card.routing_request_id }}-alt-{{ alt.bin_code }}">
+      <input type="hidden" name="decision" value="override">
+      <input type="hidden" name="selected_bin" value="{{ alt.bin_code }}">
+      <button type="submit" class="button">Instead: {{ alt.bin_code }} ({{ alt.score_label }})</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endfor %}
+
+{% if pending %}
+<section class="panel panel-padded stack bin-photo-card stash-pending" aria-labelledby="pending-heading">
+  <h2 id="pending-heading">Pending pile — the router abstained</h2>
+  {% for card in pending %}
+  <div class="stack" data-stash-card="pending">
+    <p class="stash-card-text">{{ card.text }}</p>
+    <p class="stash-flags">{{ card.abstain_flags|join(', ') }}</p>
+    <div class="stash-actions">
+      {% for alt in card.alternatives %}
+      <form method="post" action="{{ decide_action }}" data-submit-form>
+        <input type="hidden" name="routing_request_id" value="{{ card.routing_request_id }}">
+        <input type="hidden" name="action_id" value="{{ card.routing_request_id }}-alt-{{ alt.bin_code }}">
+        <input type="hidden" name="decision" value="override">
+        <input type="hidden" name="selected_bin" value="{{ alt.bin_code }}">
+        <button type="submit" class="button">{{ alt.bin_code }} ({{ alt.score_label }})</button>
+      </form>
+      {% endfor %}
+      <form method="post" action="{{ decide_action }}" data-submit-form>
+        <input type="hidden" name="routing_request_id" value="{{ card.routing_request_id }}">
+        <input type="hidden" name="action_id" value="{{ card.routing_request_id }}-notitem">
+        <input type="hidden" name="decision" value="not_an_item">
+        <button type="submit">Not an item</button>
+      </form>
+      <form method="post" action="{{ decide_action }}" data-submit-form>
+        <input type="hidden" name="routing_request_id" value="{{ card.routing_request_id }}">
+        <input type="hidden" name="action_id" value="{{ card.routing_request_id }}-reject">
+        <input type="hidden" name="decision" value="reject">
+        <button type="submit">Leave pending</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if decided %}
+<section class="panel panel-padded stack bin-photo-card" aria-labelledby="decided-heading">
+  <h2 id="decided-heading">Decided</h2>
+  <ul>
+    {% for row in decided %}
+    <li>{{ row.text }} — {{ row.decision_kind|replace('_', ' ') }}{% if row.selected_bin_code %} → <code>{{ row.selected_bin_code }}</code>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if not deck and not pending %}
+<section class="panel panel-padded stack bin-photo-card">
+  <h2>Deck cleared</h2>
+  <p>Every card in this run is decided. Time to walk the wave.</p>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block body_extra %}
+{{ super() }}
+{% if notice %}<script>document.querySelector('[data-stash-notice]')?.focus();</script>{% endif %}
+{% endblock %}

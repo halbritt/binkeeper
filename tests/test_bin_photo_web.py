@@ -20,6 +20,7 @@ from binkeeper import bin_photo_web
 from binkeeper.bin_inventory import bin_where
 from binkeeper.bin_label import PrintPlan
 from binkeeper.bin_photo_web import manage as bin_manage_web
+from binkeeper.bin_photo_web import stash as bin_stash_web
 from binkeeper.bin_register import RegisterResult
 from binkeeper.bin_vision import BinLabelProposal, DetectedItem
 from binkeeper.blob_vault import InMemoryBlobStore
@@ -1520,3 +1521,148 @@ def test_retrieval_outcome_round_trips_to_the_trip_ledger(
         "WHERE bin_code = 'AGR-014' AND event_kind = 'not_found'"
     ).fetchone()
     assert row == ("not_found", "alameda-garage", "manage-web")
+
+
+def _deck_view() -> dict[str, object]:
+    return {
+        "stash_run_id": "run-1",
+        "site": "alameda-garage",
+        "cards": [
+            {
+                "routing_request_id": "req-deck",
+                "text": "usb cable",
+                "disposition": "deck",
+                "recommended_bin_code": "AGR-001",
+                "recommended_score_label": "72%",
+                "alternatives": [{"bin_code": "AGR-002", "score_label": "55%"}],
+                "abstain_flags": [],
+            },
+            {
+                "routing_request_id": "req-pending",
+                "text": "mystery gadget",
+                "disposition": "pending",
+                "recommended_bin_code": None,
+                "recommended_score_label": "—",
+                "alternatives": [{"bin_code": "AGR-003", "score_label": "41%"}],
+                "abstain_flags": ["top_score_below_floor"],
+            },
+        ],
+        "decided": [
+            {"text": "zip ties", "decision_kind": "accept", "selected_bin_code": "AGR-002"}
+        ],
+    }
+
+
+def test_stash_deck_deals_cards_and_pending_pile() -> None:
+    app = bin_photo_web.create_app(
+        host="127.0.0.1",
+        port=8765,
+        stash_deck_loader=lambda **_: _deck_view(),
+    )
+    response = TestClient(app).get("/stash/run-1")
+
+    assert response.status_code == 200
+    body = response.text
+    assert "usb cable" in body
+    assert "Put it in AGR-001" in body
+    assert "Instead: AGR-002 (55%)" in body
+    assert "Not an item" in body
+    assert "None of these" in body
+    assert "mystery gadget" in body
+    assert "top_score_below_floor" in body
+    assert "Put it in AGR-003" not in body  # pending cards never offer accept
+    assert "zip ties — accept" in body.replace("\n", " ") or "accept" in body
+    assert "1 card to deal" in body
+
+
+def test_stash_decide_taps_map_one_to_one_onto_decision_kinds() -> None:
+    recorded: list[tuple[str, str, str | None]] = []
+
+    def record(decision: bin_stash_web.StashDecision, scope: object) -> None:
+        recorded.append(
+            (decision.decision_kind, decision.routing_request_id, decision.selected_bin_code)
+        )
+
+    app = bin_photo_web.create_app(
+        host="127.0.0.1",
+        port=8765,
+        stash_deck_loader=lambda **_: _deck_view(),
+        stash_decision_recorder=record,
+    )
+    common = {"routing_request_id": "req-deck", "action_id": "d-1"}
+    with TestClient(app) as client:
+        for decision, selected in (
+            ("accept", None),
+            ("override", "AGR-002"),
+            ("reject", None),
+            ("not_an_item", None),
+        ):
+            data = {**common, "decision": decision}
+            if selected:
+                data["selected_bin"] = selected
+            response = client.post(
+                "/stash/run-1/decide",
+                data=data,
+                headers=_LOOPBACK_ORIGIN,
+                follow_redirects=False,
+            )
+            assert response.status_code == 303
+            assert f"notice=decided-{decision}" in response.headers["location"]
+        bogus = client.post(
+            "/stash/run-1/decide",
+            data={**common, "decision": "split"},
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+
+    assert recorded == [
+        ("accept", "req-deck", None),
+        ("override", "req-deck", "AGR-002"),
+        ("reject", "req-deck", None),
+        ("not_an_item", "req-deck", None),
+    ]
+    assert "notice=decide-invalid" in bogus.headers["location"]
+
+
+def test_stash_run_round_trips_receipts_and_decisions(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import db
+
+    monkeypatch.setattr(db, "connect", lambda **_kwargs: nullcontext(conn))
+    with _client() as client:
+        created = client.post(
+            "/stash",
+            data={"site": "alameda-garage", "items": "usb cable\nzip ties", "action_id": "r-1"},
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+        assert created.status_code == 303
+        run_path = created.headers["location"]
+        deck = client.get(run_path)
+        assert deck.status_code == 200
+        assert "usb cable" in deck.text
+
+        request_id = conn.execute(
+            "SELECT id::text FROM bin_routing_requests WHERE input_text = 'usb cable'"
+        ).fetchone()[0]
+        decided = client.post(
+            f"{run_path}/decide",
+            data={
+                "routing_request_id": request_id,
+                "decision": "not_an_item",
+                "action_id": "d-db-1",
+            },
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+        assert decided.status_code == 303
+        after = client.get(run_path)
+
+    row = conn.execute(
+        "SELECT decision_kind FROM bin_placement_decisions WHERE routing_request_id = %s",
+        (request_id,),
+    ).fetchone()
+    assert row == ("not_an_item",)
+    assert "usb cable — not an item" in after.text.replace("</code>", "")
