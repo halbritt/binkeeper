@@ -23,6 +23,11 @@ DEFAULT_SITES_FILE = Path.home() / ".config/binkeeper/sites.json"
 # A bin code is a 2-4 letter site prefix, a hyphen, then digits (e.g. AGR-001).
 _BIN_CODE_RE: Final[re.Pattern[str]] = re.compile(r"\b([A-Z]{2,4}-\d{2,4})\b")
 
+# Sub-location anchors (BINK-30) reserve the LOC- prefix inside the same code
+# grammar: LOC-014 prints, scans, and normalizes exactly like a bin code, but
+# names a shelf/cabinet witness point, never a container.
+ANCHOR_CODE_PREFIX: Final[str] = "LOC"
+
 # The canonical site vocabulary (binkeeper.sites); used to seed a fresh
 # sites.json so the owner only ever fills coordinates, never slugs.
 _KNOWN_SITE_RADIUS_M: dict[str, float] = dict(SITE_RADII_M)
@@ -75,13 +80,33 @@ def extract_gps(image: bytes) -> GpsFix | None:
     return GpsFix(lat=lat, lon=lon, accuracy_m=_to_float(tags.get("GPSHPositioningError")))
 
 
-def decode_bin_code(image: bytes) -> str | None:
-    """Read a bin code from a QR in the photo (pyzbar), or None if unreadable.
+@dataclass(frozen=True)
+class DecodedCode:
+    """One decoded QR symbol: its normalized code and bounding rectangle."""
 
-    The label prints a QR encoding the bare bin code precisely so a machine can
-    read it -- this is the zero-typing path. Degrades to None (never raises) when
-    pyzbar/libzbar is absent or no QR is in frame; the caller then falls back to
-    vision OCR, then to an explicit field.
+    code: str
+    is_anchor: bool
+    left: int
+    top: int
+    width: int
+    height: int
+
+
+def is_anchor_code(text: object) -> bool:
+    """Return whether a code names a sub-location anchor (LOC- prefix)."""
+    code = normalize_bin_code(text)
+    return code is not None and code.startswith(f"{ANCHOR_CODE_PREFIX}-")
+
+
+def decode_all_codes(image: bytes) -> list[DecodedCode]:
+    """Read EVERY code visible in a photo, each with its bounding rect.
+
+    pyzbar already returns all symbols plus geometry; this keeps them. A photo
+    holding an anchor and two bin labels yields three entries whose rects later
+    weight co-location strength (an anchor prints physically larger, so
+    apparent size separates "on this shelf" from "in the same wide shot").
+    Degrades to an empty list (never raises) when pyzbar/libzbar is absent or
+    the image is unreadable.
     """
     try:
         import io
@@ -89,20 +114,47 @@ def decode_bin_code(image: bytes) -> str | None:
         from PIL import Image
         from pyzbar.pyzbar import decode as zbar_decode
     except Exception:  # pyzbar is a serve-extra; libzbar may be absent
-        return None
+        return []
     try:
         with Image.open(io.BytesIO(image)) as img:
             results = zbar_decode(img)
     except Exception:  # corrupt image / decode failure
-        return None
+        return []
+    decoded: list[DecodedCode] = []
     for result in results:
         try:
             payload = result.data.decode("utf-8", "ignore")
         except Exception:
             continue
         code = normalize_bin_code(payload)
-        if code:
-            return code
+        if not code:
+            continue
+        rect = getattr(result, "rect", None)
+        decoded.append(
+            DecodedCode(
+                code=code,
+                is_anchor=is_anchor_code(code),
+                left=int(getattr(rect, "left", 0)),
+                top=int(getattr(rect, "top", 0)),
+                width=int(getattr(rect, "width", 0)),
+                height=int(getattr(rect, "height", 0)),
+            )
+        )
+    return decoded
+
+
+def decode_bin_code(image: bytes) -> str | None:
+    """Read the first BIN code from a QR in the photo, or None if unreadable.
+
+    The label prints a QR encoding the bare bin code precisely so a machine can
+    read it -- this is the zero-typing path. Anchor codes (LOC-) are skipped:
+    registration and management must never mistake a shelf witness point for a
+    container. Degrades to None (never raises); the caller then falls back to
+    vision OCR, then to an explicit field.
+    """
+    for decoded in decode_all_codes(image):
+        if not decoded.is_anchor:
+            return decoded.code
     return None
 
 

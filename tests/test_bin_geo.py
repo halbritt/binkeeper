@@ -96,3 +96,60 @@ def test_upsert_site_anchor_writes_owner_only_permissions(tmp_path) -> None:
     sites_file = tmp_path / "sites.json"
     upsert_site_anchor("cargo-trailer", 37.7, -122.2, path=sites_file)
     assert (sites_file.stat().st_mode & 0o077) == 0  # precise location: 0600, no group/other
+
+
+def _composite(*payloads: str) -> bytes:
+    """One image holding several QR codes side by side."""
+    from io import BytesIO
+
+    import qrcode
+    from PIL import Image
+
+    tiles = []
+    for payload in payloads:
+        buf = BytesIO()
+        qrcode.make(payload).save(buf, format="PNG")
+        buf.seek(0)
+        tiles.append(Image.open(buf).convert("RGB"))
+    width = sum(tile.width for tile in tiles)
+    height = max(tile.height for tile in tiles)
+    sheet = Image.new("RGB", (width, height), "white")
+    x = 0
+    for tile in tiles:
+        sheet.paste(tile, (x, 0))
+        x += tile.width
+    out = BytesIO()
+    sheet.save(out, format="PNG")
+    return out.getvalue()
+
+
+def test_decode_all_codes_returns_every_symbol_with_rects() -> None:
+    from binkeeper.bin_geo import decode_all_codes
+
+    image = _composite("LOC-014", "AGR-001", "AGR-002")
+    decoded = decode_all_codes(image)
+
+    assert sorted(entry.code for entry in decoded) == ["AGR-001", "AGR-002", "LOC-014"]
+    by_code = {entry.code: entry for entry in decoded}
+    assert by_code["LOC-014"].is_anchor is True
+    assert by_code["AGR-001"].is_anchor is False
+    assert all(entry.width > 0 and entry.height > 0 for entry in decoded)
+    # The tiles were pasted left-to-right, so the rects must be distinct.
+    lefts = {entry.left for entry in decoded}
+    assert len(lefts) == 3
+
+
+def test_decode_bin_code_skips_anchor_codes() -> None:
+    from binkeeper.bin_geo import decode_bin_code
+
+    assert decode_bin_code(_composite("LOC-014", "AGR-001")) == "AGR-001"
+    assert decode_bin_code(_composite("LOC-014")) is None
+
+
+def test_is_anchor_code_uses_the_reserved_prefix() -> None:
+    from binkeeper.bin_geo import is_anchor_code
+
+    assert is_anchor_code("LOC-014") is True
+    assert is_anchor_code("loc-014") is True
+    assert is_anchor_code("AGR-014") is False
+    assert is_anchor_code("shelf three") is False

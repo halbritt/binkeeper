@@ -10,6 +10,7 @@ from typing import Any
 
 import psycopg
 
+from binkeeper.bin_anchor import print_anchor_label
 from binkeeper.bin_inventory import arrive_all, bin_belief, bin_where, record_event, trip_status
 from binkeeper.bin_passport import bin_passport
 from binkeeper.bin_placement import PlacementDecisionAppend, record_placement_decision
@@ -101,6 +102,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--items-file", help="one item per line; '-' reads stdin")
     run.add_argument("--idempotency-key")
     _scope(run)
+    anchor = subparsers.add_parser(
+        "bin-anchor-label", help="print one LOC- sub-location anchor label (reviewed intent)"
+    )
+    anchor.add_argument("--code", required=True)
+    anchor.add_argument("--action-id", dest="action_id", required=True)
+    anchor.add_argument("--text", dest="label_text")
+    _scope(anchor)
     return parser
 
 
@@ -110,7 +118,12 @@ def _scope(parser: argparse.ArgumentParser) -> None:
 
 
 def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any]:
-    if args.command in {"trip-scan", "bin-placement-decision", "bin-stash-run"}:
+    if args.command in {
+        "trip-scan",
+        "bin-placement-decision",
+        "bin-stash-run",
+        "bin-anchor-label",
+    }:
         require_writer_authority()
     common = {"tenant_id": args.tenant, "corpus_id": args.corpus}
     if args.command == "trip-scan":
@@ -188,6 +201,14 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
             items=items,
             site=args.site,
             idempotency_key=args.idempotency_key,
+            **common,
+        ).to_json()
+    if args.command == "bin-anchor-label":
+        return print_anchor_label(
+            conn,
+            anchor_code=args.code,
+            action_id=args.action_id,
+            label_text=args.label_text,
             **common,
         ).to_json()
     raise ValueError(f"unsupported command {args.command!r}")

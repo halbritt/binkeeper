@@ -22,6 +22,12 @@ location; not_found shocks it; browse also accrues confusion (passport drift);
 none relocates the bin.
 _Avoid_: Not-found flag, retrieval log
 
+**Sub-location anchor**:
+A LOC- coded label mounted on a shelf, cabinet, or room edge. It exists in the
+system only once photographed co-located with a bin; containment is witnessed
+evidence, never a declared tree.
+_Avoid_: Room, shelf field, location taxonomy
+
 **Current location**:
 The latest location projected by folding a bin's ordered move events; it is not
 stored as editable truth.
