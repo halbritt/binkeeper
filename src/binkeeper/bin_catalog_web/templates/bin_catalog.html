@@ -33,7 +33,7 @@
   .bin-catalog-intro { max-width: 46rem; margin: 0; }
   .bin-catalog-stats {
     display: grid;
-    grid-template-columns: repeat(2, minmax(7rem, 1fr));
+    grid-template-columns: repeat(3, minmax(6.5rem, 1fr));
     gap: var(--space-2);
   }
   .bin-catalog-stat {
@@ -62,6 +62,16 @@
   .bin-catalog-card {
     align-content: start;
     border-top: 3px solid var(--color-accent);
+  }
+  /* Fog of war (BINK-21): decayed location confidence greys the tile out.
+     The fog chip carries the same signal as text, so color is never the
+     only channel; a confirm or fetch un-greys the tile on the next render. */
+  .bin-catalog-card[data-fog="aging"] { filter: grayscale(0.35); }
+  .bin-catalog-card[data-fog="stale"] { filter: grayscale(0.65); opacity: 0.85; }
+  .bin-catalog-card[data-fog="fog"] {
+    filter: grayscale(1);
+    opacity: 0.62;
+    border-top: 3px dashed var(--color-border-strong);
   }
   .bin-catalog-card-head {
     display: flex;
@@ -230,6 +240,10 @@
         <strong>{{ contents_count }}</strong>
         <span>bin{% if contents_count != 1 %}s{% endif %} with contents</span>
       </div>
+      <div class="bin-catalog-stat" data-map-visibility>
+        <strong>{{ visibility_pct }}%</strong>
+        <span>map visibility</span>
+      </div>
     </div>
     {% endif %}
   </header>
@@ -258,7 +272,7 @@
         <select class="bin-catalog-site" id="site-filter" name="site" data-catalog-site>
           <option value="">All sites</option>
           {% for site in sites %}
-          <option value="{{ site.key }}"{% if selected_site == site.key %} selected{% endif %}>{{ site.label }}</option>
+          <option value="{{ site.key }}"{% if selected_site == site.key %} selected{% endif %}>{{ site.label }} · {{ site.visibility_pct }}% visible</option>
           {% endfor %}
         </select>
       </div>
@@ -281,6 +295,7 @@
       {% for entry in entries %}
       <article class="panel panel-padded bin-catalog-card"
                data-bin-card data-site="{{ entry.current_site_key }}"
+               data-fog="{{ entry.fog_level }}"
                data-search-text="{{ entry.search_text }}">
         <header class="bin-catalog-card-head">
           <div>
@@ -332,9 +347,10 @@
         </div>
         {% endif %}
 
-        <div class="bin-catalog-attributes" aria-label="Capacity and volume">
+        <div class="bin-catalog-attributes" aria-label="Capacity, volume, and location freshness">
           <span class="chip">{{ entry.capacity_label }}</span>
           <span class="chip">{{ entry.volume_label }}</span>
+          <span class="chip" data-fog-chip>{{ entry.fog_label }} · {{ entry.location_confidence_label }}</span>
         </div>
 
         <details class="details-block">

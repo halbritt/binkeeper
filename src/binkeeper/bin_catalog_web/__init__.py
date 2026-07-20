@@ -164,7 +164,10 @@ class BinCatalogEntry(TypedDict):
     physical_constraints: tuple[str, ...]
     capacity_label: str
     volume_label: str
+    location_confidence: float
     location_confidence_label: str
+    fog_level: str
+    fog_label: str
     passport_confidence_label: str
     photo_state: PhotoState
     photo_url: str | None
@@ -177,6 +180,7 @@ class SiteOption(TypedDict):
 
     key: str
     label: str
+    visibility_pct: int
 
 
 def require_bin_catalog_request(
@@ -336,6 +340,7 @@ def create_app(
                     sites=(),
                     total_count=0,
                     contents_count=0,
+                    visibility_pct=0,
                     query=query,
                     selected_site=selected_site,
                     catalog_unavailable=True,
@@ -360,6 +365,7 @@ def create_app(
                 sites=sites,
                 total_count=len(all_entries),
                 contents_count=contents_count,
+                visibility_pct=_visibility_pct(all_entries, site_key=selected_site or None),
                 query=query,
                 selected_site=selected_site,
                 catalog_unavailable=False,
@@ -433,7 +439,10 @@ def _passport_view(
         "physical_constraints": _unique(passport.physical_constraints),
         "capacity_label": _capacity_label(passport.capacity_state),
         "volume_label": _volume_label(passport.volume_profile),
+        "location_confidence": passport.location_confidence,
         "location_confidence_label": _confidence_label(passport.location_confidence),
+        "fog_level": _fog_level(passport.location_confidence),
+        "fog_label": _FOG_LABELS[_fog_level(passport.location_confidence)],
         "passport_confidence_label": _confidence_label(passport.passport_confidence),
         "photo_state": photo_state,
         "photo_url": photo_url,
@@ -449,9 +458,42 @@ def _site_options(entries: Sequence[BinCatalogEntry]) -> tuple[SiteOption, ...]:
         if entry["current_site_key"]
     }
     return tuple(
-        {"key": key, "label": label}
+        {"key": key, "label": label, "visibility_pct": _visibility_pct(entries, site_key=key)}
         for key, label in sorted(labels.items(), key=lambda site_pair: site_pair[1].casefold())
     )
+
+
+# Fog-of-war buckets over decayed location confidence (BINK-21): staleness is
+# rendered as visible fog to reclaim, not silent rot. A confirm or fetch event
+# refreshes confidence, so the tile un-greys on the next render.
+_FOG_LABELS: Final[dict[str, str]] = {
+    "fresh": "Location fresh",
+    "aging": "Location fading",
+    "stale": "Location stale",
+    "fog": "Location in fog",
+}
+
+
+def _fog_level(confidence: float) -> str:
+    if confidence >= 0.8:
+        return "fresh"
+    if confidence >= 0.6:
+        return "aging"
+    if confidence >= 0.4:
+        return "stale"
+    return "fog"
+
+
+def _visibility_pct(entries: Sequence[BinCatalogEntry], *, site_key: str | None = None) -> int:
+    """Mean location confidence (percent) over the entries, optionally one site."""
+    confidences = [
+        entry["location_confidence"]
+        for entry in entries
+        if site_key is None or entry["current_site_key"] == site_key
+    ]
+    if not confidences:
+        return 0
+    return round(100 * sum(confidences) / len(confidences))
 
 
 def _unique(text_values: Sequence[str]) -> tuple[str, ...]:

@@ -509,3 +509,53 @@ def test_catalog_exposes_no_write_route() -> None:
 def test_catalog_refuses_a_non_loopback_bind() -> None:
     with pytest.raises(ValueError, match="refuses non-loopback host"):
         create_app(host="0.0.0.0", passport_loader=lambda: ())
+
+
+def test_catalog_renders_fog_levels_and_the_visibility_meter() -> None:
+    fresh = _passport()  # location_confidence 0.96 -> fresh
+    foggy = replace(
+        _passport(),
+        bin_code="AGR-099",
+        current_site="alameda-garage",
+        location_confidence=0.3,
+    )
+    app = create_app(base_path="/bins", passport_loader=lambda: [fresh, foggy])
+
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+        response = client.get("/")
+
+    assert response.status_code == 200
+    assert 'data-fog="fresh"' in response.text
+    assert 'data-fog="fog"' in response.text
+    assert "Location fresh · 96%" in response.text
+    assert "Location in fog · 30%" in response.text
+    # Overall visibility = mean(0.96, 0.30) = 63%.
+    assert "63%" in response.text
+    assert "map visibility" in response.text
+    assert "% visible" in response.text
+
+
+def test_catalog_visibility_meter_scopes_to_the_selected_site() -> None:
+    fresh = _passport()  # oakland-fab-east, 0.96
+    foggy = replace(
+        _passport(),
+        bin_code="AGR-099",
+        current_site="alameda-garage",
+        location_confidence=0.3,
+    )
+    app = create_app(base_path="/bins", passport_loader=lambda: [fresh, foggy])
+
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+        response = client.get("/", params={"site": "alameda-garage"})
+
+    assert response.status_code == 200
+    assert ">30%</strong>" in response.text  # the garage's visibility, not the mean
+
+
+def test_catalog_fresh_confidence_renders_without_fog() -> None:
+    app = create_app(base_path="/bins", passport_loader=lambda: [_passport()])
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+        response = client.get("/")
+    assert 'data-fog="fresh"' in response.text
+    assert "Location in fog" not in response.text
+    assert "Location stale" not in response.text
