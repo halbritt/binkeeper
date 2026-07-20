@@ -29,6 +29,7 @@ from binkeeper.bin_photo_web.manage import (
     install_manage_routes,
     load_manage_view,
 )
+from binkeeper.sites import SITE_PREFIXES
 from binkeeper.web.chrome import build_surface_chrome, mount_shared_static, page_response
 from binkeeper.web.origin import install_origin_refusal_handler, require_origin
 from binkeeper.web.paths import normalize_base_path, surface_path
@@ -37,16 +38,8 @@ _TEMPLATE_DIR: Final[Path] = Path(__file__).parent / "templates"
 _LOOPBACK_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "localhost", "::1", "testserver"})
 BIN_PHOTO_WEB_ENABLED_ENV: Final[str] = "BINKEEPER_BIN_PHOTO_WEB_ENABLED"
 
-# D170 canonical sites and their bin-code prefixes.
-_SITE_PREFIXES: Final[dict[str, str]] = {
-    "alameda-garage": "AGR",
-    "alameda-storage": "AST",
-    "alameda-home": "AHM",
-    "cargo-trailer": "TRL",
-    "oakland-fab-east": "OFE",
-    "oakland-wood-west": "OWW",
-    "oakland-oldhome": "OOH",
-}
+# D170 canonical sites and their bin-code prefixes (single source: binkeeper.sites).
+_SITE_PREFIXES: Final[dict[str, str]] = SITE_PREFIXES
 
 
 def create_app(

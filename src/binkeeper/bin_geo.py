@@ -16,22 +16,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from binkeeper.sites import DEFAULT_SITE_RADIUS_M, SITE_RADII_M
+
 DEFAULT_SITES_FILE = Path.home() / ".config/binkeeper/sites.json"
 
 # A bin code is a 2-4 letter site prefix, a hyphen, then digits (e.g. AGR-001).
 _BIN_CODE_RE: Final[re.Pattern[str]] = re.compile(r"\b([A-Z]{2,4}-\d{2,4})\b")
 
-# The seven canonical sites (docs/reference/binkeeper-site-vocabulary.md); used to
-# seed a fresh sites.json so the owner only ever fills coordinates, never slugs.
-_KNOWN_SITE_RADIUS_M: dict[str, float] = {
-    "alameda-garage": 120,
-    "alameda-storage": 120,
-    "alameda-home": 120,
-    "cargo-trailer": 60,
-    "oakland-fab-east": 150,
-    "oakland-wood-west": 150,
-    "oakland-oldhome": 150,
-}
+# The canonical site vocabulary (binkeeper.sites); used to seed a fresh
+# sites.json so the owner only ever fills coordinates, never slugs.
+_KNOWN_SITE_RADIUS_M: dict[str, float] = dict(SITE_RADII_M)
 
 
 class BinGeoError(Exception):
@@ -143,7 +137,7 @@ def upsert_site_anchor(
     data = _load_raw(sites_path)
     entry = data.get(slug)
     if not isinstance(entry, dict):
-        default_radius = radius_m or _KNOWN_SITE_RADIUS_M.get(slug, 150)
+        default_radius = radius_m or _KNOWN_SITE_RADIUS_M.get(slug, DEFAULT_SITE_RADIUS_M)
         entry = {"lat": None, "lon": None, "radius_m": default_radius}
     already_set = entry.get("lat") is not None and entry.get("lon") is not None
     if already_set and not overwrite:
@@ -152,7 +146,7 @@ def upsert_site_anchor(
     entry["lon"] = round(float(lon), 6)
     if radius_m is not None:
         entry["radius_m"] = radius_m
-    entry.setdefault("radius_m", _KNOWN_SITE_RADIUS_M.get(slug, 150))
+    entry.setdefault("radius_m", _KNOWN_SITE_RADIUS_M.get(slug, DEFAULT_SITE_RADIUS_M))
     data[slug] = entry
     _write_raw(sites_path, data)
     return True
