@@ -16,6 +16,7 @@ EVIDENCE_TABLES = (
     "bin_presence_events",
     "bin_resting_order_events",
     "bin_routing_requests",
+    "stash_runs",
     "bin_placement_decisions",
     "bin_item_liveness",
     "evidence_blobs",

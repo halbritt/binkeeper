@@ -62,6 +62,7 @@ class TextRoutingRequest:
     requested_at: datetime | None = None
     source_label: str = DEFAULT_PLACEMENT_SOURCE_LABEL
     idempotency_key: str | None = None
+    stash_run_id: str | None = None
     tenant_id: str = DEFAULT_BIN_TENANT_ID
     corpus_id: str = DEFAULT_BIN_CORPUS_ID
 
@@ -277,8 +278,8 @@ def _append_routing_request(
             INSERT INTO bin_routing_requests (
                 tenant_id, corpus_id, external_id, request_kind, input_text, site,
                 requested_at, source_label, router_version, item_card_json,
-                route_result_json, route_result_sha256, raw_payload
-            ) VALUES (%s, %s, %s, 'text', %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                route_result_json, route_result_sha256, raw_payload, stash_run_id
+            ) VALUES (%s, %s, %s, 'text', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (tenant_id, corpus_id, external_id) DO NOTHING
             RETURNING id::text, seq
             """,
@@ -295,6 +296,7 @@ def _append_routing_request(
                 Jsonb(dict(route_result)),
                 route_result_sha256,
                 Jsonb(raw_payload),
+                request.stash_run_id,
             ),
         ).fetchone()
         if inserted is not None:

@@ -109,6 +109,21 @@ def tool_schemas() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "binkeeper.bin_stash_run",
+            "description": "Record a stash run: append the header and per-item route receipts.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "items": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                    "site": {"type": "string"},
+                    "idempotency_key": {"type": ["string", "null"]},
+                    **scope,
+                },
+                "required": ["items", "site"],
+                "additionalProperties": False,
+            },
+        },
+        {
             "name": "binkeeper.bin_placement_decision",
             "description": "Append one owner placement decision over a route receipt.",
             "inputSchema": {
@@ -186,4 +201,8 @@ def call_tool(conn: psycopg.Connection, name: str, arguments: dict[str, Any]) ->
                 setattr(namespace, key, None)
     elif command == "bin-stash-route" and not hasattr(namespace, "items_file"):
         namespace.items_file = None
+    elif command == "bin-stash-run":
+        for key in ("items_file", "idempotency_key"):
+            if not hasattr(namespace, key):
+                setattr(namespace, key, None)
     return execute(namespace, conn)

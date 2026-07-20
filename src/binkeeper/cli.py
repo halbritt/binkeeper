@@ -14,7 +14,7 @@ from binkeeper.bin_inventory import arrive_all, bin_belief, bin_where, record_ev
 from binkeeper.bin_passport import bin_passport
 from binkeeper.bin_placement import PlacementDecisionAppend, record_placement_decision
 from binkeeper.bin_route import bin_route
-from binkeeper.bin_stash import stash_route_batch
+from binkeeper.bin_stash import record_stash_run, stash_route_batch
 from binkeeper.bin_sweep import BIN_SWEEP_DEFAULT_LIMIT, bin_sweep
 from binkeeper.database import connect
 from binkeeper.search import search_inventory
@@ -93,6 +93,14 @@ def build_parser() -> argparse.ArgumentParser:
     stash.add_argument("--item", action="append", dest="items", default=[])
     stash.add_argument("--items-file", help="one item per line; '-' reads stdin")
     _scope(stash)
+    run = subparsers.add_parser(
+        "bin-stash-run", help="record a stash run: batch receipts over one routing pass"
+    )
+    run.add_argument("--site", required=True)
+    run.add_argument("--item", action="append", dest="items", default=[])
+    run.add_argument("--items-file", help="one item per line; '-' reads stdin")
+    run.add_argument("--idempotency-key")
+    _scope(run)
     return parser
 
 
@@ -102,7 +110,7 @@ def _scope(parser: argparse.ArgumentParser) -> None:
 
 
 def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any]:
-    if args.command in {"trip-scan", "bin-placement-decision"}:
+    if args.command in {"trip-scan", "bin-placement-decision", "bin-stash-run"}:
         require_writer_authority()
     common = {"tenant_id": args.tenant, "corpus_id": args.corpus}
     if args.command == "trip-scan":
@@ -167,16 +175,32 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
             **common,
         ).to_json()
     if args.command == "bin-stash-route":
-        items = list(args.items)
-        if args.items_file == "-":
-            items.extend(line.strip() for line in sys.stdin if line.strip())
-        elif args.items_file:
-            with open(args.items_file, encoding="utf-8") as stream:
-                items.extend(line.strip() for line in stream if line.strip())
+        items = _collect_items(args)
         if not items:
             raise ValueError("bin-stash-route needs --item or --items-file")
         return stash_route_batch(conn, items=items, site=args.site, **common).to_json()
+    if args.command == "bin-stash-run":
+        items = _collect_items(args)
+        if not items:
+            raise ValueError("bin-stash-run needs --item or --items-file")
+        return record_stash_run(
+            conn,
+            items=items,
+            site=args.site,
+            idempotency_key=args.idempotency_key,
+            **common,
+        ).to_json()
     raise ValueError(f"unsupported command {args.command!r}")
+
+
+def _collect_items(args: argparse.Namespace) -> list[str]:
+    items = list(args.items)
+    if args.items_file == "-":
+        items.extend(line.strip() for line in sys.stdin if line.strip())
+    elif args.items_file:
+        with open(args.items_file, encoding="utf-8") as stream:
+            items.extend(line.strip() for line in stream if line.strip())
+    return items
 
 
 def _datetime(value: str | None) -> datetime | None:

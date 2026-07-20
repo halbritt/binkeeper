@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import psycopg
+import pytest
+
 from binkeeper.bin_passport import BinPassport
 from binkeeper.bin_route import route_text_item
-from binkeeper.bin_stash import route_batch
+from binkeeper.bin_stash import StashRunError, record_stash_run, route_batch
 
 
 def _passport(
@@ -99,3 +102,56 @@ def test_batch_json_shape_is_stable() -> None:
     assert payload["pending_count"] == 0
     assert payload["wave_plan"][0]["bin_code"] == "AGR-010"
     assert payload["items"][0]["disposition"] == "deck"
+
+
+# --- IO: recorded stash runs (BINK-25) ---------------------------------------
+
+
+def test_record_stash_run_fans_out_linked_receipts(conn: psycopg.Connection) -> None:
+    record = record_stash_run(
+        conn,
+        items=["usb cable", "zip ties", "zip ties"],
+        site="alameda-garage",
+        idempotency_key="run-1",
+    )
+    assert record.already_existed is False
+    assert len(record.receipts) == 3  # duplicate texts still get their own receipts
+    linked = conn.execute(
+        "SELECT count(*) FROM bin_routing_requests WHERE stash_run_id = %s",
+        (record.stash_run_id,),
+    ).fetchone()
+    assert linked == (3,)
+    payload = record.to_json()
+    assert payload["item_count"] == 3
+    assert payload["deck_count"] + payload["pending_count"] == 3
+
+
+def test_record_stash_run_is_idempotent_at_run_and_receipt_level(
+    conn: psycopg.Connection,
+) -> None:
+    first = record_stash_run(
+        conn, items=["usb cable"], site="alameda-garage", idempotency_key="run-2"
+    )
+    replay = record_stash_run(
+        conn, items=["usb cable"], site="alameda-garage", idempotency_key="run-2"
+    )
+    assert replay.already_existed is True
+    assert replay.stash_run_id == first.stash_run_id
+    assert [r["external_id"] for r in replay.receipts] == [r["external_id"] for r in first.receipts]
+    counts = conn.execute(
+        "SELECT (SELECT count(*) FROM stash_runs), (SELECT count(*) FROM bin_routing_requests)"
+    ).fetchone()
+    assert counts == (1, 1)
+
+
+def test_stash_runs_are_append_only(conn: psycopg.Connection) -> None:
+    record = record_stash_run(
+        conn, items=["usb cable"], site="alameda-garage", idempotency_key="run-3"
+    )
+    with pytest.raises(psycopg.Error):
+        conn.execute("DELETE FROM stash_runs WHERE id = %s", (record.stash_run_id,))
+
+
+def test_record_stash_run_rejects_an_empty_batch(conn: psycopg.Connection) -> None:
+    with pytest.raises(StashRunError):
+        record_stash_run(conn, items=["  ", ""], site="alameda-garage")

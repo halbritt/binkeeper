@@ -36,6 +36,7 @@ def test_mcp_schema_snapshot_uses_only_binkeeper_names() -> None:
         "binkeeper.bin_search",
         "binkeeper.bin_route",
         "binkeeper.bin_stash_route",
+        "binkeeper.bin_stash_run",
         "binkeeper.bin_placement_decision",
         "binkeeper.bin_sweep",
     ]
