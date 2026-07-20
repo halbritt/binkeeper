@@ -145,6 +145,8 @@ def create_app(
         view = await run_in_threadpool(
             _analyze, images=images, notes=notes, site=site, requested_code=requested_code
         )
+        if images:
+            await run_in_threadpool(_harvest_colocations, images)
         return page_response(
             chrome.render(
                 "bin_photo_result.html",
@@ -292,6 +294,25 @@ def create_app(
     )
 
     return app
+
+
+def _harvest_colocations(images: list[bytes]) -> None:
+    """Advisory: append witnessed anchor co-location rows from dropped photos.
+
+    The drop flow must never fail because this lane did — any error degrades
+    to a logged warning and an empty harvest.
+    """
+    import logging
+
+    try:
+        from binkeeper.bin_colocation import harvest_photo_colocations
+        from binkeeper.db import connect
+
+        with connect() as conn:
+            for image in images:
+                harvest_photo_colocations(conn, image)
+    except Exception:  # advisory lane: swallow, log, move on
+        logging.getLogger(__name__).warning("BinKeeper co-location harvest failed")
 
 
 def _align_label() -> str:

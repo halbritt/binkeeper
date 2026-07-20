@@ -586,6 +586,18 @@ def add_bin_photo(action: PhotoAction, scope: BinActionScope) -> None:
         )
         if record.plaintext_sha256 != digest:
             raise BlobVaultError("stored photo digest differs from its capture link")
+    try:  # advisory: a manage photo may also witness anchor co-locations
+        from binkeeper.bin_colocation import harvest_photo_colocations
+
+        harvest_photo_colocations(
+            conn,
+            action.image,
+            evidence_ref=f"photo:{digest}",
+            tenant_id=scope.tenant_id,
+            corpus_id=scope.corpus_id,
+        )
+    except Exception:  # advisory lane: swallow, log, move on
+        _LOGGER.warning("BinKeeper co-location harvest failed")
 
 
 def place_bin(

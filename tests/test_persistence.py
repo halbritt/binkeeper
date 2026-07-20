@@ -24,6 +24,7 @@ EVIDENCE_TABLES = (
     "bin_item_liveness",
     "evidence_blobs",
     "stash_runs",
+    "colocation_observations",
 )
 
 
