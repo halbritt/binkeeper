@@ -205,6 +205,10 @@ ANCHOR_HALF_LIFE_DAYS = float(os.environ.get("BINKEEPER_ANCHOR_HALF_LIFE_DAYS", 
 ANCHOR_CONTAINMENT_FLOOR = float(os.environ.get("BINKEEPER_ANCHOR_FLOOR", "0.5"))
 # Confidence drop per sighting under a DIFFERENT anchor after the winner's last.
 ANCHOR_CONTRADICTION_SHOCK = float(os.environ.get("BINKEEPER_ANCHOR_CONTRADICTION_SHOCK", "0.4"))
+# An anchor unseen in ANY photo for this long demotes to unverified: it drops
+# out of where-answers and routing citations even where accumulated old mass
+# would still clear the confidence floor, and becomes a sweep target instead.
+ANCHOR_DEMOTION_DAYS = float(os.environ.get("BINKEEPER_ANCHOR_DEMOTION_DAYS", "180"))
 
 
 @dataclass(frozen=True)
@@ -247,6 +251,7 @@ def fold_containment(
     half_life_days: float = ANCHOR_HALF_LIFE_DAYS,
     floor: float = ANCHOR_CONTAINMENT_FLOOR,
     shock: float = ANCHOR_CONTRADICTION_SHOCK,
+    demoted: frozenset[str] = frozenset(),
 ) -> ContainmentBelief:
     """Fold witnessed sightings into the bin's current shelf. Pure.
 
@@ -283,7 +288,7 @@ def fold_containment(
         confidence=confidence,
         age_days=age_days,
         observation_count=len(sightings),
-        abstained=confidence < floor,
+        abstained=confidence < floor or winner in demoted,
     )
 
 
@@ -319,8 +324,10 @@ def bin_containment(
     corpus_id: str = DEFAULT_BIN_CORPUS_ID,
 ) -> ContainmentBelief:
     """Fold one bin's witnessed shelf from the ledger. Read-only."""
+    when = now or datetime.now(UTC)
     sightings = load_bin_sightings(conn, bin_code, tenant_id=tenant_id, corpus_id=corpus_id)
-    return fold_containment(bin_code, sightings, now=now or datetime.now(UTC))
+    demoted = demoted_anchors(conn, now=when, tenant_id=tenant_id, corpus_id=corpus_id)
+    return fold_containment(bin_code, sightings, now=when, demoted=demoted)
 
 
 def containment_by_bin(
@@ -348,7 +355,38 @@ def containment_by_bin(
             )
         )
     when = now or datetime.now(UTC)
+    demoted = demoted_anchors(conn, now=when, tenant_id=tenant_id, corpus_id=corpus_id)
     return {
-        member: fold_containment(member, sightings, now=when)
+        member: fold_containment(member, sightings, now=when, demoted=demoted)
         for member, sightings in grouped.items()
     }
+
+
+def demoted_anchors(
+    conn: psycopg.Connection,
+    *,
+    now: datetime | None = None,
+    horizon_days: float = ANCHOR_DEMOTION_DAYS,
+    tenant_id: str = DEFAULT_BIN_TENANT_ID,
+    corpus_id: str = DEFAULT_BIN_CORPUS_ID,
+) -> frozenset[str]:
+    """Anchors whose latest sighting anywhere is older than the horizon. Read-only.
+
+    Demotion is a fold outcome, not a mutation: no row changes, the anchor
+    simply stops being served and surfaces as a sweep target instead.
+    """
+    when = now or datetime.now(UTC)
+    rows = conn.execute(
+        """
+        SELECT anchor_code, max(observed_at)
+        FROM colocation_observations
+        WHERE tenant_id = %s AND corpus_id = %s
+        GROUP BY anchor_code
+        """,
+        (tenant_id, corpus_id),
+    ).fetchall()
+    return frozenset(
+        str(row[0])
+        for row in rows
+        if row[1] is not None and (when - row[1]).total_seconds() / 86400.0 > horizon_days
+    )

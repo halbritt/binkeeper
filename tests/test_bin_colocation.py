@@ -214,3 +214,50 @@ def test_bin_where_carries_the_shelf_tier(conn: psycopg.Connection) -> None:
         command="bin-where", bin_code="AGR-999", tenant="personal", corpus="personal"
     )
     assert execute(bare, conn)["anchor"] is None
+
+
+# --- anchor demotion (BINK-33) --------------------------------------------------
+
+
+def test_demotion_abstains_even_when_old_mass_would_clear_the_floor(
+    conn: psycopg.Connection,
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from binkeeper.bin_colocation import bin_containment
+
+    now = datetime(2026, 7, 20, tzinfo=UTC)
+    # Ten heavy sightings 200 days ago: decayed mass still caps confidence at 1.0,
+    # so without demotion this shelf claim would serve despite 200 unseen days.
+    for index in range(10):
+        record_colocation(
+            conn,
+            anchor_code="LOC-777",
+            member_code="AGR-001",
+            strength=1.0,
+            observed_at=now - timedelta(days=200, minutes=index),
+            idempotency_key=f"dem-{index}",
+        )
+    belief = bin_containment(conn, "AGR-001", now=now)
+    assert belief.anchor_code == "LOC-777"
+    assert belief.confidence >= 0.5  # the floor alone would have served this
+    assert belief.abstained is True  # demotion horizon (180d) folds it to unverified
+    assert belief.to_json() is None
+
+
+def test_fresh_anchor_is_not_demoted(conn: psycopg.Connection) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from binkeeper.bin_colocation import bin_containment, demoted_anchors
+
+    now = datetime(2026, 7, 20, tzinfo=UTC)
+    record_colocation(
+        conn,
+        anchor_code="LOC-001",
+        member_code="AGR-001",
+        strength=1.0,
+        observed_at=now - timedelta(days=5),
+        idempotency_key="fresh-1",
+    )
+    assert demoted_anchors(conn, now=now) == frozenset()
+    assert bin_containment(conn, "AGR-001", now=now).abstained is False

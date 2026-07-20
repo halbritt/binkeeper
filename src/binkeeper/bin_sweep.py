@@ -23,6 +23,7 @@ from typing import Final
 
 import psycopg
 
+from binkeeper.bin_colocation import containment_by_bin
 from binkeeper.bin_inventory import DEFAULT_BIN_CORPUS_ID, DEFAULT_BIN_TENANT_ID
 from binkeeper.bin_presence import current_presence
 from binkeeper.bin_priority import ReconfirmCandidate, reconfirm_priorities
@@ -67,6 +68,25 @@ class SweepItem:
 
 
 @dataclass(frozen=True)
+class AnchorSweepTask:
+    """One shelf-batched task: a single photo refreshes every member bin."""
+
+    anchor_code: str
+    bin_codes: tuple[str, ...]
+    summed_regret: float
+    action: str
+
+    def to_json(self) -> dict[str, object]:
+        """Return the stable JSON shape for one anchor task."""
+        return {
+            "anchor_code": self.anchor_code,
+            "bin_codes": list(self.bin_codes),
+            "summed_regret": round(self.summed_regret, 6),
+            "action": self.action,
+        }
+
+
+@dataclass(frozen=True)
 class SweepResult:
     """The ordered camera-pan answer, or a clean abstention with a reason."""
 
@@ -74,6 +94,7 @@ class SweepResult:
     items: tuple[SweepItem, ...]
     abstained: bool
     reason: str | None
+    anchor_tasks: tuple[AnchorSweepTask, ...] = ()
 
     def to_json(self) -> dict[str, object]:
         """Return the stable JSON shape for a sweep result."""
@@ -82,6 +103,7 @@ class SweepResult:
             "abstained": self.abstained,
             "reason": self.reason,
             "items": [item.to_json() for item in self.items],
+            "anchor_tasks": [task.to_json() for task in self.anchor_tasks],
         }
 
 
@@ -125,7 +147,11 @@ def bin_sweep(
         )
         for candidate in ranked
     )
-    return SweepResult(resolved_site, items, False, None)
+    site_candidates = [candidate for candidate in candidates if candidate.site == resolved_site]
+    anchor_tasks = _anchor_tasks(
+        conn, site_candidates, now=when, tenant_id=tenant_id, corpus_id=corpus_id
+    )
+    return SweepResult(resolved_site, items, False, None, anchor_tasks)
 
 
 def _rank_at_site(
@@ -147,3 +173,42 @@ def _confirm_action(candidate: ReconfirmCandidate, site: str) -> str:
             f"({candidate.confusion} fruitless openings) — open it and re-scan its contents."
         )
     return f"Look at {candidate.bin_code} at {site} and confirm it is still here."
+
+
+def _anchor_tasks(
+    conn: psycopg.Connection,
+    candidates: Sequence[ReconfirmCandidate],
+    *,
+    now: datetime,
+    tenant_id: str,
+    corpus_id: str,
+) -> tuple[AnchorSweepTask, ...]:
+    """Batch the site's candidates by their witnessed shelf, regret-summed.
+
+    One shelf photo refreshes every bin last witnessed there, so a task's
+    weight is the SUM of its members' expected regret — the amortization that
+    makes printing anchors worth it. Demoted (long-unseen) anchors never fold
+    to a served belief, so they cannot form a task; their bins fall back to
+    per-bin items like any unanchored bin.
+    """
+    witnessed = containment_by_bin(conn, now=now, tenant_id=tenant_id, corpus_id=corpus_id)
+    groups: dict[str, list[ReconfirmCandidate]] = {}
+    for candidate in candidates:
+        belief = witnessed.get(candidate.bin_code)
+        if belief is None or belief.abstained or belief.anchor_code is None:
+            continue
+        groups.setdefault(belief.anchor_code, []).append(candidate)
+    tasks = [
+        AnchorSweepTask(
+            anchor_code=anchor,
+            bin_codes=tuple(sorted(candidate.bin_code for candidate in members)),
+            summed_regret=sum(candidate.expected_regret for candidate in members),
+            action=(
+                f"Photograph {anchor} once — it refreshes "
+                f"{', '.join(sorted(candidate.bin_code for candidate in members))}."
+            ),
+        )
+        for anchor, members in groups.items()
+        if len(members) >= 2
+    ]
+    return tuple(sorted(tasks, key=lambda task: (-task.summed_regret, task.anchor_code)))

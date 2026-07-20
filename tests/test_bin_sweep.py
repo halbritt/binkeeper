@@ -119,3 +119,53 @@ def test_sweep_prompts_a_rescan_for_a_confused_bin(conn: psycopg.Connection) -> 
     assert "re-scan its contents" in by_code["SWP-CONF"].action
     assert by_code["SWP-CALM"].rescan is False
     assert "confirm it is still here" in by_code["SWP-CALM"].action
+
+
+def test_sweep_batches_anchored_bins_into_one_shelf_task(conn: psycopg.Connection) -> None:
+    from binkeeper.bin_colocation import record_colocation
+
+    _place(conn, "SWP-A1", "alameda-garage", NOW - timedelta(days=60))
+    _place(conn, "SWP-A2", "alameda-garage", NOW - timedelta(days=50))
+    _place(conn, "SWP-SOLO", "alameda-garage", NOW - timedelta(days=40))
+    for code in ("SWP-A1", "SWP-A2"):
+        record_colocation(
+            conn,
+            anchor_code="LOC-003",
+            member_code=code,
+            strength=1.0,
+            observed_at=NOW - timedelta(days=3),
+            idempotency_key=f"sweep-coloc-{code}",
+        )
+    _arrive(conn, "alameda-garage", NOW)
+
+    result = bin_sweep(conn, now=NOW, limit=8)
+
+    assert len(result.anchor_tasks) == 1
+    task = result.anchor_tasks[0]
+    assert task.anchor_code == "LOC-003"
+    assert task.bin_codes == ("SWP-A1", "SWP-A2")
+    assert "Photograph LOC-003 once" in task.action
+    assert task.summed_regret > 0
+    # The solo bin stays a per-bin item, never an anchor task.
+    assert all("SWP-SOLO" not in t.bin_codes for t in result.anchor_tasks)
+
+
+def test_sweep_ignores_demoted_anchors(conn: psycopg.Connection) -> None:
+    from binkeeper.bin_colocation import record_colocation
+
+    _place(conn, "SWP-D1", "alameda-garage", NOW - timedelta(days=60))
+    _place(conn, "SWP-D2", "alameda-garage", NOW - timedelta(days=60))
+    for code in ("SWP-D1", "SWP-D2"):
+        record_colocation(
+            conn,
+            anchor_code="LOC-009",
+            member_code=code,
+            strength=1.0,
+            observed_at=NOW - timedelta(days=400),
+            idempotency_key=f"sweep-dem-{code}",
+        )
+    _arrive(conn, "alameda-garage", NOW)
+
+    result = bin_sweep(conn, now=NOW, limit=8)
+
+    assert result.anchor_tasks == ()
