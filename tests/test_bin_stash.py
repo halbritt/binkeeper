@@ -239,3 +239,76 @@ def test_completing_an_unknown_stop_raises(conn: psycopg.Connection) -> None:
     )
     with pytest.raises(StashRunError):
         complete_wave_stop(conn, stash_run_id=run.stash_run_id, bin_code="AGR-999")
+
+
+# --- quorum-born bins (BINK-28) -----------------------------------------------
+
+
+def test_cluster_orphans_requires_mutual_similarity() -> None:
+    from binkeeper.bin_stash import cluster_orphans
+
+    orphans = [
+        ("r1", "black zip ties bag"),
+        ("r2", "zip ties 200mm"),
+        ("r3", "velcro cable ties"),
+        ("r4", "nylon zip ties"),
+        ("r5", "kitchen spatula"),
+        ("r6", "yoga mat"),
+    ]
+    clusters = cluster_orphans(orphans, min_overlap=0.5, quorum=3)
+    assert len(clusters) == 1
+    cluster = clusters[0]
+    assert "r5" not in cluster.receipt_ids and "r6" not in cluster.receipt_ids
+    assert "tie" in cluster.shared_tokens or "ties" in " ".join(cluster.shared_tokens)
+    assert cluster.drafted_accepts == cluster.shared_tokens
+    assert len(cluster.receipt_ids) >= 3
+
+
+def test_cluster_orphans_below_quorum_proposes_nothing() -> None:
+    from binkeeper.bin_stash import cluster_orphans
+
+    clusters = cluster_orphans(
+        [("r1", "zip ties"), ("r2", "nylon zip ties")], min_overlap=0.5, quorum=4
+    )
+    assert clusters == []
+
+
+def test_vague_labels_do_not_chain_into_one_cluster() -> None:
+    from binkeeper.bin_stash import cluster_orphans
+
+    # "small black object" overlaps both, but the outer two share nothing:
+    # complete linkage must refuse the chain.
+    orphans = [
+        ("r1", "small black charger"),
+        ("r2", "small black object"),
+        ("r3", "small black spatula"),
+    ]
+    clusters = cluster_orphans(orphans, min_overlap=0.99, quorum=2)
+    assert all(len(c.receipt_ids) < 3 for c in clusters)
+
+
+def test_quorum_proposals_and_founding_round_trip(conn: psycopg.Connection) -> None:
+    from binkeeper.bin_stash import found_bin_from_cluster, quorum_proposals
+
+    record_stash_run(
+        conn,
+        items=["zip ties bag", "nylon zip ties", "zip ties 200mm", "black zip ties", "yoga mat"],
+        site="alameda-garage",
+        idempotency_key="quorum-run",
+    )
+    proposals = quorum_proposals(conn, site="alameda-garage")
+    assert len(proposals) == 1
+    proposal = proposals[0]
+    assert len(proposal.receipt_ids) == 4  # the yoga mat is no founder
+
+    written = found_bin_from_cluster(conn, receipt_ids=proposal.receipt_ids, bin_code="agr-050")
+    assert written == 4
+    rows = conn.execute(
+        "SELECT count(*) FROM bin_placement_decisions "
+        "WHERE decision_kind = 'create_new_bin' AND selected_bin_code = 'AGR-050'"
+    ).fetchone()
+    assert rows == (4,)
+    # Founding consumed the orphans: the proposal is gone.
+    assert quorum_proposals(conn, site="alameda-garage") == []
+    # Replay writes nothing new.
+    assert found_bin_from_cluster(conn, receipt_ids=proposal.receipt_ids, bin_code="AGR-050") == 0

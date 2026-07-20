@@ -32,6 +32,8 @@ from binkeeper.bin_photo_web.manage import (
     load_manage_view,
 )
 from binkeeper.bin_photo_web.stash import (
+    QuorumFounder,
+    QuorumLoader,
     StashDecisionRecorder,
     StashDeckLoader,
     StashRouteConfig,
@@ -73,6 +75,8 @@ def create_app(
     stash_decision_recorder: StashDecisionRecorder | None = None,
     wave_plan_loader: WavePlanLoader | None = None,
     wave_stop_completer: WaveStopCompleter | None = None,
+    quorum_loader: QuorumLoader | None = None,
+    quorum_founder: QuorumFounder | None = None,
 ) -> FastAPI:
     """Build the loopback-bound bin-photo-drop app."""
     if host.strip() not in _LOOPBACK_HOSTS:
@@ -282,6 +286,8 @@ def create_app(
             record_decision=stash_decision_recorder,
             load_wave=wave_plan_loader,
             complete_stop=wave_stop_completer,
+            load_quorum=quorum_loader,
+            found_bin=quorum_founder,
         ),
     )
 

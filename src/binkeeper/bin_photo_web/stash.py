@@ -93,6 +93,12 @@ class StashRunLister(Protocol):
     def __call__(self, *, tenant_id: str, corpus_id: str) -> list[StashRunSummary]: ...
 
 
+class QuorumLoader(Protocol):
+    """Loader seam for a site's quorum proposals (template-ready mappings)."""
+
+    def __call__(self, *, site: str, tenant_id: str, corpus_id: str) -> list[dict[str, object]]: ...
+
+
 class WavePlanLoader(Protocol):
     """Loader seam for one run's compiled wave plan (template-ready mapping)."""
 
@@ -125,6 +131,8 @@ class StashRunStart:
 StashDecisionRecorder = Callable[[StashDecision, BinActionScope], None]
 StashRunCreator = Callable[[StashRunStart, BinActionScope], str]
 WaveStopCompleter = Callable[[str, str, BinActionScope], None]
+QuorumFounder = Callable[[list[str], str, BinActionScope], int]
+CodeSuggester = Callable[[str], str | None]
 
 
 @dataclass(frozen=True)
@@ -142,6 +150,9 @@ class StashRouteConfig:
     record_decision: StashDecisionRecorder | None = None
     load_wave: WavePlanLoader | None = None
     complete_stop: WaveStopCompleter | None = None
+    load_quorum: QuorumLoader | None = None
+    found_bin: QuorumFounder | None = None
+    suggest_code: CodeSuggester | None = None
 
 
 def install_stash_routes(app: FastAPI, config: StashRouteConfig) -> None:
@@ -158,6 +169,17 @@ def install_stash_routes(app: FastAPI, config: StashRouteConfig) -> None:
         _origin: None = Depends(strict_origin),
     ) -> RedirectResponse:
         return await _create_response(request, config)
+
+    @app.get("/stash/quorum")
+    def stash_quorum(site: str = "", notice: str = "") -> object:
+        return _quorum_page(config, site, notice)
+
+    @app.post("/stash/quorum/found")
+    async def stash_quorum_found(
+        request: Request,
+        _origin: None = Depends(strict_origin),
+    ) -> RedirectResponse:
+        return await _quorum_found_response(request, config)
 
     @app.get("/stash/{stash_run_id}")
     def stash_deck(
@@ -350,6 +372,64 @@ async def _wave_complete_response(
         _LOGGER.warning("BinKeeper wave-stop completion failed")
         return _wave_redirect(config.base_path, stash_run_id, "stop-failed")
     return _wave_redirect(config.base_path, stash_run_id, "stop-done")
+
+
+def _quorum_page(config: StashRouteConfig, site: str, notice: str) -> object:
+    selected = site.strip() or (config.sites[0] if config.sites else "")
+    load_quorum = config.load_quorum or load_quorum_proposals
+    proposals: list[dict[str, object]] = []
+    if selected:
+        try:
+            proposals = load_quorum(
+                site=selected,
+                tenant_id=config.scope.tenant_id,
+                corpus_id=config.scope.corpus_id,
+            )
+        except (psycopg.Error, ServingRoleUnavailableError):
+            _LOGGER.warning("BinKeeper could not load quorum proposals")
+            raise HTTPException(status_code=503, detail="proposals are unavailable") from None
+    suggest = config.suggest_code or suggest_new_bin_code
+    try:
+        suggested = suggest(selected) if selected else None
+    except (psycopg.Error, ServingRoleUnavailableError):
+        suggested = None
+    return page_response(
+        config.chrome.render(
+            "bin_stash_quorum.html",
+            site=selected,
+            sites=list(config.sites),
+            proposals=proposals,
+            suggested_code=suggested or "",
+            found_action=surface_path(config.base_path, "/stash/quorum/found"),
+            quorum_url=surface_path(config.base_path, "/stash/quorum"),
+            stash_url=surface_path(config.base_path, "/stash"),
+            notice=_stash_notice(notice),
+            catalog_url="/bins/",
+            photo_url=surface_path(config.base_path, "/"),
+            register_url=surface_path(config.base_path, "/register"),
+            binkeeper_section="photo",
+            surface_label="Bin proposals",
+        )
+    )
+
+
+async def _quorum_found_response(request: Request, config: StashRouteConfig) -> RedirectResponse:
+    form = await request.form()
+    site = _form_text(form.get("site"))
+    bin_code = _form_text(form.get("bin_code")).strip().upper()
+    receipt_ids = [
+        part.strip() for part in _form_text(form.get("receipt_ids")).split(",") if part.strip()
+    ]
+    if not bin_code or not receipt_ids:
+        return _quorum_redirect(config.base_path, site, "found-invalid")
+    found = config.found_bin or found_bin_io
+    try:
+        await run_in_threadpool(found, receipt_ids, bin_code, config.scope)
+    except (StashRunError, PlacementLedgerError, psycopg.Error, RuntimeError):
+        _LOGGER.warning("BinKeeper quorum founding failed")
+        return _quorum_redirect(config.base_path, site, "found-failed")
+    register = surface_path(config.base_path, f"/register?code={quote(bin_code, safe='')}")
+    return RedirectResponse(register, status_code=303)
 
 
 # --- production IO ------------------------------------------------------------
@@ -548,6 +628,45 @@ def complete_wave_stop_io(stash_run_id: str, bin_code: str, scope: BinActionScop
         )
 
 
+def load_quorum_proposals(*, site: str, tenant_id: str, corpus_id: str) -> list[dict[str, object]]:
+    """Cluster founder-eligible orphans on the serving role. Read-only."""
+    from binkeeper.bin_stash import quorum_proposals
+    from binkeeper.db import connect
+
+    with connect(role="serving") as conn:
+        clusters = quorum_proposals(conn, site=site, tenant_id=tenant_id, corpus_id=corpus_id)
+    return [cluster.to_json() for cluster in clusters]
+
+
+def found_bin_io(receipt_ids: list[str], bin_code: str, scope: BinActionScope) -> int:
+    """Write the founding decisions on the owner connection."""
+    from binkeeper.bin_stash import found_bin_from_cluster
+    from binkeeper.db import connect
+
+    with connect() as conn:
+        return found_bin_from_cluster(
+            conn,
+            receipt_ids=receipt_ids,
+            bin_code=bin_code,
+            tenant_id=scope.tenant_id,
+            corpus_id=scope.corpus_id,
+        )
+
+
+def suggest_new_bin_code(site: str) -> str | None:
+    """Suggest the next free code for a site prefix (registration helper)."""
+    from binkeeper.bin_photo_web import _suggest_bin_code
+
+    return _suggest_bin_code(site)
+
+
+def _quorum_redirect(base_path: str, site: str, notice: str) -> RedirectResponse:
+    path = surface_path(base_path, "/stash/quorum")
+    return RedirectResponse(
+        f"{path}?site={quote(site, safe='')}&notice={quote(notice, safe='')}", status_code=303
+    )
+
+
 def _wave_redirect(base_path: str, stash_run_id: str, notice: str) -> RedirectResponse:
     path = surface_path(base_path, f"/stash/{quote(stash_run_id, safe='')}/wave")
     return RedirectResponse(f"{path}?notice={quote(notice, safe='')}", status_code=303)
@@ -580,6 +699,8 @@ def _stash_notice(key: str) -> dict[str, str] | None:
         "stop-invalid": ("error", "That stop is not on this wave."),
         "stop-failed": ("error", "The stop was not recorded. Try again."),
         "stop-done": ("ok", "Stop recorded — the items joined the bin's contents history."),
+        "found-invalid": ("error", "A bin code and the founding items are required."),
+        "found-failed": ("error", "The founding decisions were not recorded. Try again."),
     }
     found = notices.get(key)
     return {"kind": found[0], "message": found[1]} if found else None

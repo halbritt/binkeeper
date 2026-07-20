@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -581,3 +582,179 @@ def _existing_stash_run(
         already_existed=True,
         receipts=receipts,
     )
+
+
+# --- quorum-born bins (BINK-28) -----------------------------------------------
+
+# A cluster founds a bin only when this many mutually-similar orphans gather.
+BIN_QUORUM_SIZE = int(os.environ.get("BINKEEPER_BIN_QUORUM_SIZE", "4"))
+# Minimum pairwise token overlap (|a∩b| / min(|a|,|b|)) between EVERY pair in a
+# cluster. Mutual similarity, never router scores: the BINK-24 spike showed
+# vague labels share a near-constant structural score and would false-cluster.
+BIN_QUORUM_OVERLAP = float(os.environ.get("BINKEEPER_BIN_QUORUM_OVERLAP", "0.5"))
+# Only orphans the router could not match to ANY passport may found a bin;
+# a close-tie abstention belongs to the tie, not to a new bin.
+_FOUNDER_FLAGS = frozenset({"no_accepting_passport", "no_passports"})
+
+
+@dataclass(frozen=True)
+class OrphanCluster:
+    """One quorum of mutually-similar unroutable items, ready to found a bin."""
+
+    receipt_ids: tuple[str, ...]
+    texts: tuple[str, ...]
+    shared_tokens: tuple[str, ...]
+    drafted_theme: str
+    drafted_accepts: tuple[str, ...]
+
+    def to_json(self) -> dict[str, object]:
+        """Return the stable JSON shape for one proposal."""
+        return {
+            "receipt_ids": list(self.receipt_ids),
+            "texts": list(self.texts),
+            "shared_tokens": list(self.shared_tokens),
+            "drafted_theme": self.drafted_theme,
+            "drafted_accepts": list(self.drafted_accepts),
+        }
+
+
+def cluster_orphans(
+    orphans: Sequence[tuple[str, str]],
+    *,
+    min_overlap: float = BIN_QUORUM_OVERLAP,
+    quorum: int = BIN_QUORUM_SIZE,
+) -> list[OrphanCluster]:
+    """Group orphans into mutually-similar clusters of at least quorum size. Pure.
+
+    Complete-linkage on token overlap: an orphan joins a cluster only when it
+    clears ``min_overlap`` against EVERY existing member, so two unrelated
+    items can never chain into one cluster through a vague middle item. The
+    drafted passport derives from exactly the founding items: accepts are the
+    tokens shared by at least two members, the theme is the strongest shared
+    phrase.
+    """
+    from binkeeper.bin_route import _tokens_for
+
+    tokened = [
+        (receipt_id, text, _tokens_for(text)) for receipt_id, text in orphans if text.strip()
+    ]
+    clusters: list[list[tuple[str, str, set[str]]]] = []
+    for entry in tokened:
+        placed = False
+        for cluster in clusters:
+            if all(_mutual_overlap(entry[2], member[2]) >= min_overlap for member in cluster):
+                cluster.append(entry)
+                placed = True
+                break
+        if not placed:
+            clusters.append([entry])
+    proposals: list[OrphanCluster] = []
+    for cluster in clusters:
+        if len(cluster) < quorum:
+            continue
+        token_counts: dict[str, int] = {}
+        for _, _, tokens in cluster:
+            for token in tokens:
+                token_counts[token] = token_counts.get(token, 0) + 1
+        shared = tuple(sorted(token for token, count in token_counts.items() if count >= 2))
+        if not shared:
+            continue
+        proposals.append(
+            OrphanCluster(
+                receipt_ids=tuple(entry[0] for entry in cluster),
+                texts=tuple(entry[1] for entry in cluster),
+                shared_tokens=shared,
+                drafted_theme=" ".join(shared[:4]),
+                drafted_accepts=shared,
+            )
+        )
+    return proposals
+
+
+def _mutual_overlap(a: set[str], b: set[str]) -> float:
+    if not a or not b:
+        return 0.0
+    return len(a & b) / min(len(a), len(b))
+
+
+def load_orphans(
+    conn: psycopg.Connection,
+    *,
+    site: str,
+    tenant_id: str = DEFAULT_BIN_TENANT_ID,
+    corpus_id: str = DEFAULT_BIN_CORPUS_ID,
+) -> list[tuple[str, str]]:
+    """Load founder-eligible orphans at a site: abstained with no passport match,
+    and either undecided or explicitly rejected. Read-only."""
+    rows = conn.execute(
+        """
+        SELECT r.id::text, r.input_text, r.route_result_json
+        FROM bin_routing_requests r
+        LEFT JOIN LATERAL (
+            SELECT decision_kind FROM bin_placement_decisions d
+            WHERE d.tenant_id = r.tenant_id AND d.corpus_id = r.corpus_id
+              AND d.routing_request_id = r.id
+            ORDER BY d.seq DESC LIMIT 1
+        ) d ON TRUE
+        WHERE r.tenant_id = %s AND r.corpus_id = %s AND r.site = %s
+          AND r.route_result_json->>'recommended_bin_code' IS NULL
+          AND (d.decision_kind IS NULL OR d.decision_kind = 'reject')
+        ORDER BY r.seq
+        """,
+        (tenant_id, corpus_id, site),
+    ).fetchall()
+    orphans: list[tuple[str, str]] = []
+    for receipt_id, text, route_result in rows:
+        flags = route_result.get("abstain_flags") if isinstance(route_result, Mapping) else None
+        flag_set = {str(flag) for flag in flags} if isinstance(flags, list) else set()
+        if flag_set & _FOUNDER_FLAGS:
+            orphans.append((str(receipt_id), str(text)))
+    return orphans
+
+
+def quorum_proposals(
+    conn: psycopg.Connection,
+    *,
+    site: str,
+    tenant_id: str = DEFAULT_BIN_TENANT_ID,
+    corpus_id: str = DEFAULT_BIN_CORPUS_ID,
+) -> list[OrphanCluster]:
+    """Cluster a site's founder-eligible orphans into bin proposals. Read-only."""
+    return cluster_orphans(load_orphans(conn, site=site, tenant_id=tenant_id, corpus_id=corpus_id))
+
+
+def found_bin_from_cluster(
+    conn: psycopg.Connection,
+    *,
+    receipt_ids: Sequence[str],
+    bin_code: str,
+    tenant_id: str = DEFAULT_BIN_TENANT_ID,
+    corpus_id: str = DEFAULT_BIN_CORPUS_ID,
+) -> int:
+    """Write one create_new_bin decision per founding orphan. Owner-approved only.
+
+    The decisions are the bin's birth certificate: every founding item links to
+    the new code. Registration and label printing then proceed through the
+    normal reviewed flow. Idempotent per (bin, receipt).
+    """
+    from binkeeper.bin_placement import PlacementDecisionAppend, record_placement_decision
+
+    code = bin_code.strip().upper()
+    if not code:
+        raise StashRunError("a founding bin code is required")
+    written = 0
+    for receipt_id in receipt_ids:
+        result = record_placement_decision(
+            conn,
+            PlacementDecisionAppend(
+                routing_request_id=receipt_id,
+                decision_kind="create_new_bin",
+                selected_bin_code=code,
+                idempotency_key=f"quorum:{code}:{receipt_id}",
+                tenant_id=tenant_id,
+                corpus_id=corpus_id,
+            ),
+        )
+        if not result.already_existed:
+            written += 1
+    return written

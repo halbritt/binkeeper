@@ -1,0 +1,76 @@
+{% extends "bin_photo_base.html" %}
+
+{% block title %}Bin proposals · BinKeeper{% endblock %}
+
+{% block head_extra %}
+{{ super() }}
+<style>
+  .quorum-proposal { border-top: 3px solid var(--color-accent); }
+  .quorum-tokens { color: var(--color-fg-muted); font-size: var(--type-meta); margin: 0; }
+  .quorum-found-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: end; }
+</style>
+{% endblock %}
+
+{% block bin_photo_main %}
+<a href="{{ stash_url }}">← Stash runs</a>
+<header class="bin-photo-hero">
+  <div class="bin-photo-heading-row">
+    <div>
+      <span class="bin-photo-kicker">BinKeeper</span>
+      <h1>Quorum-born bin proposals</h1>
+    </div>
+    <span class="chip">{{ site|replace('-', ' ')|title }}</span>
+  </div>
+  <p class="bin-photo-intro">
+    A new bin is only proposed once enough mutually-similar unroutable items
+    gather. Its passport is drafted from exactly those items — the founding
+    evidence is the birth certificate. Nothing is created without your approval.
+  </p>
+</header>
+
+{% if notice %}
+<div class="banner banner-{{ notice.kind }}" tabindex="-1" role="alert" data-quorum-notice>{{ notice.message }}</div>
+{% endif %}
+
+<form method="get" action="{{ quorum_url }}" class="bin-photo-form">
+  <label for="quorum-site">Site
+    <select id="quorum-site" name="site" onchange="this.form.submit()">
+      {% for s in sites %}<option value="{{ s }}"{% if s == site %} selected{% endif %}>{{ s|replace('-', ' ')|title }}</option>{% endfor %}
+    </select>
+  </label>
+</form>
+
+{% for proposal in proposals %}
+<section class="panel panel-padded stack bin-photo-card quorum-proposal" data-quorum-proposal>
+  <h2>Proposed: {{ proposal.drafted_theme }}</h2>
+  <p class="quorum-tokens">Shared vocabulary: {{ proposal.shared_tokens|join(', ') }}</p>
+  <h3>Founding items ({{ proposal.texts|length }})</h3>
+  <ul>{% for text in proposal.texts %}<li>{{ text }}</li>{% endfor %}</ul>
+  <form method="post" action="{{ found_action }}" class="bin-photo-form" data-submit-form>
+    <input type="hidden" name="site" value="{{ site }}">
+    <input type="hidden" name="receipt_ids" value="{{ proposal.receipt_ids|join(',') }}">
+    <div class="quorum-found-row">
+      <label for="found-code-{{ loop.index }}">New bin code
+        <input id="found-code-{{ loop.index }}" name="bin_code" value="{{ suggested_code }}"
+               pattern="[A-Za-z]{2,4}-[0-9]{2,4}" required autocomplete="off">
+      </label>
+      <button type="submit" class="bin-photo-primary">Found this bin</button>
+    </div>
+    <span class="field-help">Approving writes one create_new_bin decision per founding item, then opens registration for the label.</span>
+  </form>
+</section>
+{% endfor %}
+
+{% if not proposals %}
+<section class="panel panel-padded stack bin-photo-card">
+  <h2>No quorum yet</h2>
+  <p>Not enough mutually-similar unroutable items have gathered at this site.
+     Keep sorting stashes; proposals appear on their own.</p>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block body_extra %}
+{{ super() }}
+{% if notice %}<script>document.querySelector('[data-quorum-notice]')?.focus();</script>{% endif %}
+{% endblock %}
