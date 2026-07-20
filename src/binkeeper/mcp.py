@@ -79,6 +79,77 @@ def tool_schemas() -> list[dict[str, Any]]:
                 "additionalProperties": False,
             },
         },
+        {
+            "name": "binkeeper.bin_route",
+            "description": "Advisory: route one typed item text over bin passports at a site.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "site": {"type": "string"},
+                    **scope,
+                },
+                "required": ["text", "site"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "binkeeper.bin_stash_route",
+            "description": "Advisory: route a batch of item texts and compile a wave plan.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "items": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                    "site": {"type": "string"},
+                    **scope,
+                },
+                "required": ["items", "site"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "binkeeper.bin_placement_decision",
+            "description": "Append one owner placement decision over a route receipt.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "request_id": {"type": "string"},
+                    "decision": {
+                        "type": "string",
+                        "enum": [
+                            "accept",
+                            "reject",
+                            "override",
+                            "split",
+                            "merge",
+                            "not_an_item",
+                            "create_new_bin",
+                        ],
+                    },
+                    "selected_bin": {"type": ["string", "null"]},
+                    "actor": {"type": "string", "default": "owner"},
+                    "reason": {"type": ["string", "null"]},
+                    "idempotency_key": {"type": ["string", "null"]},
+                    **scope,
+                },
+                "required": ["request_id", "decision"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "binkeeper.bin_sweep",
+            "description": "List the stalest bins to re-confirm, regret-ranked.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "site": {"type": ["string", "null"]},
+                    "limit": {"type": ["integer", "null"], "minimum": 1, "maximum": 100},
+                    **scope,
+                },
+                "required": [],
+                "additionalProperties": False,
+            },
+        },
     ]
 
 
@@ -102,4 +173,16 @@ def call_tool(conn: psycopg.Connection, name: str, arguments: dict[str, Any]) ->
         namespace.source_label = "mcp"
     elif command == "bin-search" and not hasattr(namespace, "limit"):
         namespace.limit = 20
+    elif command == "bin-placement-decision":
+        for key in ("selected_bin", "reason", "idempotency_key"):
+            if not hasattr(namespace, key):
+                setattr(namespace, key, None)
+        if not hasattr(namespace, "actor"):
+            namespace.actor = "owner"
+    elif command == "bin-sweep":
+        for key in ("site", "limit"):
+            if not hasattr(namespace, key):
+                setattr(namespace, key, None)
+    elif command == "bin-stash-route" and not hasattr(namespace, "items_file"):
+        namespace.items_file = None
     return execute(namespace, conn)

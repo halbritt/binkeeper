@@ -27,3 +27,11 @@ exact/lexical search and the offline liveness adapter are now standalone. The
 two old capture-helper nodes stay deferred because exposing their writer before the
 one-writer cutover would violate the extraction contract. This parity evidence
 does not authorize a writer, hardware, or route change.
+
+## Surface parity (BINK-35)
+
+Every CLI command now has an MCP counterpart: `bin-route`,
+`bin-placement-decision`, `bin-sweep`, and the BINK-24 `bin-stash-route`
+batch router joined the original five tools. Mutation paths (`trip_scan`,
+`bin_placement_decision`) share the same fail-closed writer gate as the CLI;
+the rest run read-only. The schema snapshot test pins the tool list.

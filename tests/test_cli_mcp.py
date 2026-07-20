@@ -34,6 +34,10 @@ def test_mcp_schema_snapshot_uses_only_binkeeper_names() -> None:
         "binkeeper.bin_belief",
         "binkeeper.bin_passport",
         "binkeeper.bin_search",
+        "binkeeper.bin_route",
+        "binkeeper.bin_stash_route",
+        "binkeeper.bin_placement_decision",
+        "binkeeper.bin_sweep",
     ]
     rendered = json.dumps(schemas, sort_keys=True)
     assert "engram" not in rendered.lower()
@@ -142,3 +146,29 @@ def test_compat_trip_arrive_without_bin_reconciles_every_loaded_bin(
     assert len(result["arrived"]) == 2
     assert result["trip"]["arrived"] == ["TST-A", "TST-B"]
     assert result["trip"]["unaccounted"] == []
+
+
+def test_mcp_route_sweep_and_stash_are_read_only_callable(conn: psycopg.Connection) -> None:
+    route = call_tool(conn, "binkeeper.bin_route", {"text": "usb cable", "site": "site-a"})
+    assert route["item_card"]["label"] == "usb cable"
+    sweep = call_tool(conn, "binkeeper.bin_sweep", {})
+    assert "items" in sweep
+    stash = call_tool(
+        conn, "binkeeper.bin_stash_route", {"items": ["usb cable", "zip ties"], "site": "site-a"}
+    )
+    assert stash["item_count"] == 2
+    assert stash["deck_count"] + stash["pending_count"] == 2
+
+
+def test_mcp_placement_decision_uses_the_frozen_writer_gate(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("BINKEEPER_WRITES_ENABLED", raising=False)
+    with pytest.raises(RuntimeError, match="writer is frozen"):
+        call_tool(
+            conn,
+            "binkeeper.bin_placement_decision",
+            {"request_id": "00000000-0000-0000-0000-000000000000", "decision": "reject"},
+        )
+    assert conn.execute("SELECT count(*) FROM bin_placement_decisions").fetchone() == (0,)
