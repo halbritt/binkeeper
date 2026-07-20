@@ -251,6 +251,7 @@ def _manage_page(config: ManageRouteConfig, bin_code: str, notice: str) -> objec
             catalog_url="/bins/",
             photo_url=surface_path(config.base_path, "/"),
             register_url=surface_path(config.base_path, "/register"),
+            stash_url=surface_path(config.base_path, "/stash"),
             binkeeper_section="catalog",
             surface_label="Manage bin",
         )
@@ -422,6 +423,7 @@ def _triage_page(config: ManageRouteConfig, bin_code: str, notice: str) -> objec
             catalog_url="/bins/",
             photo_url=surface_path(config.base_path, "/"),
             register_url=surface_path(config.base_path, "/register"),
+            stash_url=surface_path(config.base_path, "/stash"),
             binkeeper_section="catalog",
             surface_label="Where else?",
         )

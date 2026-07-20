@@ -1575,6 +1575,25 @@ def test_stash_deck_deals_cards_and_pending_pile() -> None:
     assert "1 card to deal" in body
 
 
+def test_stash_is_reachable_from_the_tab_bar_and_marks_itself_current() -> None:
+    client = TestClient(
+        bin_photo_web.create_app(
+            host="127.0.0.1",
+            port=8765,
+            stash_deck_loader=lambda **_: _deck_view(),
+        )
+    )
+
+    photo_page = client.get("/")
+    assert photo_page.status_code == 200
+    assert 'data-binkeeper-section="stash"' in photo_page.text
+    assert 'href="/stash"' in photo_page.text
+
+    deck_page = client.get("/stash/run-1")
+    assert deck_page.status_code == 200
+    assert 'data-binkeeper-section="stash" aria-current="page"' in deck_page.text
+
+
 def test_stash_decide_taps_map_one_to_one_onto_decision_kinds() -> None:
     recorded: list[tuple[str, str, str | None]] = []
 

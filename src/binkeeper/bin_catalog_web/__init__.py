@@ -291,6 +291,7 @@ def create_app(
         "catalog_url": path("/"),
         "photo_url": authoring_path("/"),
         "register_url": authoring_path("/register"),
+        "stash_url": authoring_path("/stash"),
         "binkeeper_section": "catalog",
         "authoring_enabled": authoring_enabled,
         "help_title": "Bin catalog help",

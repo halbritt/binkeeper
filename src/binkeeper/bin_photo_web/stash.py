@@ -230,7 +230,7 @@ def _start_page(config: StashRouteConfig, notice: str) -> object:
             catalog_url="/bins/",
             photo_url=surface_path(config.base_path, "/"),
             register_url=surface_path(config.base_path, "/register"),
-            binkeeper_section="photo",
+            binkeeper_section="stash",
             surface_label="Stash run",
         )
     )
@@ -293,7 +293,7 @@ def _deck_page(config: StashRouteConfig, stash_run_id: str, notice: str) -> obje
             catalog_url="/bins/",
             photo_url=surface_path(config.base_path, "/"),
             register_url=surface_path(config.base_path, "/register"),
-            binkeeper_section="photo",
+            binkeeper_section="stash",
             surface_label="Stash deck",
         )
     )
@@ -350,7 +350,7 @@ def _wave_page(config: StashRouteConfig, stash_run_id: str, notice: str) -> obje
             catalog_url="/bins/",
             photo_url=surface_path(config.base_path, "/"),
             register_url=surface_path(config.base_path, "/register"),
-            binkeeper_section="photo",
+            binkeeper_section="stash",
             surface_label="Wave plan",
         )
     )
@@ -407,7 +407,7 @@ def _quorum_page(config: StashRouteConfig, site: str, notice: str) -> object:
             catalog_url="/bins/",
             photo_url=surface_path(config.base_path, "/"),
             register_url=surface_path(config.base_path, "/register"),
-            binkeeper_section="photo",
+            binkeeper_section="stash",
             surface_label="Bin proposals",
         )
     )

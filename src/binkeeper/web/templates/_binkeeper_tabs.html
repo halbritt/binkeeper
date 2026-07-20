@@ -6,5 +6,7 @@
      href="{{ photo_url|default('/') }}" data-binkeeper-section="photo"{% if binkeeper_section == 'photo' %} aria-current="page"{% endif %}>Photograph &amp; label</a>
   <a class="surface-tab{% if binkeeper_section == 'register' %} is-active{% endif %}"
      href="{{ register_url|default('/register') }}" data-binkeeper-section="register"{% if binkeeper_section == 'register' %} aria-current="page"{% endif %}>Register</a>
+  <a class="surface-tab{% if binkeeper_section == 'stash' %} is-active{% endif %}"
+     href="{{ stash_url|default('/stash') }}" data-binkeeper-section="stash"{% if binkeeper_section == 'stash' %} aria-current="page"{% endif %}>Stash</a>
   {% endif %}
 </nav>
