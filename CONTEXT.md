@@ -15,9 +15,11 @@ part of a physical move.
 _Avoid_: Location update
 
 **Retrieval outcome**:
-Immutable evidence that the owner physically found (`fetch`) or failed to find
-(`not_found`) a bin at a site; it re-confirms or shocks location confidence and
-never relocates the bin.
+Immutable evidence of what happened when the owner went to a bin: found it and
+took something (`fetch`), opened it and took nothing (`browse`), or failed to
+find it at the claimed site (`not_found`). Fetch and browse re-confirm
+location; not_found shocks it; browse also accrues confusion (passport drift);
+none relocates the bin.
 _Avoid_: Not-found flag, retrieval log
 
 **Current location**:

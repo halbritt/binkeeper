@@ -34,10 +34,19 @@ from psycopg.types.json import Jsonb
 DEFAULT_BIN_TENANT_ID: Final[str] = os.environ.get("BINKEEPER_BIN_TENANT_ID", "personal")
 DEFAULT_BIN_CORPUS_ID: Final[str] = os.environ.get("BINKEEPER_BIN_CORPUS_ID", "personal")
 DEFAULT_BIN_SOURCE_LABEL: Final[str] = "manual"
-TRIP_EVENT_SCHEMA_VERSION: Final[str] = "bin_trip_event.v2"
+TRIP_EVENT_SCHEMA_VERSION: Final[str] = "bin_trip_event.v3"
 
 EventKind = Literal[
-    "place", "open", "load", "arrive", "close", "confirm", "contradict", "fetch", "not_found"
+    "place",
+    "open",
+    "load",
+    "arrive",
+    "close",
+    "confirm",
+    "contradict",
+    "fetch",
+    "not_found",
+    "browse",
 ]
 EVENT_KINDS: Final[tuple[EventKind, ...]] = (
     "place",
@@ -49,12 +58,21 @@ EVENT_KINDS: Final[tuple[EventKind, ...]] = (
     "contradict",
     "fetch",
     "not_found",
+    "browse",
 )
 # Events that assert where a bin currently rests (the fold's location-bearing set).
-# A `fetch` is a successful retrieval: the owner had the bin in hand at that site,
-# so it re-confirms location exactly as `confirm` does. A `not_found` asserts where
-# the bin is NOT and is deliberately excluded — it shocks confidence instead.
-LOCATION_EVENT_KINDS: Final[tuple[EventKind, ...]] = ("place", "load", "arrive", "confirm", "fetch")
+# A `fetch` is a successful retrieval and a `browse` an opened-took-nothing look:
+# both put the bin physically in the owner's hands at that site, so each
+# re-confirms location exactly as `confirm` does. A `not_found` asserts where the
+# bin is NOT and is deliberately excluded — it shocks confidence instead.
+LOCATION_EVENT_KINDS: Final[tuple[EventKind, ...]] = (
+    "place",
+    "load",
+    "arrive",
+    "confirm",
+    "fetch",
+    "browse",
+)
 # Events that count as an actual physical MOVE — used to learn a per-bin half-life;
 # a `confirm` re-verifies a bin in place and is deliberately excluded.
 MOVE_EVENT_KINDS: Final[tuple[EventKind, ...]] = ("place", "load", "arrive")
@@ -234,10 +252,11 @@ def validate_event(
         raise BinInventoryError(f"event_kind {kind!r} requires a bin_code")
     if not bin_required and bin_code:
         raise BinInventoryError(f"event_kind {kind!r} must not carry a bin_code")
-    trip_free = ("place", "confirm", "contradict", "fetch", "not_found")
+    trip_free = ("place", "confirm", "contradict", "fetch", "not_found", "browse")
     if kind not in trip_free and not (trip_id and trip_id.strip()):
         raise BinInventoryError(f"event_kind {kind!r} requires a trip_id")
-    if kind in ("place", "arrive", "confirm", "fetch", "not_found") and not (site and site.strip()):
+    site_required = ("place", "arrive", "confirm", "fetch", "not_found", "browse")
+    if kind in site_required and not (site and site.strip()):
         raise BinInventoryError(f"event_kind {kind!r} requires a site")
     return kind
 
@@ -445,6 +464,23 @@ def _contradiction_shock(events: Sequence[TripEvent], *, after_seq: int) -> floa
         if event.event_kind in ("contradict", "not_found") and event.seq > after_seq
     )
     return contradictions * BIN_CONTRADICTION_SHOCK
+
+
+def confusion_score(bin_code: str, events: Sequence[TripEvent]) -> int:
+    """Count opened-took-nothing looks since the bin last served a take. Pure.
+
+    Each `browse` is a fruitless opening: the bin was physically there (it
+    re-confirms location) but its contents disappointed the search — evidence
+    the passport is lying about what's inside. A later `fetch` or `load`
+    (the bin served something) resets the count, so confusion measures the
+    CURRENT streak of disappointments, rebuildable from the ledger.
+    """
+    own = [event for event in events if event.bin_code == bin_code]
+    last_take = max(
+        (event.seq for event in own if event.event_kind in ("fetch", "load")),
+        default=0,
+    )
+    return sum(1 for event in own if event.event_kind == "browse" and event.seq > last_take)
 
 
 def compute_belief(

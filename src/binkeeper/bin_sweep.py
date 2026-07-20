@@ -28,6 +28,11 @@ from binkeeper.bin_presence import current_presence
 from binkeeper.bin_priority import ReconfirmCandidate, reconfirm_priorities
 
 BIN_SWEEP_DEFAULT_LIMIT: Final[int] = int(os.environ.get("BINKEEPER_BIN_SWEEP_LIMIT", "8"))
+# Confusion streak (opened-took-nothing looks, BINK-20) at which the sweep
+# prompts a contents re-scan instead of a mere location confirm.
+BIN_CONFUSION_RESCAN_THRESHOLD: Final[int] = int(
+    os.environ.get("BINKEEPER_BIN_CONFUSION_RESCAN_THRESHOLD", "2")
+)
 
 _ABSTAIN_NO_PRESENCE: Final[str] = "no_current_presence"
 _ABSTAIN_NAMED_SITE_NOT_PRESENT: Final[str] = "named_site_not_present"
@@ -46,6 +51,8 @@ class SweepItem:
     confidence: float
     p_stale: float
     action: str
+    confusion: int = 0
+    rescan: bool = False
 
     def to_json(self) -> dict[str, object]:
         """Return the stable JSON shape for a sweep item."""
@@ -54,6 +61,8 @@ class SweepItem:
             "confidence": round(self.confidence, 4),
             "p_stale": round(self.p_stale, 4),
             "action": self.action,
+            "confusion": self.confusion,
+            "rescan": self.rescan,
         }
 
 
@@ -111,6 +120,8 @@ def bin_sweep(
             confidence=candidate.confidence,
             p_stale=candidate.p_stale,
             action=_confirm_action(candidate, resolved_site),
+            confusion=candidate.confusion,
+            rescan=candidate.confusion >= BIN_CONFUSION_RESCAN_THRESHOLD,
         )
         for candidate in ranked
     )
@@ -130,4 +141,9 @@ def _rank_at_site(
 
 def _confirm_action(candidate: ReconfirmCandidate, site: str) -> str:
     """Name the cheapest confirming action for one stale bin."""
+    if candidate.confusion >= BIN_CONFUSION_RESCAN_THRESHOLD:
+        return (
+            f"{candidate.bin_code} keeps disappointing searches "
+            f"({candidate.confusion} fruitless openings) — open it and re-scan its contents."
+        )
     return f"Look at {candidate.bin_code} at {site} and confirm it is still here."

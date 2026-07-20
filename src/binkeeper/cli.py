@@ -38,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
             "contradict",
             "fetch",
             "not_found",
+            "browse",
         ),
     )
     trip.add_argument("--bin", dest="bin_code")

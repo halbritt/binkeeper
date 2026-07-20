@@ -46,6 +46,7 @@ from binkeeper.bin_inventory import (
     BinBelief,
     compute_belief,
     compute_source_reliabilities,
+    confusion_score,
     load_bin_events,
     load_bin_observations,
 )
@@ -61,6 +62,12 @@ BIN_DEFAULT_COST: Final[float] = float(os.environ.get("BINKEEPER_BIN_DEFAULT_COS
 # Default reachability for a site with no override: 1.0 = no trip discount.
 BIN_DEFAULT_REACHABILITY: Final[float] = float(
     os.environ.get("BINKEEPER_BIN_DEFAULT_REACHABILITY", "1.0")
+)
+# How much each point of confusion (opened-took-nothing streak, BINK-20)
+# inflates a bin's cost-of-being-wrong: a lying passport makes being wrong
+# costlier. 0 disables the multiplier entirely.
+BIN_CONFUSION_COST_WEIGHT: Final[float] = float(
+    os.environ.get("BINKEEPER_BIN_CONFUSION_COST_WEIGHT", "0.5")
 )
 # Optional per-site factor overrides (reachability / cost). Missing file => no
 # overrides (every site uses the defaults above), so the prioritizer is a safe
@@ -113,6 +120,7 @@ class ReconfirmCandidate:
     priority: float
     abstained: bool
     age_days: float | None
+    confusion: int = 0
 
     def to_json(self) -> dict[str, object]:
         """Return the stable JSON shape for one ranked candidate."""
@@ -129,6 +137,7 @@ class ReconfirmCandidate:
             "priority": round(self.priority, 6),
             "abstained": self.abstained,
             "age_days": round(self.age_days, 2) if self.age_days is not None else None,
+            "confusion": self.confusion,
         }
 
 
@@ -158,17 +167,23 @@ def build_candidate(
     *,
     factors: SiteFactors | None = None,
     need_prior: float = BIN_NEED_PRIOR,
+    confusion: int = 0,
+    confusion_weight: float = BIN_CONFUSION_COST_WEIGHT,
 ) -> ReconfirmCandidate:
     """Turn a bin's belief + its site factors into a ranked re-confirm candidate. Pure.
 
     ``P(stale)`` is ``1 - confidence`` straight from the belief spine, so a freshly
     placed or well-corroborated bin has low regret and an old, uncorroborated one
     high. An ``unknown`` bin (no location event) has confidence 0, so it floats up.
+    ``confusion`` (the opened-took-nothing streak) multiplies cost-of-being-wrong
+    by ``1 + weight x confusion``: a bin whose passport keeps disappointing
+    searches is costlier to be wrong about, so it jumps the queue.
     """
     resolved = factors or SiteFactors()
     p_stale = _clamp01(1.0 - belief.confidence)
     p_need = _clamp01(need_prior)
-    regret = expected_regret(p_stale, p_need, resolved.cost_of_wrong)
+    effective_cost = resolved.cost_of_wrong * (1.0 + max(0.0, confusion_weight) * max(0, confusion))
+    regret = expected_regret(p_stale, p_need, effective_cost)
     priority = regret * _clamp01(resolved.reachability)
     return ReconfirmCandidate(
         bin_code=belief.bin_code,
@@ -177,12 +192,13 @@ def build_candidate(
         confidence=belief.confidence,
         p_stale=p_stale,
         p_need=p_need,
-        cost_of_wrong=resolved.cost_of_wrong,
+        cost_of_wrong=effective_cost,
         reachability=resolved.reachability,
         expected_regret=regret,
         priority=priority,
         abstained=belief.abstained,
         age_days=belief.age_days,
+        confusion=max(0, confusion),
     )
 
 
@@ -283,5 +299,12 @@ def reconfirm_priorities(
             source_reliability_by_kind=reliabilities or None,
         )
         factors = resolved_factors.get(belief.location.site) if belief.location.site else None
-        candidates.append(build_candidate(belief, factors=factors, need_prior=need_prior))
+        candidates.append(
+            build_candidate(
+                belief,
+                factors=factors,
+                need_prior=need_prior,
+                confusion=confusion_score(bin_code, events),
+            )
+        )
     return rank_reconfirm(candidates)

@@ -188,3 +188,20 @@ def test_reconfirm_priorities_reachability_reorders(conn: psycopg.Connection):
 
 def test_reconfirm_priorities_empty_corpus_is_empty(conn: psycopg.Connection):
     assert reconfirm_priorities(conn, now=NOW) == []
+
+
+def test_confusion_multiplies_cost_and_jumps_the_queue():
+    calm = build_candidate(_belief("CLM-1", 0.5), confusion=0, confusion_weight=0.5)
+    confused = build_candidate(_belief("CNF-1", 0.5), confusion=2, confusion_weight=0.5)
+    assert calm.cost_of_wrong == 1.0
+    assert confused.cost_of_wrong == 2.0  # 1.0 * (1 + 0.5 * 2)
+    assert confused.priority == 2 * calm.priority
+    assert confused.confusion == 2
+    ranked = rank_reconfirm([calm, confused])
+    assert ranked[0].bin_code == "CNF-1"
+
+
+def test_zero_weight_disables_the_confusion_multiplier():
+    candidate = build_candidate(_belief("CNF-2", 0.5), confusion=5, confusion_weight=0.0)
+    assert candidate.cost_of_wrong == 1.0
+    assert candidate.confusion == 5

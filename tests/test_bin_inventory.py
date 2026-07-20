@@ -25,6 +25,7 @@ from binkeeper.bin_inventory import (
     bin_where,
     compute_belief,
     compute_source_reliabilities,
+    confusion_score,
     decayed_confidence,
     event_external_id,
     fold_bin_location,
@@ -648,3 +649,37 @@ def test_compute_source_reliabilities_learns_from_moves(conn: psycopg.Connection
     rels = compute_source_reliabilities(conn)
     assert rels["photo_gps"] == pytest.approx(5 / 6)  # prior (4,1) + 1 hit
     assert rels["transcript_deixis"] == pytest.approx(1 / 4)  # prior (1,2) + 1 miss
+
+
+def test_validate_browse_requires_bin_and_site_no_trip():
+    assert (
+        validate_event(event_kind="browse", trip_id=None, bin_code="ALA-1", site="garage")
+        == "browse"
+    )
+    with pytest.raises(BinInventoryError):
+        validate_event(event_kind="browse", trip_id=None, bin_code="ALA-1", site=None)
+    with pytest.raises(BinInventoryError):
+        validate_event(event_kind="browse", trip_id=None, bin_code=None, site="garage")
+
+
+def test_browse_confirms_location_and_accrues_confusion():
+    events = [
+        _move(1, "place", NOW, site="garage"),
+        _move(2, "browse", NOW + DAY, site="garage"),
+        _move(3, "browse", NOW + 2 * DAY, site="garage"),
+    ]
+    location = fold_bin_location("ALA-1", events)
+    assert (location.status, location.site, location.last_event_seq) == ("at_site", "garage", 3)
+    assert confusion_score("ALA-1", events) == 2
+
+
+def test_confusion_resets_on_a_successful_take():
+    events = [
+        _move(1, "place", NOW, site="garage"),
+        _move(2, "browse", NOW + DAY, site="garage"),
+        _move(3, "fetch", NOW + 2 * DAY, site="garage"),
+        _move(4, "browse", NOW + 3 * DAY, site="garage"),
+    ]
+    assert confusion_score("ALA-1", events) == 1
+    assert confusion_score("ALA-1", events[:3]) == 0
+    assert confusion_score("OTHER", events) == 0

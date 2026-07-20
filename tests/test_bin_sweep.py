@@ -95,3 +95,27 @@ def test_sweep_never_mutates_the_ledgers(conn: psycopg.Connection) -> None:
     bin_sweep(conn, now=NOW)
 
     assert conn.execute(counts).fetchone() == before
+
+
+def test_sweep_prompts_a_rescan_for_a_confused_bin(conn: psycopg.Connection) -> None:
+    _place(conn, "SWP-CONF", "alameda-garage", NOW - timedelta(days=30))
+    for day in (3, 2):
+        record_event(
+            conn,
+            event_kind="browse",
+            bin_code="SWP-CONF",
+            site="alameda-garage",
+            occurred_at=NOW - timedelta(days=day),
+            idempotency_key=f"sweep-browse-{day}",
+        )
+    _place(conn, "SWP-CALM", "alameda-garage", NOW - timedelta(days=30))
+    _arrive(conn, "alameda-garage", NOW)
+
+    result = bin_sweep(conn, now=NOW, limit=8)
+
+    by_code = {item.bin_code: item for item in result.items}
+    assert by_code["SWP-CONF"].confusion == 2
+    assert by_code["SWP-CONF"].rescan is True
+    assert "re-scan its contents" in by_code["SWP-CONF"].action
+    assert by_code["SWP-CALM"].rescan is False
+    assert "confirm it is still here" in by_code["SWP-CALM"].action

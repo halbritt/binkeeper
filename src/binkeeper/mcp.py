@@ -34,6 +34,7 @@ def tool_schemas() -> list[dict[str, Any]]:
                             "contradict",
                             "fetch",
                             "not_found",
+                            "browse",
                         ],
                     },
                     "bin_code": {"type": ["string", "null"]},

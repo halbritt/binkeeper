@@ -12,4 +12,5 @@ def test_initial_persistence_migration_is_packaged() -> None:
         "002_domain_compatibility.sql",
         "003_scope_idempotency.sql",
         "004_retrieval_event_kinds.sql",
+        "005_browse_event_kind.sql",
     )
