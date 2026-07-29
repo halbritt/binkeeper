@@ -205,6 +205,16 @@ class OllamaVisionClient:
             raise BinVisionError(
                 f"vision endpoint {self.endpoint} unreachable: {exc.reason}"
             ) from exc
+        except TimeoutError as exc:
+            # A read timeout raises the builtin TimeoutError, which is an OSError
+            # but NOT a URLError, so it is not covered above -- urllib only wraps
+            # connect-time failures. Left uncaught it escaped the advisory-vision
+            # lane entirely and 500'd the photo-drop page (2026-07-29). The usual
+            # cause is a cold model load on the vision host, not an outage.
+            raise BinVisionError(
+                f"vision model {self.model} at {self.endpoint} did not respond "
+                f"within {timeout_s:g}s (it may still be loading; try again)"
+            ) from exc
         try:
             message = body["choices"][0]["message"]
         except (KeyError, IndexError, TypeError) as exc:

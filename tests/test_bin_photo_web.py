@@ -1737,3 +1737,23 @@ def test_wave_page_lists_stops_and_completion_taps(monkeypatch: pytest.MonkeyPat
     assert done.status_code == 303
     assert "notice=stop-done" in done.headers["location"]
     assert completions == [("run-9", "AGR-001")]
+
+
+def test_photo_drop_survives_a_vision_timeout(monkeypatch) -> None:
+    # Regression 2026-07-29: a cold model load on the vision host let a raw
+    # TimeoutError escape the advisory lane, so the drop page 500'd and the
+    # owner lost the form -- while the photos had in fact already been stored.
+    # Vision is advisory (README invariant); a slow model degrades to a message.
+    def fake_urlopen(request, *, timeout):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
+    resp = _client().post(
+        "/",
+        files={"photos": ("bin.jpg", _ONE_PIXEL_JPEG, "image/jpeg")},
+        data={"notes": "", "site": "alameda-garage"},
+        headers=_LOOPBACK_ORIGIN,
+    )
+
+    assert resp.status_code == 200
+    assert "did not respond within" in resp.text

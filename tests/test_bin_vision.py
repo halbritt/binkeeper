@@ -229,3 +229,19 @@ def test_non_json_retry_uses_remaining_request_deadline(
 
     assert proposal.theme == "hand tools"
     assert timeouts == [60, 48]
+
+
+# Regression 2026-07-29: a socket read timeout raises the builtin TimeoutError,
+# which is an OSError but NOT a urllib URLError, so it escaped _request's
+# handlers and surfaced as an unhandled 500 on the photo-drop page -- losing the
+# form even though the photos had already been stored. Vision is advisory; a
+# slow model must degrade to an owner-readable message like every other failure.
+def test_read_timeout_becomes_a_vision_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_urlopen(request: Request, *, timeout: float) -> _FakeHttpResponse:
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
+    client = OllamaVisionClient(endpoint="http://peecee:11434/v1", timeout_s=60)
+
+    with pytest.raises(BinVisionError, match="did not respond within 60"):
+        propose_bin_label(client, [b"not-a-real-image"])
