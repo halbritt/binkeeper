@@ -15,4 +15,5 @@ def test_initial_persistence_migration_is_packaged() -> None:
         "005_browse_event_kind.sql",
         "006_stash_runs.sql",
         "007_colocation_observations.sql",
+        "008_bin_containment_events.sql",
     )

@@ -42,6 +42,7 @@ EVIDENCE_RELATIONS: Final[tuple[str, ...]] = (
     "capture_sources",
     "capture_evidence",
     "bin_trip_events",
+    "bin_containment_events",
     "location_observations",
     "bin_presence_events",
     "bin_resting_order_events",

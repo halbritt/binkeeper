@@ -18,6 +18,7 @@ EVIDENCE_TABLES = (
     "bin_routing_requests",
     "stash_runs",
     "colocation_observations",
+    "bin_containment_events",
     "bin_placement_decisions",
     "bin_item_liveness",
     "evidence_blobs",

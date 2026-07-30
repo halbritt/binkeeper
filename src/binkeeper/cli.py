@@ -13,6 +13,7 @@ import psycopg
 from binkeeper.bin_anchor import print_anchor_label
 from binkeeper.bin_colocation import bin_containment
 from binkeeper.bin_inventory import arrive_all, bin_belief, bin_where, record_event, trip_status
+from binkeeper.bin_nesting import BinContainmentAppend, record_bin_containment
 from binkeeper.bin_passport import bin_passport
 from binkeeper.bin_placement import PlacementDecisionAppend, record_placement_decision
 from binkeeper.bin_route import bin_route
@@ -58,6 +59,18 @@ def build_parser() -> argparse.ArgumentParser:
     trip.add_argument("--source-label", default="manual")
     trip.add_argument("--idempotency-key")
     _scope(trip)
+
+    containment = subparsers.add_parser(
+        "bin-containment",
+        help="append one physical pack or unpack event",
+    )
+    containment.add_argument("--action", required=True, choices=("pack", "unpack"))
+    containment.add_argument("--bin", dest="bin_code", required=True)
+    containment.add_argument("--container", dest="container_code", required=True)
+    containment.add_argument("--occurred-at")
+    containment.add_argument("--source-label", default="manual")
+    containment.add_argument("--idempotency-key", required=True)
+    _scope(containment)
 
     where = subparsers.add_parser("bin-where", help="fold a bin's current location")
     where.add_argument("bin_code")
@@ -138,6 +151,7 @@ def _scope(parser: argparse.ArgumentParser) -> None:
 def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any]:
     if args.command in {
         "trip-scan",
+        "bin-containment",
         "bin-placement-decision",
         "bin-stash-run",
         "bin-anchor-label",
@@ -177,6 +191,23 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
         payload = result.to_json()
         if args.trip_id:
             payload["trip"] = trip_status(conn, args.trip_id, **common).to_json()
+        return payload
+    if args.command == "bin-containment":
+        appended = record_bin_containment(
+            conn,
+            BinContainmentAppend(
+                event_kind=args.action,
+                bin_code=args.bin_code,
+                container_code=args.container_code,
+                occurred_at=_datetime(args.occurred_at),
+                source_label=args.source_label,
+                idempotency_key=args.idempotency_key,
+                tenant_id=args.tenant,
+                corpus_id=args.corpus,
+            ),
+        )
+        payload = appended.to_json()
+        payload["location"] = bin_where(conn, args.bin_code, **common).to_json()
         return payload
     if args.command == "bin-where":
         payload = bin_where(conn, args.bin_code, **common).to_json()

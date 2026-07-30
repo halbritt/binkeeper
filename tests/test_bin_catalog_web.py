@@ -613,6 +613,28 @@ def test_catalog_abstained_shelf_tier_stays_silent() -> None:
     assert "Witnessed shelf" not in response.text
 
 
+def test_catalog_shows_authoritative_physical_containment_separately() -> None:
+    nested = replace(
+        _passport(),
+        container_code="AGR-010",
+        containment_path=("AGR-010", "AGR-020"),
+    )
+    container = replace(
+        _passport(),
+        bin_code="AGR-010",
+        contained_bin_codes=("AGR-014",),
+    )
+    app = create_app(base_path="/bins", passport_loader=lambda: [nested, container])
+
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+        response = client.get("/")
+
+    assert "Physical containment" in response.text
+    assert "Inside AGR-010 → AGR-020" in response.text
+    assert "Contains bins" in response.text
+    assert "AGR-014" in response.text
+
+
 def test_catalog_renders_virtual_bins_section() -> None:
     virtual = [
         {

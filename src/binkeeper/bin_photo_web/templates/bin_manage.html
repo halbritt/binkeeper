@@ -97,6 +97,9 @@
       <h2 id="location-heading">Current location</h2>
       <p class="bin-photo-card-copy">Moving a bin records a placement event. It does not change the return-to site printed on its label.</p>
     </div>
+    {% if container_code %}
+    <p>This bin follows its outer container. Move {{ containment_path[-1] }} instead, or take this bin out first.</p>
+    {% else %}
     <form method="post" action="{{ location_action }}" class="form-grid bin-photo-form" data-submit-form>
       <input type="hidden" name="action_id" value="{{ location_action_id }}">
       <label for="manage-current-site">Current location
@@ -121,6 +124,50 @@
         <span class="field-help">Went to {{ current_site|replace('-', ' ')|title }} and the bin was not there? One tap records the miss and opens a where-else checklist.</span>
       </div>
     </form>
+    {% endif %}
+    {% endif %}
+  </section>
+
+  <section class="panel panel-padded stack bin-photo-card" aria-labelledby="containment-heading">
+    <div class="bin-photo-card-header">
+      <h2 id="containment-heading">Bin inside a bin</h2>
+      {% if container_code %}
+      <p class="bin-photo-card-copy">This bin is inside {{ containment_path|join(' → ') }} and follows the outer container's current location.</p>
+      {% else %}
+      <p class="bin-photo-card-copy">Put this bin inside another bin. Moving the outer bin will move this bin with it.</p>
+      {% endif %}
+    </div>
+    {% if contained_bin_codes %}
+    <p><strong>Contains {{ contained_bin_codes|join(', ') }}</strong></p>
+    {% endif %}
+    {% if container_code %}
+    <form method="post" action="{{ containment_action }}" class="bin-photo-form" data-submit-form>
+      <input type="hidden" name="action_id" value="{{ containment_action_id }}">
+      <input type="hidden" name="action" value="unpack">
+      <input type="hidden" name="container_code" value="{{ container_code }}">
+      <div class="action-bar">
+        <button type="submit" data-submit-button data-busy-label="Taking bin out…">
+          <span data-button-label>Take out of {{ container_code }}</span>
+        </button>
+      </div>
+    </form>
+    {% elif container_options %}
+    <form method="post" action="{{ containment_action }}" class="form-grid bin-photo-form" data-submit-form>
+      <input type="hidden" name="action_id" value="{{ containment_action_id }}">
+      <input type="hidden" name="action" value="pack">
+      <label for="manage-container">Container bin
+        <select id="manage-container" name="container_code" required>
+          {% for code in container_options %}<option value="{{ code }}">{{ code }}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="action-bar">
+        <button type="submit" data-submit-button data-busy-label="Putting bin inside…">
+          <span data-button-label>Put inside selected bin</span>
+        </button>
+      </div>
+    </form>
+    {% else %}
+    <p class="muted">No other bin at this site can contain this bin.</p>
     {% endif %}
   </section>
 

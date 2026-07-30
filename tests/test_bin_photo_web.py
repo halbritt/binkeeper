@@ -128,6 +128,10 @@ def test_manage_bin_page_prefills_current_state_and_exposes_clear_actions() -> N
             "home_site": "alameda-garage",
             "current_site": "oakland-fab-east",
             "catalog_photo_url": "/bins/photo/AGR-014",
+            "container_code": "",
+            "containment_path": (),
+            "contained_bin_codes": (),
+            "container_options": ("AGR-010", "AGR-020"),
         }
 
     app = bin_photo_web.create_app(
@@ -147,6 +151,9 @@ def test_manage_bin_page_prefills_current_state_and_exposes_clear_actions() -> N
     assert "Home / return-to site" in body
     assert 'name="current_site"' in body
     assert "Current location" in body
+    assert "Put this bin inside another bin" in body
+    assert 'name="container_code"' in body
+    assert '<option value="AGR-010">AGR-010</option>' in body
     assert "Save changes" in body
     assert "Add photo" in body
     assert "Print another label" in body
@@ -482,6 +489,50 @@ def test_manage_location_post_records_a_placement_and_redirects(
     assert count == (1,)
 
 
+def test_manage_containment_post_packs_once_and_redirects(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import db
+    from binkeeper.bin_inventory import bin_where
+    from binkeeper.bin_register import register_bin
+
+    when = datetime(2026, 7, 30, 6, tzinfo=UTC)
+    for code in ("AGR-001", "AGR-010"):
+        register_bin(conn, bin_code=code, site="alameda-garage", observed_at=when)
+    monkeypatch.setattr(db, "connect", lambda **_kwargs: nullcontext(conn))
+    action = {
+        "action": "pack",
+        "container_code": "AGR-010",
+        "action_id": "a2e88b6a-451d-4aad-a8c3-2130b3515c84",
+    }
+
+    with _client() as client:
+        response = client.post(
+            "/manage/AGR-001/containment",
+            data=action,
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+        replay = client.post(
+            "/manage/AGR-001/containment",
+            data=action,
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+        page = client.get("/manage/AGR-001")
+        container_page = client.get("/manage/AGR-010")
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("notice=containment-packed")
+    assert replay.headers["location"].endswith("notice=containment-packed")
+    assert bin_where(conn, "AGR-001").container_code == "AGR-010"
+    assert conn.execute("SELECT count(*) FROM bin_containment_events").fetchone() == (1,)
+    assert "Take out of AGR-010" in page.text
+    assert "Move AGR-010 instead" in page.text
+    assert "Contains AGR-001" in container_page.text
+
+
 def test_manage_reprint_post_sends_one_deliberate_label_and_redirects(
     conn: psycopg.Connection,
     monkeypatch: pytest.MonkeyPatch,
@@ -640,6 +691,14 @@ def test_reprint_failure_keeps_the_intent_reserved_without_a_second_attempt(
             "/manage/AGR-014/location",
             {
                 "action_id": "c32d9090-2270-4590-901d-b44c253c9113",
+            },
+        ),
+        (
+            "/manage/AGR-014/containment",
+            {
+                "action": "pack",
+                "container_code": "AGR-099",
+                "action_id": "2362f86d-cff6-4a1f-85e8-c6c796a6389c",
             },
         ),
         (

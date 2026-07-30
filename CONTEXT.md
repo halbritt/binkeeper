@@ -24,13 +24,21 @@ _Avoid_: Not-found flag, retrieval log
 
 **Sub-location anchor**:
 A LOC- coded label mounted on a shelf, cabinet, or room edge. It exists in the
-system only once photographed co-located with a bin; containment is witnessed
-evidence, never a declared tree.
+system only once photographed co-located with a bin. It is witnessed
+sub-location evidence, never a physical parent relation or declared location
+taxonomy.
 _Avoid_: Room, shelf field, location taxonomy
 
+**Physical containment**:
+The current fact that one bin is physically inside another bin. It is projected
+from immutable owner-attested pack and unpack events into a single-parent,
+acyclic graph.
+_Avoid_: Parent field, sub-location anchor, editable nesting
+
 **Current location**:
-The latest location projected by folding a bin's ordered move events; it is not
-stored as editable truth.
+The latest location projected by folding a top-level bin's ordered move events.
+A contained bin inherits the current location of its outermost container. It is
+never stored as editable truth.
 _Avoid_: Location field
 
 **Profile snapshot**:

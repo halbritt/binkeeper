@@ -38,6 +38,8 @@ BinKeeper-owned key while retaining both source and target manifests.
   append-only.
 - Current location and other current state are folds over evidence, not mutable
   truth cells.
+- Physical bin containment is a single-parent, acyclic fold over pack and
+  unpack evidence. A contained bin moves with its outermost container.
 - Derived passports, confidence, routes, and manifests are rebuildable.
 - Vision output is advisory. It cannot move a bin, register a bin, or accept a
   placement without an explicit owner action.
@@ -75,6 +77,14 @@ Run local inventory search with `binkeeper bin-search QUERY`. Transcript
 liveness is optional and accepts only the inert file contract documented in
 [docs/liveness-adapter.md](docs/liveness-adapter.md); absence is reported as
 unavailable and never blocks core search.
+
+Record physical nesting with
+`binkeeper bin-containment --action pack --bin BIN --container CONTAINER --idempotency-key KEY`
+and reverse it with the `unpack` action. Both bins must have the same known site
+before packing. A contained bin must be unpacked before it can be moved
+directly. The owner management page exposes the same workflow under
+**Bin inside a bin**. [ADR 0003](docs/adr/0003-physical-bin-containment.md)
+records the evidence and projection contract.
 
 `make check` runs the full verification sequence; the editable install is a
 prerequisite of each target. PostgreSQL acceptance tests require a disposable

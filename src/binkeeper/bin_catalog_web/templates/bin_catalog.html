@@ -360,6 +360,8 @@
               <dt>Current site</dt><dd>{{ entry.current_site_label }}</dd>
               <dt>Home site</dt><dd>{{ entry.home_site_label }}</dd>
               <dt>Location confidence</dt><dd>{{ entry.location_confidence_label }}</dd>
+              {% if entry.containment_label %}<dt>Physical containment</dt><dd>{{ entry.containment_label }}</dd>{% endif %}
+              {% if entry.contained_bin_codes %}<dt>Contains bins</dt><dd>{{ entry.contained_bin_codes|join(', ') }}</dd>{% endif %}
               {% if entry.anchor_label %}<dt>Witnessed shelf</dt><dd>{{ entry.anchor_label }}</dd>{% endif %}
               <dt>Profile confidence</dt><dd>{{ entry.passport_confidence_label }}</dd>
             </dl>

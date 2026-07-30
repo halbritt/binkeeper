@@ -51,6 +51,10 @@ class ManageView(TypedDict):
     home_site: str
     current_site: str
     catalog_photo_url: str | None
+    container_code: str
+    containment_path: tuple[str, ...]
+    contained_bin_codes: tuple[str, ...]
+    container_options: tuple[str, ...]
 
 
 class ManageLoader(Protocol):
@@ -144,6 +148,15 @@ class LocationAction:
 
 
 @dataclass(frozen=True)
+class ContainmentAction:
+    bin_code: str
+    event_kind: str
+    container_code: str
+    action_id: str
+    received_at: datetime
+
+
+@dataclass(frozen=True)
 class PrintAction:
     bin_code: str
     action_id: str
@@ -193,6 +206,14 @@ def install_manage_routes(app: FastAPI, config: ManageRouteConfig) -> None:
         _origin: None = Depends(strict_origin),
     ) -> RedirectResponse:
         return await _location_response(request, bin_code, config)
+
+    @app.post("/manage/{bin_code}/containment")
+    async def manage_containment(
+        request: Request,
+        bin_code: str = ApiPath(min_length=1, max_length=120),
+        _origin: None = Depends(strict_origin),
+    ) -> RedirectResponse:
+        return await _containment_response(request, bin_code, config)
 
     @app.post("/manage/{bin_code}/print")
     async def manage_print(
@@ -330,6 +351,28 @@ async def _location_response(
     except (BinManageError, BinInventoryError, psycopg.Error):
         _LOGGER.warning("BinKeeper location update failed")
         notice = "save-failed"
+    return _redirect(config.base_path, bin_code, notice)
+
+
+async def _containment_response(
+    request: Request,
+    bin_code: str,
+    config: ManageRouteConfig,
+) -> RedirectResponse:
+    form = await request.form()
+    action = ContainmentAction(
+        bin_code=bin_code,
+        event_kind=_form_text(form.get("action")),
+        container_code=_form_text(form.get("container_code")),
+        action_id=_form_text(form.get("action_id")),
+        received_at=datetime.now(UTC),
+    )
+    notice = f"containment-{action.event_kind}ed"
+    try:
+        await run_in_threadpool(change_bin_containment, action, config.scope)
+    except (BinManageError, BinInventoryError, psycopg.Error):
+        _LOGGER.warning("BinKeeper containment update failed")
+        notice = "containment-failed"
     return _redirect(config.base_path, bin_code, notice)
 
 
@@ -508,14 +551,33 @@ def load_triage_view(
 
 def load_manage_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> ManageView:
     """Load the current owner-safe fields for one exact known bin."""
+    from binkeeper.bin_inventory import bin_where
+    from binkeeper.bin_nesting import load_bin_containment
     from binkeeper.bin_passport import bin_passport, load_known_bin_codes
     from binkeeper.db import connect
 
     code = bin_code.strip()
     with connect(role="serving") as conn:
-        if code not in load_known_bin_codes(conn, tenant_id=tenant_id, corpus_id=corpus_id):
+        known_codes = load_known_bin_codes(conn, tenant_id=tenant_id, corpus_id=corpus_id)
+        if code not in known_codes:
             raise BinManageNotFoundError(f"unknown bin {code!r}")
         passport = bin_passport(conn, code, tenant_id=tenant_id, corpus_id=corpus_id)
+        graph = load_bin_containment(conn, tenant_id=tenant_id, corpus_id=corpus_id)
+        container_options: tuple[str, ...] = ()
+        if passport.container_code is None and passport.current_site is not None:
+            container_options = tuple(
+                candidate
+                for candidate in known_codes
+                if candidate != code
+                and code not in graph.path_for(candidate)
+                and bin_where(
+                    conn,
+                    candidate,
+                    tenant_id=tenant_id,
+                    corpus_id=corpus_id,
+                ).site
+                == passport.current_site
+            )
         has_photo = _has_linked_photo(
             conn,
             bin_code=code,
@@ -527,6 +589,10 @@ def load_manage_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> Manage
         "contents": passport.sibling_contents[-1] if passport.sibling_contents else "",
         "home_site": passport.home_site or "",
         "current_site": passport.current_site or "",
+        "container_code": passport.container_code or "",
+        "containment_path": passport.containment_path,
+        "contained_bin_codes": passport.contained_bin_codes,
+        "container_options": container_options,
         "catalog_photo_url": (
             f"/bins/photo/{quote(passport.bin_code, safe='')}" if has_photo else None
         ),
@@ -621,6 +687,34 @@ def place_bin(
     )
     with connect() as conn:
         place_existing_bin(conn, placement, scope=scope)
+
+
+def change_bin_containment(action: ContainmentAction, scope: BinActionScope) -> None:
+    """Append one reviewed physical pack or unpack event."""
+    from binkeeper.bin_nesting import (
+        BinContainmentAppend,
+        BinNestingError,
+        record_bin_containment,
+    )
+    from binkeeper.db import connect
+
+    try:
+        with connect() as conn:
+            record_bin_containment(
+                conn,
+                BinContainmentAppend(
+                    event_kind=action.event_kind,
+                    bin_code=action.bin_code,
+                    container_code=action.container_code,
+                    occurred_at=action.received_at,
+                    source_label="binkeeper-manage",
+                    idempotency_key=f"bincontainment:{action.action_id}",
+                    tenant_id=scope.tenant_id,
+                    corpus_id=scope.corpus_id,
+                ),
+            )
+    except BinNestingError as exc:
+        raise BinManageError(str(exc)) from exc
 
 
 def reprint_bin(action: PrintAction, scope: BinActionScope) -> PrintOutcome:
@@ -748,6 +842,7 @@ def _action_urls(base_path: str, bin_code: str) -> dict[str, str]:
         for name, suffix in (
             ("profile_action", "profile"),
             ("location_action", "location"),
+            ("containment_action", "containment"),
             ("photo_action", "photo"),
             ("print_action", "print"),
             ("not_found_action", "not-found"),
@@ -774,6 +869,12 @@ def _manage_notice(key: str) -> dict[str, str] | None:
     notices = {
         "profile-saved": ("ok", "Changes saved."),
         "location-saved": ("ok", "Current location updated."),
+        "containment-packed": ("ok", "This bin is now inside the selected container."),
+        "containment-unpacked": ("ok", "This bin was taken out of its container."),
+        "containment-failed": (
+            "error",
+            "Nothing was changed. Check both bins and try again.",
+        ),
         "photo-added": ("ok", "Photo added. The catalog now uses this newest photo."),
         "label-sent": ("ok", "One label request was sent to the local print queue."),
         "label-replayed": (

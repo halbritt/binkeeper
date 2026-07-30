@@ -15,6 +15,7 @@ def test_cli_help_names_standalone_commands(capsys: pytest.CaptureFixture[str]) 
         build_parser().parse_args(["--help"])
     help_text = capsys.readouterr().out
     assert "trip-scan" in help_text
+    assert "bin-containment" in help_text
     assert "bin-passport" in help_text
     assert "bin-search" in help_text
     assert "bin-placement-decision" in help_text
@@ -30,6 +31,7 @@ def test_mcp_schema_snapshot_uses_only_binkeeper_names() -> None:
     schemas = tool_schemas()
     assert [schema["name"] for schema in schemas] == [
         "binkeeper.trip_scan",
+        "binkeeper.bin_containment",
         "binkeeper.bin_where",
         "binkeeper.bin_belief",
         "binkeeper.bin_passport",
@@ -95,6 +97,31 @@ def test_mcp_write_uses_the_same_frozen_writer_gate(
     ).fetchone() == (0,)
 
 
+def test_containment_cli_refuses_before_mutating_when_writer_authority_is_closed(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("BINKEEPER_WRITES_ENABLED", raising=False)
+    args = build_parser().parse_args(
+        [
+            "bin-containment",
+            "--action",
+            "pack",
+            "--bin",
+            "TST-INNER",
+            "--container",
+            "TST-OUTER",
+            "--idempotency-key",
+            "frozen-containment",
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="writer is frozen"):
+        execute(args, conn)
+
+    assert conn.execute("SELECT count(*) FROM bin_containment_events").fetchone() == (0,)
+
+
 def test_cli_and_mcp_share_idempotent_trip_behavior(
     conn: psycopg.Connection,
     monkeypatch: pytest.MonkeyPatch,
@@ -127,6 +154,46 @@ def test_cli_and_mcp_share_idempotent_trip_behavior(
     assert cli_result["event_id"] == mcp_result["event_id"]
     assert cli_result["already_existed"] is False
     assert mcp_result["already_existed"] is True
+
+
+def test_cli_and_mcp_share_idempotent_bin_containment(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper.bin_register import register_bin
+
+    monkeypatch.setenv("BINKEEPER_WRITES_ENABLED", "1")
+    for code in ("TST-INNER", "TST-OUTER"):
+        register_bin(conn, bin_code=code, site="site-a")
+    arguments = {
+        "action": "pack",
+        "bin_code": "TST-INNER",
+        "container_code": "TST-OUTER",
+        "idempotency_key": "pack-inner-outer",
+    }
+
+    cli_result = execute(
+        build_parser().parse_args(
+            [
+                "bin-containment",
+                "--action",
+                "pack",
+                "--bin",
+                "TST-INNER",
+                "--container",
+                "TST-OUTER",
+                "--idempotency-key",
+                "pack-inner-outer",
+            ]
+        ),
+        conn,
+    )
+    mcp_result = call_tool(conn, "binkeeper.bin_containment", arguments)
+
+    assert cli_result["already_existed"] is False
+    assert mcp_result["event_id"] == cli_result["event_id"]
+    assert mcp_result["already_existed"] is True
+    assert mcp_result["location"]["container_code"] == "TST-OUTER"
 
 
 def test_compat_trip_arrive_without_bin_reconciles_every_loaded_bin(

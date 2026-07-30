@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from importlib import import_module
 from typing import Final, Literal, cast
@@ -194,10 +194,13 @@ class BinPassport:
     passport_confidence: float
     provenance_refs: tuple[str, ...]
     projector_version: str = BIN_PASSPORT_PROJECTOR_VERSION
+    container_code: str | None = None
+    containment_path: tuple[str, ...] = ()
+    contained_bin_codes: tuple[str, ...] = ()
 
     def to_json(self) -> dict[str, object]:
         """Return the stable JSON shape for a passport."""
-        return {
+        payload: dict[str, object] = {
             "bin_code": self.bin_code,
             "theme": self.theme,
             "home_site": self.home_site,
@@ -215,6 +218,12 @@ class BinPassport:
             "provenance_refs": list(self.provenance_refs),
             "projector_version": self.projector_version,
         }
+        if self.container_code is not None:
+            payload["container_code"] = self.container_code
+            payload["containment_path"] = list(self.containment_path)
+        if self.contained_bin_codes:
+            payload["contained_bin_codes"] = list(self.contained_bin_codes)
+        return payload
 
 
 def canonical_volume_liters(value: float, unit: VolumeUnit) -> float | None:
@@ -419,6 +428,8 @@ def project_bin_passport(
         passport_confidence=passport_confidence,
         provenance_refs=provenance_refs,
         projector_version=projector_version,
+        container_code=resolved_location.container_code if resolved_location else None,
+        containment_path=resolved_location.containment_path if resolved_location else (),
     )
 
 
@@ -497,7 +508,11 @@ def bin_passport(
     """Load existing evidence and project one bin passport. Read-only."""
     captures = load_bin_captures(conn, bin_code, tenant_id=tenant_id, corpus_id=corpus_id)
     belief = bin_belief(conn, bin_code, now=now, tenant_id=tenant_id, corpus_id=corpus_id)
-    return project_bin_passport(bin_code, captures, belief=belief)
+    passport = project_bin_passport(bin_code, captures, belief=belief)
+    from binkeeper.bin_nesting import load_bin_containment
+
+    graph = load_bin_containment(conn, tenant_id=tenant_id, corpus_id=corpus_id)
+    return replace(passport, contained_bin_codes=graph.children_of(bin_code))
 
 
 def load_bin_passports(

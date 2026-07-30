@@ -174,6 +174,8 @@ class BinCatalogEntry(TypedDict):
     photo_url: str | None
     manage_url: str | None
     anchor_label: str | None
+    containment_label: str | None
+    contained_bin_codes: tuple[str, ...]
     search_text: str
 
 
@@ -454,6 +456,8 @@ def _passport_view(
         passport.home_site or "",
         passport.owner_phrase or "",
         *contents,
+        *passport.containment_path,
+        *passport.contained_bin_codes,
     )
     return {
         "bin_code": passport.bin_code,
@@ -475,6 +479,10 @@ def _passport_view(
         "photo_url": photo_url,
         "manage_url": manage_url,
         "anchor_label": anchor_label,
+        "containment_label": (
+            f"Inside {' → '.join(passport.containment_path)}" if passport.containment_path else None
+        ),
+        "contained_bin_codes": passport.contained_bin_codes,
         "search_text": " ".join(searchable_values).casefold(),
     }
 

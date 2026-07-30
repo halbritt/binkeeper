@@ -22,7 +22,7 @@ import hashlib
 import json
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Final, Literal
 
@@ -167,10 +167,13 @@ class BinLocation:
     trip_id: str | None
     last_event_seq: int | None
     last_event_at: datetime | None
+    container_code: str | None = None
+    containment_path: tuple[str, ...] = ()
+    location_source_bin: str | None = None
 
     def to_json(self) -> dict[str, object]:
         """Return the stable JSON shape for a location answer."""
-        return {
+        payload: dict[str, object] = {
             "bin_code": self.bin_code,
             "status": self.status,
             "site": self.site,
@@ -178,6 +181,15 @@ class BinLocation:
             "last_event_seq": self.last_event_seq,
             "last_event_at": self.last_event_at.isoformat() if self.last_event_at else None,
         }
+        if self.container_code is not None:
+            payload.update(
+                {
+                    "container_code": self.container_code,
+                    "containment_path": list(self.containment_path),
+                    "location_source_bin": self.location_source_bin,
+                }
+            )
+        return payload
 
 
 @dataclass(frozen=True)
@@ -703,6 +715,23 @@ def record_event(
         "idempotency_key": idempotency_key,
     }
     with conn.transaction():
+        if kind in MOVE_EVENT_KINDS and bin_code:
+            prior = conn.execute(
+                """
+                SELECT 1 FROM bin_trip_events
+                WHERE tenant_id = %s AND corpus_id = %s AND external_id = %s
+                """,
+                (tenant_id, corpus_id, external_id),
+            ).fetchone()
+            if prior is None:
+                from binkeeper.bin_nesting import require_top_level_for_move
+
+                require_top_level_for_move(
+                    conn,
+                    bin_code,
+                    tenant_id=tenant_id,
+                    corpus_id=corpus_id,
+                )
         inserted = conn.execute(
             """
             INSERT INTO bin_trip_events (
@@ -788,8 +817,14 @@ def bin_where(
     corpus_id: str = DEFAULT_BIN_CORPUS_ID,
 ) -> BinLocation:
     """Resolve a bin's current location by folding its events."""
-    events = load_bin_events(conn, bin_code, tenant_id=tenant_id, corpus_id=corpus_id)
-    return fold_bin_location(bin_code, events)
+    from binkeeper.bin_nesting import effective_bin_location
+
+    return effective_bin_location(
+        conn,
+        bin_code,
+        tenant_id=tenant_id,
+        corpus_id=corpus_id,
+    )
 
 
 def trip_status(
@@ -858,21 +893,44 @@ def bin_belief(
     T3b: corroborating ``location_observation`` rows can refresh confidence, weighted by
     each source's learned reliability (a read-time projection over the whole corpus).
     """
-    events = load_bin_events(conn, bin_code, tenant_id=tenant_id, corpus_id=corpus_id)
-    observations = load_bin_observations(conn, bin_code, tenant_id=tenant_id, corpus_id=corpus_id)
+    from binkeeper.bin_nesting import load_bin_containment
+
+    path = load_bin_containment(
+        conn,
+        tenant_id=tenant_id,
+        corpus_id=corpus_id,
+    ).path_for(bin_code)
+    location_source = path[-1] if path else bin_code
+    events = load_bin_events(conn, location_source, tenant_id=tenant_id, corpus_id=corpus_id)
+    observations = load_bin_observations(
+        conn,
+        location_source,
+        tenant_id=tenant_id,
+        corpus_id=corpus_id,
+    )
     reliabilities = (
         compute_source_reliabilities(conn, tenant_id=tenant_id, corpus_id=corpus_id)
         if observations
         else None
     )
-    return compute_belief(
-        bin_code,
+    belief = compute_belief(
+        location_source,
         events,
         now=now or datetime.now(UTC),
         floor=floor,
         observations=observations,
         source_reliability_by_kind=reliabilities,
     )
+    if not path:
+        return belief
+    location = replace(
+        belief.location,
+        bin_code=bin_code,
+        container_code=path[0],
+        containment_path=path,
+        location_source_bin=location_source,
+    )
+    return replace(belief, bin_code=bin_code, location=location)
 
 
 # --- IO T3b: passive-harvest observation stream -----------------------------

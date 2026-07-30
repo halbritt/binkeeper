@@ -13,6 +13,7 @@ from psycopg import sql
 from psycopg.types.json import Jsonb
 
 from binkeeper.backup import (
+    EVIDENCE_RELATIONS,
     BackupError,
     BackupKey,
     backup_key_from_config,
@@ -22,6 +23,10 @@ from binkeeper.backup import (
 )
 from binkeeper.bin_inventory import record_event
 from binkeeper.blob_vault import FilesystemBlobStore, put_blob
+
+
+def test_backup_protects_physical_containment_evidence() -> None:
+    assert "bin_containment_events" in EVIDENCE_RELATIONS
 
 
 def test_missing_backup_is_explicitly_unready(tmp_path: Path) -> None:

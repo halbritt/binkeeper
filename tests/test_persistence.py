@@ -16,6 +16,7 @@ DATABASE_URL = os.environ.get("BINKEEPER_TEST_DATABASE_URL")
 EVIDENCE_TABLES = (
     "capture_evidence",
     "bin_trip_events",
+    "bin_containment_events",
     "location_observations",
     "bin_presence_events",
     "bin_resting_order_events",

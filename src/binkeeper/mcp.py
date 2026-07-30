@@ -49,6 +49,22 @@ def tool_schemas() -> list[dict[str, Any]]:
                 "additionalProperties": False,
             },
         },
+        {
+            "name": "binkeeper.bin_containment",
+            "description": "Append one owner-attested physical pack or unpack event.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["pack", "unpack"]},
+                    "bin_code": {"type": "string"},
+                    "container_code": {"type": "string"},
+                    "idempotency_key": {"type": "string"},
+                    **scope,
+                },
+                "required": ["action", "bin_code", "container_code", "idempotency_key"],
+                "additionalProperties": False,
+            },
+        },
         *[
             {
                 "name": f"binkeeper.{name}",
@@ -211,6 +227,9 @@ def call_tool(conn: psycopg.Connection, name: str, arguments: dict[str, Any]) ->
         ):
             if not hasattr(namespace, key):
                 setattr(namespace, key, None)
+        namespace.source_label = "mcp"
+    elif command == "bin-containment":
+        namespace.occurred_at = None
         namespace.source_label = "mcp"
     elif command == "bin-search" and not hasattr(namespace, "limit"):
         namespace.limit = 20
