@@ -1819,3 +1819,63 @@ def test_photo_drop_survives_a_vision_timeout(monkeypatch) -> None:
 
     assert resp.status_code == 200
     assert "did not respond within" in resp.text
+
+
+def test_manage_photo_harvests_colocations_with_production_connections(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # BINK-45: the advisory co-location harvest ran on a connection the manage
+    # flow had already closed, and the swallow-and-log lane hid it. This test
+    # uses the REAL connect() (env-pointed at the test DB) precisely so a
+    # closed-connection regression fails here instead of production.
+    import os
+
+    import qrcode
+
+    from binkeeper import blob_vault
+    from binkeeper.bin_register import register_bin
+
+    monkeypatch.setenv("BINKEEPER_DATABASE_URL", os.environ["BINKEEPER_TEST_DATABASE_URL"])
+    register_bin(
+        conn,
+        bin_code="AGR-014",
+        site="alameda-garage",
+        observed_at=datetime(2026, 7, 13, 10, tzinfo=UTC),
+    )
+    store = InMemoryBlobStore()
+    monkeypatch.setattr(blob_vault, "blob_store_from_config", lambda: store)
+    monkeypatch.setattr(blob_vault, "vault_key_from_config", lambda: (b"k" * 32, "test-key"))
+
+    tiles = []
+    for payload in ("LOC-014", "AGR-014"):
+        buf = BytesIO()
+        qrcode.make(payload).save(buf, format="PNG")
+        buf.seek(0)
+        tiles.append(Image.open(buf).convert("RGB"))
+    sheet = Image.new("RGB", (sum(t.width for t in tiles), max(t.height for t in tiles)), "white")
+    x = 0
+    for tile in tiles:
+        sheet.paste(tile, (x, 0))
+        x += tile.width
+    out = BytesIO()
+    sheet.save(out, format="PNG")
+    photo = out.getvalue()
+
+    app = bin_photo_web.create_app(host="127.0.0.1", port=8765, base_path="/bin-photo")
+    with TestClient(app, base_url="http://testserver:8765") as client:
+        response = client.post(
+            "/manage/AGR-014/photo",
+            files={"photo": ("shelf.png", photo, "image/png")},
+            data={"action_id": "aa062bf5-61e0-4f46-b744-b46b1f81a8bb"},
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/bin-photo/manage/AGR-014?notice=photo-added"
+    digest = hashlib.sha256(photo).hexdigest()
+    rows = conn.execute(
+        "SELECT anchor_code, member_code, evidence_ref FROM colocation_observations"
+    ).fetchall()
+    assert rows == [("LOC-014", "AGR-014", f"photo:{digest}")]

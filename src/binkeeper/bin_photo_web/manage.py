@@ -657,13 +657,17 @@ def add_bin_photo(action: PhotoAction, scope: BinActionScope) -> None:
     try:  # advisory: a manage photo may also witness anchor co-locations
         from binkeeper.bin_colocation import harvest_photo_colocations
 
-        harvest_photo_colocations(
-            conn,
-            action.image,
-            evidence_ref=f"photo:{digest}",
-            tenant_id=scope.tenant_id,
-            corpus_id=scope.corpus_id,
-        )
+        # Its own connection, like the drop path's harvest: the capture and
+        # ciphertext above are already committed, and this lane must not reuse
+        # their closed connection (BINK-45) or sink the photo when it fails.
+        with connect() as harvest_conn:
+            harvest_photo_colocations(
+                harvest_conn,
+                action.image,
+                evidence_ref=f"photo:{digest}",
+                tenant_id=scope.tenant_id,
+                corpus_id=scope.corpus_id,
+            )
     except Exception:  # advisory lane: swallow, log, move on
         _LOGGER.warning("BinKeeper co-location harvest failed")
 
