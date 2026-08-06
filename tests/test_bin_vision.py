@@ -358,11 +358,29 @@ def test_gemini_empty_candidates_is_a_vision_error(monkeypatch: pytest.MonkeyPat
         client.analyze("Describe this bin", b"not-a-real-image")
 
 
-def test_default_vision_client_selects_the_configured_backend() -> None:
+def test_default_vision_client_selects_the_configured_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BINKEEPER_OPENROUTER_API_KEY", "synthetic-key")
+    openrouter = default_vision_client("openrouter")
+    assert isinstance(openrouter, OllamaVisionClient)
+    assert openrouter.endpoint == "https://openrouter.ai/api/v1"
+    assert openrouter.api_key == "synthetic-key"
     assert isinstance(default_vision_client("gemini"), GeminiVisionClient)
-    assert isinstance(default_vision_client("local"), OllamaVisionClient)
+    local = default_vision_client("local")
+    assert isinstance(local, OllamaVisionClient)
+    assert local.api_key is None
     with pytest.raises(BinVisionError, match="unsupported vision provider"):
         default_vision_client("mystery")
+
+
+def test_openrouter_provider_without_key_is_a_vision_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("BINKEEPER_OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    with pytest.raises(BinVisionError, match="no OpenRouter API key"):
+        default_vision_client("openrouter")
 
 
 def test_openai_compatible_client_sends_bearer_token_when_keyed(

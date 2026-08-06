@@ -1807,9 +1807,9 @@ def test_photo_drop_survives_a_vision_timeout(monkeypatch) -> None:
         raise TimeoutError("timed out")
 
     monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
-    # A synthetic key keeps the ADR 0004 default (gemini) provider on the
+    # A synthetic key keeps the ADR 0005 default (openrouter) provider on the
     # transport path so the faked timeout, not a missing key, is what degrades.
-    monkeypatch.setenv("BINKEEPER_GEMINI_API_KEY", "synthetic-key")
+    monkeypatch.setenv("BINKEEPER_OPENROUTER_API_KEY", "synthetic-key")
     resp = _client().post(
         "/",
         files={"photos": ("bin.jpg", _ONE_PIXEL_JPEG, "image/jpeg")},

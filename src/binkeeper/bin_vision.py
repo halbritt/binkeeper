@@ -5,11 +5,13 @@ PROVISIONAL bin-label proposal. Vision output is advisory: it never mutates
 inventory, never writes location, and the owner confirms before anything is
 captured or printed.
 
-Two backends implement the same ``VisionClient`` seam (ADR 0004): the Gemini
-API (default; the owner approved exporting the downscaled inference JPEG and
-prompt text, nothing else) and the local Qwen3-VL model served on peecee
-(Ollama, OpenAI-compatible), which remains the fallback and rollback target.
-Each photo is analyzed in its own call and the results are merged.
+Three backends implement the same ``VisionClient`` seam (ADR 0004 authorized
+the cloud export scope; ADR 0005 selected the default by benchmark): hosted
+``qwen/qwen3-vl-32b-instruct`` via OpenRouter (default), the Gemini API
+(first fallback), and the local Qwen3-VL model on peecee (Ollama,
+OpenAI-compatible), the no-cloud rollback. Cloud backends receive only the
+downscaled inference JPEG and prompt text. Each photo is analyzed in its own
+call and the results are merged.
 """
 
 from __future__ import annotations
@@ -49,7 +51,13 @@ DEFAULT_VISION_MAX_EDGE: Final[int] = int(os.environ.get("BINKEEPER_BIN_VISION_M
 DEFAULT_VISION_JPEG_QUALITY: Final[int] = int(
     os.environ.get("BINKEEPER_BIN_VISION_JPEG_QUALITY", "85")
 )
-DEFAULT_VISION_PROVIDER: Final[str] = os.environ.get("BINKEEPER_BIN_VISION_PROVIDER", "gemini")
+DEFAULT_VISION_PROVIDER: Final[str] = os.environ.get("BINKEEPER_BIN_VISION_PROVIDER", "openrouter")
+DEFAULT_OPENROUTER_ENDPOINT: Final[str] = os.environ.get(
+    "BINKEEPER_BIN_VISION_OPENROUTER_ENDPOINT", "https://openrouter.ai/api/v1"
+)
+DEFAULT_OPENROUTER_MODEL: Final[str] = os.environ.get(
+    "BINKEEPER_BIN_VISION_OPENROUTER_MODEL", "qwen/qwen3-vl-32b-instruct"
+)
 DEFAULT_GEMINI_ENDPOINT: Final[str] = os.environ.get(
     "BINKEEPER_BIN_VISION_GEMINI_ENDPOINT",
     "https://generativelanguage.googleapis.com/v1beta",
@@ -345,13 +353,27 @@ class GeminiVisionClient:
 
 
 def default_vision_client(provider: str | None = None) -> VisionClient:
-    """Build the configured vision backend (ADR 0004): gemini or local."""
+    """Build the configured vision backend (ADR 0005): openrouter, gemini, or local."""
     selected = (provider or DEFAULT_VISION_PROVIDER).strip().lower()
+    if selected == "openrouter":
+        key = os.environ.get("BINKEEPER_OPENROUTER_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
+        if not key or not key.strip():
+            raise BinVisionError(
+                "no OpenRouter API key configured; set BINKEEPER_OPENROUTER_API_KEY (or "
+                "OPENROUTER_API_KEY), or set BINKEEPER_BIN_VISION_PROVIDER=gemini|local"
+            )
+        return OllamaVisionClient(
+            endpoint=DEFAULT_OPENROUTER_ENDPOINT,
+            model=DEFAULT_OPENROUTER_MODEL,
+            api_key=key.strip(),
+        )
     if selected == "gemini":
         return GeminiVisionClient()
     if selected == "local":
         return OllamaVisionClient()
-    raise BinVisionError(f"unsupported vision provider {selected!r} (use 'gemini' or 'local')")
+    raise BinVisionError(
+        f"unsupported vision provider {selected!r} (use 'openrouter', 'gemini', or 'local')"
+    )
 
 
 def propose_bin_label(
