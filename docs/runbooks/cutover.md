@@ -1,6 +1,12 @@
 # One-writer cutover and rollback runbook
 
-This is the execution procedure for BINK-11. It does not itself authorize a
+Status: executed 2026-07-18 in the owner-approved `BINK-11` window (receipt
+below). The sections that follow are the preserved execution record, not a
+standing instruction: the Engram rollback path they reference expired with the
+`BINK-13` retirement, and any future writer transition requires a new
+owner-accepted work item.
+
+This is the execution procedure for BINK-11. It did not itself authorize a
 production cutover.
 
 ## Mandatory gate

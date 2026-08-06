@@ -23,9 +23,13 @@ The file contract is:
 
 The export is inert input: BinKeeper cannot write back through it. Missing,
 unversioned, or malformed input never becomes an empty success. An unconfigured
-adapter returns `source_status: unavailable`; malformed configured files raise
-a typed adapter error. Approved-source and privacy-tier policy is applied again
-inside BinKeeper before any append-only liveness evidence is recorded.
+adapter reports `status: unavailable`, which the harvest result surfaces as
+`source_status: unavailable`; malformed configured files raise a typed adapter
+error. Approved-source and privacy-tier policy is applied again inside
+BinKeeper before any append-only liveness evidence is recorded. No deployment
+surface configures this file today: the adapter is constructed
+programmatically, the harvest entry point is not wired into the CLI, MCP, or
+service, and the unavailable default is production behavior.
 
 This contract authorizes no transcript export job, network access, model,
 embedding, semantic index, or cloud service. A later deployment item must name

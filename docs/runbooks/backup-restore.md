@@ -25,7 +25,10 @@ after their ciphertext hashes match.
    copy of both keys in the owner's offline key custody; Git and backup
    artifacts are not key custody.
 3. Create `/var/lib/binkeeper/blobs` and `/var/lib/binkeeper/backups` with owner
-   mode 0700. Set the exact paths in `/etc/binkeeper/binkeeper.env`.
+   mode 0700. Set the backup path as `BINKEEPER_BACKUP_ROOT` in
+   `/etc/binkeeper/binkeeper.env`; the blob path is the `filesystem_root`
+   inside `/etc/binkeeper/blob-vault.json` (the environment file only points
+   at that file).
 
 Stop if the source database was not created from `template0`, the two key
 references are missing, the keys are equal, the blob root contains a
@@ -69,6 +72,11 @@ Run it once in the foreground before enabling its timer:
 sudo -u halbritt /opt/binkeeper/venv/bin/binkeeper-restore-drill
 ```
 
+Only then install and enable `binkeeper-restore-smoke.timer`. Inspect failures
+with `systemctl status binkeeper-restore-smoke.service` and
+`journalctl -u binkeeper-restore-smoke.service` (the unit is named
+`restore-smoke`; the binary is `binkeeper-restore-drill`).
+
 Stop and keep production authority unchanged after any migration, role,
 extension, count, stable-row, payload, blob, fold, passport, trip, or route
 mismatch. If cleanup fails, the command fails visibly and prints the exact
@@ -77,9 +85,15 @@ single database. Never use a wildcard or a broad database cleanup command.
 
 ## Recovery ownership
 
-Before cutover, Engram remains recovery owner and BinKeeper artifacts are
-rehearsal evidence. After an accepted BINK-11 cutover, the executing operator
-owns backup failure response: make `/readyz` unavailable, stop BinKeeper writes,
-preserve the newest artifacts and journals, and either restore BinKeeper from a
-verified artifact or invoke the documented Engram-writer rollback window. Never
+The `BINK-11` cutover completed on 2026-07-18; BinKeeper is the live authority
+and its artifacts are the production recovery evidence. On backup failure the
+executing operator owns the response: make `/readyz` unavailable, stop
+BinKeeper writes (set `BINKEEPER_WRITES_ENABLED=0` in
+`/etc/binkeeper/binkeeper.env` and restart `binkeeper.service`; the nightly
+`binkeeper-ocr-harvest.timer` lane inherits the same gate from that file, or
+stop it explicitly with `systemctl stop binkeeper-ocr-harvest.timer`),
+preserve the newest artifacts and journals, and restore BinKeeper from a
+verified artifact. The Engram-writer rollback window closed with the `BINK-13`
+retirement (2026-07-18); the Engram writer must not be re-enabled, and any
+further authority change requires a new owner-accepted work item. Never
 rotate/destroy keys or delete Engram evidence during incident recovery.

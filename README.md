@@ -12,7 +12,13 @@ The owner-approved `BINK-11` one-writer cutover completed on 2026-07-18;
 BinKeeper is now the live physical-inventory authority. Engram retains frozen
 historical evidence and migrations, but its runtime, compatibility names, and
 direct inventory writer were retired under `BINK-13` after the accepted
-consumer and rollback-window gates.
+consumer and rollback-window gates. The advisory vision lane with its
+benchmark-selected cloud default (ADR 0005) and the nightly local-only
+peripheral-OCR true-up timer (`binkeeper-ocr-harvest.timer`) are also
+deployed.
+
+The whole-system design is described in
+[docs/architecture.md](docs/architecture.md).
 
 The extraction plan is in
 [docs/extraction-analysis.md](docs/extraction-analysis.md). Work is tracked in
@@ -37,6 +43,10 @@ BinKeeper-owned key while retaining both source and target manifests.
   it. One standing owner-approved export exists ([ADR 0004](docs/adr/0004-cloud-vision-backend.md)):
   the advisory vision lane may send the downscaled inference JPEG and its
   prompt text to the configured cloud vision provider. Nothing else leaves.
+  The default provider inside that unchanged scope is benchmark-selected in
+  [ADR 0005](docs/adr/0005-benchmarked-vision-default.md);
+  [ADR 0006](docs/adr/0006-label-drift-review-queue.md) (accepted, not yet
+  implemented) will add a nightly ensemble upstream under the same scope.
 - Raw captures, moves, observations, receipts, and owner decisions are
   append-only.
 - Current location and other current state are folds over evidence, not mutable
@@ -61,9 +71,13 @@ make migration-test
 make package-test
 ```
 
-The standalone entry points are `binkeeper` and `binkeeper-mcp-stdio`. They
-require an explicit local `BINKEEPER_DATABASE_URL`; neither imports the Engram
-package or reaches its database. The web app factories are
+The primary entry points are `binkeeper` and `binkeeper-mcp-stdio`; both
+require an explicit local `BINKEEPER_DATABASE_URL`, and neither imports the
+Engram package or reaches its database. The package also installs
+`binkeeper-serve` (same database requirement), `binkeeper-migrate`,
+`binkeeper-transfer` ([docs/transfer.md](docs/transfer.md)),
+`binkeeper-backup`, and `binkeeper-restore-drill`
+([docs/runbooks/backup-restore.md](docs/runbooks/backup-restore.md)). The web app factories are
 `binkeeper.bin_catalog_web:create_app` and
 `binkeeper.bin_photo_web:create_app`. The composed owner service is
 `binkeeper-serve`, frozen to `127.0.0.1:8766` and documented in
@@ -89,6 +103,14 @@ before packing. A contained bin must be unpacked before it can be moved
 directly. The owner management page exposes the same workflow under
 **Bin inside a bin**. [ADR 0003](docs/adr/0003-physical-bin-containment.md)
 records the evidence and projection contract.
+
+A nightly peripheral-OCR true-up (`binkeeper bin-ocr-harvest --local-only`,
+deployed as `binkeeper-ocr-harvest.timer` from `deploy/systemd/`) re-reads
+geolocated vault photos with the local model only and records corroborative
+`peripheral_ocr` location observations. It is idempotent, never relocates a
+bin, and fails closed: exit 3 means no geofence site is configured, exit 4
+means photos were read but no code was legible anywhere. See
+[docs/deployment.md](docs/deployment.md).
 
 `make check` runs the full verification sequence; the editable install is a
 prerequisite of each target. PostgreSQL acceptance tests require a disposable

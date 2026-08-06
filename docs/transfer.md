@@ -1,5 +1,9 @@
 # Evidence transfer
 
+Status: the owner-approved `BINK-11` authority cutover completed on
+2026-07-18 using this flow; it remains the tool for disposable-database
+rehearsals and any future owner-approved evidence move.
+
 `binkeeper-transfer` moves only the accepted BinKeeper subset. Export opens an
 explicit source URL, marks the transaction read-only before inspecting the
 pinned source schema, and writes a new mode-0600 snapshot. It refuses to

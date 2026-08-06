@@ -1,17 +1,32 @@
 # Project instructions
 
-BinKeeper is a local-first physical inventory system. The repository is being
-extracted from `~/git/engram`; read `README.md` and
+BinKeeper is a local-first physical inventory system. The repository was
+extracted from `~/git/engram` (extraction complete; BinKeeper is the
+standalone authority); read `README.md`, `docs/architecture.md`, and
 `docs/extraction-analysis.md` before changing code or data contracts.
 
 ## Current status
 
 The owner-approved `BINK-11` cutover completed on 2026-07-18. BinKeeper is the
 sole runtime and data authority for new physical-inventory evidence. Engram's
-historical rows remain immutable provenance and its legacy names are temporary
-compatibility redirects or subprocess calls into BinKeeper. Do not re-enable
-the Engram writer, start a second writer, or copy live owner data into this Git
+historical rows remain immutable provenance; its compatibility names, shims,
+and embedded BinKeeper runtime were retired under `BINK-13` on 2026-07-18, so
+legacy Engram calls are explicitly unavailable, not redirected (see
+`docs/runbooks/compatibility-retirement.md`). Do not re-enable the Engram
+writer, start a second writer, or copy live owner data into this Git
 repository.
+
+Since 2026-08-06 the interactive advisory-vision default is the hosted
+OpenRouter `qwen/qwen3-vl-32b-instruct` backend (ADR 0005), selected by
+`BINKEEPER_BIN_VISION_PROVIDER` (`openrouter` default; `gemini` and `local`
+remain the fallback and the no-cloud rollback). A nightly local-only
+peripheral-OCR location true-up is deployed as
+`binkeeper-ocr-harvest.{service,timer}` (`deploy/systemd/`, 03:30): it runs
+`binkeeper bin-ocr-harvest --local-only` with the local peecee `qwen3-vl:32b`
+pinned by an environment pin file, and fails closed (exit 3 = no geofence site
+configured, exit 4 = photos read but zero codes seen). ADR 0006 (accepted
+2026-08-06) records the async label-drift review queue; it is designed but not
+yet implemented (`BINK-42`..`BINK-44`).
 
 ## Architecture constraints
 
@@ -21,9 +36,11 @@ repository.
 - Preserve provenance, confidence, idempotency keys, and audit history.
 - Keep storage, models, printer access, and owner data local. Do not add hosted
   services, telemetry, cloud APIs, or external persistence without explicit
-  owner approval. The one accepted exception is ADR 0004: the advisory vision
-  lane may call the configured cloud vision provider with the downscaled
-  inference image and prompt text only.
+  owner approval. The one accepted export exception is ADR 0004: the advisory
+  vision lane may call the configured cloud vision provider with the
+  downscaled inference image and prompt text only. ADR 0005 selects the
+  current default provider inside that unchanged scope; accepted ADR 0006 will
+  add a nightly ensemble upstream under the same scope once implemented.
 - Tests and fixtures must be deterministic and synthetic. Never commit real bin
   contents, photos, coordinates, credentials, or database dumps.
 - Tailnet-fronted HTTPS is the owner access path. Verify fronted behavior before

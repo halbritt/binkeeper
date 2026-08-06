@@ -24,6 +24,13 @@ opened its writer. `BINK-12` consumer probes and the full rollback-window
 observation then passed; `BINK-13` removed Engram's compatibility names and
 embedded runtime. Engram now retains immutable provenance and migrations only.
 
+Post-cutover architecture changes are recorded in `docs/adr/` (0002 blob-key
+transition, 0003 physical containment, 0004/0005 the cloud vision lane and its
+benchmarked OpenRouter default, 0006 the async label-drift review queue) and
+the current whole-system description lives in
+[docs/architecture.md](architecture.md); this document is the preserved
+extraction record.
+
 ## Decision summary
 
 BinKeeper has earned its own repository and release boundary. It has a distinct
@@ -71,12 +78,12 @@ The baseline proves the exercised Engram implementation, not the extracted
 system. Each extraction slice must preserve or deliberately replace the
 relevant tests.
 
-## Current ownership map
+## Ownership map at the source baseline (Engram `a4b2b48`, 2026-07-18)
 
 ### BinKeeper-owned behavior inside Engram
 
-The main domain modules are `src/engram/bin_*.py`,
-`src/engram/bin_catalog_web/`, and `src/engram/bin_photo_web/`. They cover:
+At the baseline, the main domain modules were `src/engram/bin_*.py`,
+`src/engram/bin_catalog_web/`, and `src/engram/bin_photo_web/`. They covered:
 
 - capture and registration;
 - the append-only move ledger and trip checksum;
@@ -86,7 +93,7 @@ The main domain modules are `src/engram/bin_*.py`,
 - encrypted photo storage, local vision, catalog, and existing-bin management;
 - bin passports, routing, placement receipts, and feedback folds.
 
-### Engram dependencies that prevent an independent move
+### Engram dependencies that prevented an independent move
 
 | Engram dependency | Why BinKeeper uses it | Required extraction treatment |
 |---|---|---|
@@ -101,7 +108,7 @@ The main domain modules are `src/engram/bin_*.py`,
 | Engram operator web and systemd unit | `/bins/` and `/bin-photo/` hosting | Add a separate BinKeeper process and tailnet-fronted route only after recovery and compatibility gates pass. |
 | Engram backup/restore | database and blob durability | Add BinKeeper backup, restore-smoke, age checks, and runbooks before authority changes. |
 
-### BinKeeper-owned tables currently in the Engram database
+### BinKeeper-owned tables then in the Engram database
 
 - `bin_trip_events`
 - `location_observation`
@@ -149,6 +156,10 @@ local PG  local   local CUPS
 database  blobs   and vision
 ```
 
+Superseded in part by ADR 0004/0005 (2026-08-06): the advisory vision lane may
+now call a configured cloud provider with the downscaled inference JPEG and
+prompt text only; everything else in the topology remains local.
+
 Use a dedicated `binkeeper` database and roles on the existing local PostgreSQL
 cluster first. A different host, container stack, or network service is a later
 decision and needs a concrete isolation or deployment driver.
@@ -159,10 +170,10 @@ After cutover, BinKeeper owns all new physical-inventory evidence and derived
 state. Engram may consume a narrow, read-only summary or evidence reference, but
 must not write BinKeeper tables or mirror them as current truth.
 
-Praxis already models BinKeeper as a physical-truth witness. Its current design
-uses `engram.bin_where` and `engram.trip_scan` names and lives under a deferred
-module. Update that adapter to the standalone interface before the Engram shims
-are removed.
+Praxis models BinKeeper as a physical-truth witness. Its adapter was moved
+from the legacy `engram.bin_where`/`engram.trip_scan` names to the standalone
+witness contract under `BINK-12`, before the Engram shims were removed under
+`BINK-13`.
 
 ## Preservation contract
 
@@ -270,17 +281,21 @@ itself accept a cutover.
 - The standalone endpoint is frozen to loopback `127.0.0.1:8766` and tailnet
   HTTPS `https://proximal.tail0ecc2e.ts.net:8766`; Engram retains its unrelated
   operator service on `:8765` with no inventory routes.
-- The four current bin-linked blobs will be re-encrypted under a
-  BinKeeper-owned key. Migration and backup/restore must verify plaintext
-  hashes before authority moves.
-- The owner or executing operator may restore the Engram writer during the
-  verification window after a manifest mismatch, incorrect protected
-  projection, failed physical-action path, or failed backup/restore check.
-- Engram search currently provides contents discovery. The standalone minimum
-  is exact and lexical search; semantic search should be added only if owner
-  queries demonstrate a need.
-- Transcript liveness reads Engram captures and segments. It should remain
-  optional until an adapter contract avoids shared-table reads.
+- The four bin-linked blobs were re-encrypted under a BinKeeper-owned key
+  (ADR 0002); plaintext hashes were verified during `BINK-11` before authority
+  moved.
+- During the `BINK-11` verification window the owner or executing operator
+  could restore the Engram writer after a manifest mismatch, incorrect
+  protected projection, failed physical-action path, or failed backup/restore
+  check. That window closed with `BINK-13`; any further writer transition
+  requires a new owner-accepted decision.
+- BinKeeper owns exact and lexical inventory search over its own evidence
+  (`BINK-8`, `binkeeper bin-search`); semantic search should be added only if
+  owner queries demonstrate a need.
+- Transcript liveness is optional and accepts only the versioned inert local
+  export (`binkeeper.liveness-export.v1`, see
+  [docs/liveness-adapter.md](liveness-adapter.md)); the former shared-table
+  read of Engram captures and segments was retired with `BINK-8`.
 - The data set is currently small, but data-integrity risk is high. Small row
   counts make a manifest comparison cheap; they do not justify skipping it.
 

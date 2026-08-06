@@ -39,14 +39,16 @@ trait-heavy multiword labels ("black USB-C to USB-A cable 1m") — routed at
 - **Passport enrichment is the dominant lever.** Filling accepts/examples/
   siblings took every clear-match item over the floor with the correct bin and
   left exactly the right items pending. Enrichment is what the swipe-deck
-  decision loop (BINK-26) produces as a byproduct.
+  decision loop (BINK-26, since shipped) produces as a byproduct — confirmed:
+  deck decisions fold into passport accepts/excludes.
 - **Label normalization is not worth building.** Stripping trait tokens gave
   no gain (config 3's zero deck is a borderline-floor artifact, not a
   penalty); the overlap dilution predicted for long labels is real but small
   next to the missing-vocabulary problem.
 - **Cross-site matches are invisible by design.** EV-charging items routed at
-  the garage cannot reach AST-001 (hard `wrong_site` filter). A later wave
-  surface could show "belongs elsewhere" hints from the filtered candidates.
+  the garage cannot reach AST-001 (hard `wrong_site` filter). The wave surface
+  (BINK-27) has since shipped without this; surfacing "belongs elsewhere"
+  hints from the `wrong_site`-filtered candidates remains an open idea.
 
 ## Recommendation for BINK-25..28
 
@@ -55,3 +57,7 @@ the feedback loop that enriches passports from swipe decisions, since
 vocabulary — not scoring — is the bottleneck. Quorum-birth clustering
 (BINK-28) must cluster on item-to-item token overlap, never on router scores:
 vague labels share a near-constant structural score and would false-cluster.
+
+Status (2026-08-06): adopted in full — recorded stash runs (BINK-25), the
+swipe deck and its passport-enrichment fold (BINK-26), and the wave surface
+(BINK-27) shipped on this recommendation.
