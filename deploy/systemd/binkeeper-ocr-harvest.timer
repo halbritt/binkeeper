@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly BinKeeper peripheral-OCR location true-up
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=binkeeper-ocr-harvest.service
+
+[Install]
+WantedBy=timers.target

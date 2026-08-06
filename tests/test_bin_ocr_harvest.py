@@ -13,12 +13,15 @@ import json
 from datetime import datetime
 
 import psycopg
+import pytest
 from psycopg.types.json import Jsonb
 
+from binkeeper import bin_ocr_harvest, bin_vision
 from binkeeper.bin_harvest import SiteAnchor
 from binkeeper.bin_inventory import bin_where, load_bin_observations, record_event
 from binkeeper.bin_ocr_harvest import harvest_peripheral_ocr
 from binkeeper.bin_vision import read_visible_bin_codes
+from binkeeper.cli import build_parser, execute, harvest_exit_code
 
 # Two well-separated sites (~1.1 km apart) — a fix at either centre is unambiguous.
 SEPARATED = {
@@ -255,6 +258,142 @@ def test_ocr_max_photos_caps_the_pass(conn: psycopg.Connection):
         conn, sites=SEPARATED, read_codes=_reader("AGR-001"), open_photo=_opener(), max_photos=2
     )
     assert summary.photos_read == 2
+
+
+# --- CLI: the bin-ocr-harvest subcommand (the nightly true-up entry point) ---
+
+
+def test_cli_ocr_harvest_refuses_before_reading_when_writer_authority_is_closed(
+    conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("BINKEEPER_WRITES_ENABLED", raising=False)
+    _insert_bin_capture(
+        conn, external_id="cap-cli-frozen", bin_code="AGR-001", lat=37.0, lon=-122.0
+    )
+
+    with pytest.raises(RuntimeError, match="writer is frozen"):
+        execute(build_parser().parse_args(["bin-ocr-harvest"]), conn)
+
+    assert load_bin_observations(conn, "AGR-001") == []
+
+
+def _wire_cli_defaults(monkeypatch: pytest.MonkeyPatch, *codes: str) -> None:
+    """Point the CLI's default harvest wiring at stubs: no model, no vault, no sites file."""
+    monkeypatch.setattr(bin_ocr_harvest, "load_sites", lambda: SEPARATED)
+    monkeypatch.setattr(bin_ocr_harvest, "_default_code_reader", lambda: _reader(*codes))
+    monkeypatch.setattr(bin_ocr_harvest, "_default_photo_opener", lambda: _opener())
+
+
+def test_cli_ocr_harvest_records_and_prints_summary(
+    conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BINKEEPER_WRITES_ENABLED", "1")
+    _wire_cli_defaults(monkeypatch, "AGR-001")
+    _insert_bin_capture(conn, external_id="cap-cli", bin_code="AGR-001", lat=37.0, lon=-122.0)
+
+    payload = execute(build_parser().parse_args(["bin-ocr-harvest"]), conn)
+
+    assert payload["photos_read"] == 1
+    assert payload["recorded"] == 1
+    observations = load_bin_observations(conn, "AGR-001")
+    assert len(observations) == 1
+    assert observations[0].source_kind == "peripheral_ocr"
+
+
+def test_cli_ocr_harvest_max_photos_flag_caps_the_pass(
+    conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BINKEEPER_WRITES_ENABLED", "1")
+    _wire_cli_defaults(monkeypatch, "AGR-001")
+    for i in range(3):
+        _insert_bin_capture(
+            conn, external_id=f"cap-cli-{i}", bin_code="AGR-001", lat=37.0, lon=-122.0
+        )
+
+    payload = execute(build_parser().parse_args(["bin-ocr-harvest", "--max-photos", "2"]), conn)
+
+    assert payload["photos_read"] == 2
+
+
+def test_cli_ocr_harvest_rejects_negative_max_photos() -> None:
+    # A negative cap would silently invert "0 = no cap" into "read nothing, exit green".
+    with pytest.raises(SystemExit, match="2"):
+        build_parser().parse_args(["bin-ocr-harvest", "--max-photos", "-1"])
+
+
+def test_cli_ocr_harvest_default_cap_comes_from_the_env_tunable() -> None:
+    args = build_parser().parse_args(["bin-ocr-harvest"])
+    assert args.max_photos == bin_ocr_harvest.BIN_OCR_MAX_PHOTOS
+
+
+def test_cli_ocr_harvest_local_only_refuses_a_cloud_provider(
+    conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The nightly unit passes --local-only: a partially applied env pin must fail the
+    # run before a single photo is read, never silently export photos to a cloud model.
+    monkeypatch.setenv("BINKEEPER_WRITES_ENABLED", "1")
+    monkeypatch.setattr(bin_vision, "DEFAULT_VISION_PROVIDER", "openrouter")
+    _insert_bin_capture(conn, external_id="cap-cli-cloud", bin_code="AGR-001", lat=37.0, lon=-122.0)
+
+    with pytest.raises(ValueError, match="local"):
+        execute(build_parser().parse_args(["bin-ocr-harvest", "--local-only"]), conn)
+
+    assert load_bin_observations(conn, "AGR-001") == []
+
+
+def test_cli_ocr_harvest_local_only_allows_the_local_provider(
+    conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BINKEEPER_WRITES_ENABLED", "1")
+    monkeypatch.setattr(bin_vision, "DEFAULT_VISION_PROVIDER", "local")
+    _wire_cli_defaults(monkeypatch, "AGR-001")
+    _insert_bin_capture(conn, external_id="cap-cli-local", bin_code="AGR-001", lat=37.0, lon=-122.0)
+
+    payload = execute(build_parser().parse_args(["bin-ocr-harvest", "--local-only"]), conn)
+
+    assert payload["recorded"] == 1
+
+
+def test_cli_ocr_harvest_exit_code_flags_an_unconfigured_geofence() -> None:
+    # sites_configured == 0 means no photo can ever resolve: misconfiguration, not a
+    # quiet night. The nightly unit must go red, not report success forever.
+    assert harvest_exit_code({"sites_configured": 0, "photos_read": 0, "codes_matched": 0}) == 3
+
+
+def test_cli_ocr_harvest_exit_code_flags_a_backend_that_reads_no_codes() -> None:
+    # Photos were fetched but not one code came back (known or unknown): the usual
+    # cause is a dead/unpulled vision model, which read_visible_bin_codes swallows.
+    payload = {
+        "sites_configured": 2,
+        "photos_read": 3,
+        "codes_matched": 0,
+        "unknown_codes_dropped": 0,
+    }
+    assert harvest_exit_code(payload) == 4
+
+
+def test_cli_ocr_harvest_exit_code_is_zero_for_ordinary_passes() -> None:
+    quiet_night = {
+        "sites_configured": 2,
+        "photos_read": 0,
+        "codes_matched": 0,
+        "unknown_codes_dropped": 0,
+    }
+    assert harvest_exit_code(quiet_night) == 0
+    misreads_only = {
+        "sites_configured": 2,
+        "photos_read": 2,
+        "codes_matched": 0,
+        "unknown_codes_dropped": 1,
+    }
+    assert harvest_exit_code(misreads_only) == 0
+    productive = {
+        "sites_configured": 2,
+        "photos_read": 2,
+        "codes_matched": 3,
+        "unknown_codes_dropped": 0,
+    }
+    assert harvest_exit_code(productive) == 0
 
 
 def test_ocr_summary_json_is_stable(conn: psycopg.Connection):

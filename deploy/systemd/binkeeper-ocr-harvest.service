@@ -1,0 +1,40 @@
+[Unit]
+Description=Nightly BinKeeper peripheral-OCR location true-up (local model)
+ConditionPathExists=/etc/binkeeper/blob-vault.json
+Wants=network-online.target
+After=postgresql.service network-online.target
+
+[Service]
+Type=oneshot
+User=halbritt
+Group=halbritt
+# The pin file is listed second: systemd reads EnvironmentFile= entries in
+# order and the later setting wins, so the lane cannot inherit the interactive
+# service's cloud provider selection (ADR 0005). A missing pin file fails the
+# start rather than silently running the lane against a cloud backend.
+EnvironmentFile=/etc/binkeeper/binkeeper.env
+EnvironmentFile=/etc/binkeeper/binkeeper-ocr-harvest.env
+# --local-only makes the no-export guarantee fail closed: a partially applied
+# pin file aborts the run instead of silently exporting photos to the cloud
+# provider inherited from binkeeper.env. The harvest itself runs autocommit,
+# so a timeout or crash keeps the observations recorded so far.
+ExecStart=/opt/binkeeper/venv/bin/binkeeper bin-ocr-harvest --local-only
+# Every geolocated photo is re-OCR'd each pass (~20-95 s per photo on the
+# local 32B plus ~1 min cold load), so the bound grows with the vault.
+TimeoutStartSec=4h
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=binkeeper-ocr-harvest

@@ -19,6 +19,7 @@ def test_cli_help_names_standalone_commands(capsys: pytest.CaptureFixture[str]) 
     assert "bin-passport" in help_text
     assert "bin-search" in help_text
     assert "bin-placement-decision" in help_text
+    assert "bin-ocr-harvest" in help_text
     assert "engram" not in help_text.lower()
 
 

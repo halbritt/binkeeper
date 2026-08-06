@@ -55,6 +55,26 @@ no older than `BINKEEPER_BACKUP_MAX_AGE_SECONDS`. It returns HTTP 503 with an
 explicit reason when either dependency is unavailable. A proxy must never turn
 that result into a stale or cross-database read or write.
 
+## Nightly peripheral-OCR true-up
+
+`binkeeper-ocr-harvest.{service,timer}` runs `binkeeper bin-ocr-harvest
+--local-only` nightly at 03:30. The lane OCRs every geolocated bin photo with
+the local model and records corroborative `peripheral_ocr` observations; it is
+idempotent, never relocates a bin, and exports nothing (ADR 0004/0005 are not
+implicated). The unit layers `/etc/binkeeper/binkeeper-ocr-harvest.env` after
+the service environment file: the pin selects the `local` provider, the peecee
+endpoint and model, and the owner-local geofence file
+(`~/.config/binkeeper/sites.json`, surveyed anchors, never in git). Fail-closed
+properties: `--local-only` aborts if the provider pin is missing or partial
+(exit before any photo is read); exit 3 flags an unconfigured geofence; exit 4
+flags a pass in which photos were read but no code was seen anywhere (the
+usual sign of a dead or unpulled vision model). The pass runs autocommit so a
+timeout or crash keeps the observations recorded so far. Known limitation: the
+pass re-OCRs every eligible photo (dedupe is per observation, not per photo),
+so wall-clock grows with the vault — revisit before the vault approaches the
+unit's 4 h `TimeoutStartSec`. Rollback: `systemctl disable --now
+binkeeper-ocr-harvest.timer`.
+
 The reviewed backup and restore-smoke units are timer-driven templates, not an
 authorization to install or enable them. Their key material belongs only in the
 owner-local mode-0600 vault configuration. See

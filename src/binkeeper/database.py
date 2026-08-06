@@ -12,13 +12,15 @@ class ServingRoleUnavailableError(RuntimeError):
     """The process cannot assume BinKeeper's read-only serving role."""
 
 
-def connect(*, role: Literal["owner", "serving"] = "owner") -> psycopg.Connection:
+def connect(
+    *, role: Literal["owner", "serving"] = "owner", autocommit: bool = False
+) -> psycopg.Connection:
     database_url = os.environ.get("BINKEEPER_DATABASE_URL")
     if not database_url:
         if role == "serving":
             raise ServingRoleUnavailableError("BINKEEPER_DATABASE_URL is required")
         raise RuntimeError("BINKEEPER_DATABASE_URL is required")
-    conn = psycopg.connect(database_url)
+    conn = psycopg.connect(database_url, autocommit=autocommit)
     if role == "serving":
         try:
             conn.execute("SET ROLE binkeeper_serving")

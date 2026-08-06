@@ -14,6 +14,7 @@ from binkeeper.bin_anchor import print_anchor_label
 from binkeeper.bin_colocation import bin_containment
 from binkeeper.bin_inventory import arrive_all, bin_belief, bin_where, record_event, trip_status
 from binkeeper.bin_nesting import BinContainmentAppend, record_bin_containment
+from binkeeper.bin_ocr_harvest import BIN_OCR_MAX_PHOTOS, harvest_peripheral_ocr
 from binkeeper.bin_passport import bin_passport
 from binkeeper.bin_placement import PlacementDecisionAppend, record_placement_decision
 from binkeeper.bin_route import bin_route
@@ -140,12 +141,35 @@ def build_parser() -> argparse.ArgumentParser:
         "bin-virtual-list", help="list virtual bins with their computed members"
     )
     _scope(vlist)
+    harvest = subparsers.add_parser(
+        "bin-ocr-harvest",
+        help="OCR bin labels in stored geolocated photos and record corroborations",
+    )
+    harvest.add_argument(
+        "--max-photos",
+        type=_nonnegative_int,
+        default=BIN_OCR_MAX_PHOTOS,
+        help="cap the photos OCR'd this pass (0 = no cap)",
+    )
+    harvest.add_argument(
+        "--local-only",
+        action="store_true",
+        help="refuse to run unless the configured vision provider is 'local'",
+    )
+    _scope(harvest)
     return parser
 
 
 def _scope(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--tenant", default="personal")
     parser.add_argument("--corpus", default="personal")
+
+
+def _nonnegative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError(f"must be >= 0, got {value}")
+    return parsed
 
 
 def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any]:
@@ -156,6 +180,7 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
         "bin-stash-run",
         "bin-anchor-label",
         "bin-virtual-define",
+        "bin-ocr-harvest",
     }:
         require_writer_authority()
     common = {"tenant_id": args.tenant, "corpus_id": args.corpus}
@@ -274,6 +299,17 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
         return {"name": args.name.strip().lower(), "already_existed": not appended}
     if args.command == "bin-virtual-list":
         return {"virtual_bins": [bin.to_json() for bin in list_virtual_bins(conn, **common)]}
+    if args.command == "bin-ocr-harvest":
+        if args.local_only:
+            from binkeeper import bin_vision
+
+            if bin_vision.DEFAULT_VISION_PROVIDER != "local":
+                raise ValueError(
+                    "bin-ocr-harvest --local-only refuses provider "
+                    f"{bin_vision.DEFAULT_VISION_PROVIDER!r}; "
+                    "set BINKEEPER_BIN_VISION_PROVIDER=local"
+                )
+        return harvest_peripheral_ocr(conn, max_photos=args.max_photos, **common).to_json()
     raise ValueError(f"unsupported command {args.command!r}")
 
 
@@ -291,6 +327,21 @@ def _datetime(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
 
 
+def harvest_exit_code(payload: dict[str, Any]) -> int:
+    """Exit status for one bin-ocr-harvest pass, so the nightly timer can go red.
+
+    3: no geofence site is configured — nothing can ever resolve (misconfiguration).
+    4: photos were read but not one code was seen, known or unknown — the usual cause
+       is a dead or unpulled vision model, which the best-effort reader swallows.
+    """
+    if not payload.get("sites_configured"):
+        return 3
+    codes_seen = payload.get("codes_matched", 0) + payload.get("unknown_codes_dropped", 0)
+    if payload.get("photos_read") and not codes_seen:
+        return 4
+    return 0
+
+
 def main() -> None:
     args = build_parser().parse_args()
     read_only = args.command in {
@@ -303,5 +354,12 @@ def main() -> None:
         "bin-stash-route",
         "bin-virtual-list",
     }
-    with connect(role="serving" if read_only else "owner") as conn:
-        print(json.dumps(execute(args, conn), sort_keys=True))
+    # The OCR harvest is incremental by design (idempotency-keyed observations) and
+    # can run for hours against a slow local model; autocommit keeps each recorded
+    # observation durable if the pass is killed, instead of rolling back the night.
+    autocommit = args.command == "bin-ocr-harvest"
+    with connect(role="serving" if read_only else "owner", autocommit=autocommit) as conn:
+        payload = execute(args, conn)
+        print(json.dumps(payload, sort_keys=True))
+    if args.command == "bin-ocr-harvest":
+        sys.exit(harvest_exit_code(payload))

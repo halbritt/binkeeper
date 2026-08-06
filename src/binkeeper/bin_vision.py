@@ -65,7 +65,7 @@ DEFAULT_GEMINI_ENDPOINT: Final[str] = os.environ.get(
 # Model names retire under callers (gemini-2.5-flash 404'd during the ADR 0004
 # evaluation), so the served model is configuration, never code.
 DEFAULT_GEMINI_MODEL: Final[str] = os.environ.get(
-    "BINKEEPER_BIN_VISION_GEMINI_MODEL", "gemini-3.5-flash"
+    "BINKEEPER_BIN_VISION_GEMINI_MODEL", "gemini-3.6-flash"
 )
 _JSON_OBJECT_RE: Final[re.Pattern[str]] = re.compile(r"\{.*\}", re.DOTALL)
 _TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"[a-z0-9]+", re.IGNORECASE)
