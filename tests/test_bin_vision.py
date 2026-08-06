@@ -363,3 +363,24 @@ def test_default_vision_client_selects_the_configured_backend() -> None:
     assert isinstance(default_vision_client("local"), OllamaVisionClient)
     with pytest.raises(BinVisionError, match="unsupported vision provider"):
         default_vision_client("mystery")
+
+
+def test_openai_compatible_client_sends_bearer_token_when_keyed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(request: Request, *, timeout: float) -> _FakeHttpResponse:
+        captured["auth"] = request.get_header("Authorization")
+        return _FakeHttpResponse()
+
+    monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
+    client = OllamaVisionClient(
+        endpoint="https://openrouter.ai/api/v1",
+        model="some/vision-model",
+        api_key="synthetic-key",
+    )
+
+    client.analyze("Describe this bin", b"not-a-real-image")
+
+    assert captured["auth"] == "Bearer synthetic-key"

@@ -120,7 +120,11 @@ class VisionClient(Protocol):
 
 
 class OllamaVisionClient:
-    """OpenAI-compatible vision client for the local Ollama endpoint (peecee)."""
+    """OpenAI-compatible vision client (local Ollama on peecee by default).
+
+    An ``api_key`` sends a bearer token, which also fits hosted
+    OpenAI-compatible gateways (the benchmark uses this for OpenRouter).
+    """
 
     def __init__(
         self,
@@ -131,6 +135,7 @@ class OllamaVisionClient:
         timeout_s: float = DEFAULT_VISION_TIMEOUT_S,
         max_edge: int = DEFAULT_VISION_MAX_EDGE,
         jpeg_quality: int = DEFAULT_VISION_JPEG_QUALITY,
+        api_key: str | None = None,
     ) -> None:
         self.endpoint = endpoint.rstrip("/")
         self.model = model
@@ -138,6 +143,7 @@ class OllamaVisionClient:
         self.timeout_s = timeout_s
         self.max_edge = max_edge
         self.jpeg_quality = jpeg_quality
+        self.api_key = api_key
 
     def analyze(self, prompt: str, image: bytes) -> str:
         prepared, mime = _prepare_image(image, max_edge=self.max_edge, quality=self.jpeg_quality)
@@ -197,10 +203,13 @@ class OllamaVisionClient:
                 }
             ],
         }
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         request = urllib.request.Request(
             f"{self.endpoint}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         try:

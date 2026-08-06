@@ -7,9 +7,11 @@ Usage (owner-run, results stay local -- they name real bin contents):
         --model local:qwen3-vl:8b@http://peecee:11434/v1 \
         --repeats 2 --out ~/binkeeper-bench
 
-Model specs are ``gemini:<model>`` or ``local:<model>@<openai-endpoint>``.
-Needs BINKEEPER_GEMINI_API_KEY (or GEMINI_API_KEY) for gemini specs and a
-readable blob vault + binkeeper database for the photos.
+Model specs are ``gemini:<model>``, ``openrouter:<model>`` (image-capable
+models only -- check the model's input modalities first), or
+``local:<model>@<openai-endpoint>``. Gemini specs need BINKEEPER_GEMINI_API_KEY
+(or GEMINI_API_KEY), openrouter specs need BINKEEPER_OPENROUTER_API_KEY (or
+OPENROUTER_API_KEY), and photos need a readable blob vault + database.
 """
 
 from __future__ import annotations
@@ -66,15 +68,30 @@ def _load_photos(
 
 
 def _build_client(spec: str, timeout_s: float) -> tuple[str, VisionClient]:
+    import os
+
     provider, _, rest = spec.partition(":")
     if provider == "gemini" and rest:
         return spec, GeminiVisionClient(model=rest, timeout_s=timeout_s)
+    if provider == "openrouter" and rest:
+        key = os.environ.get("BINKEEPER_OPENROUTER_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
+        if not key:
+            raise SystemExit("openrouter spec needs OPENROUTER_API_KEY in the environment")
+        return spec, OllamaVisionClient(
+            endpoint="https://openrouter.ai/api/v1",
+            model=rest,
+            timeout_s=timeout_s,
+            api_key=key,
+        )
     if provider == "local" and rest:
         model, separator, endpoint = rest.partition("@")
         if not separator or not model:
             raise SystemExit(f"local spec needs model@endpoint: {spec!r}")
         return spec, OllamaVisionClient(endpoint=endpoint, model=model, timeout_s=timeout_s)
-    raise SystemExit(f"unsupported model spec {spec!r} (use gemini:<model> or local:<m>@<url>)")
+    raise SystemExit(
+        f"unsupported model spec {spec!r} "
+        "(use gemini:<model>, openrouter:<model>, or local:<m>@<url>)"
+    )
 
 
 def _warmup_image() -> bytes:
