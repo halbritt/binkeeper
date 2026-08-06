@@ -1,6 +1,6 @@
 # BinKeeper
 
-BinKeeper is a local-first system for tracking physical storage bins, their
+BinKeeper is a system for tracking physical storage bins, their
 contents, locations, photos, movement history, and placement recommendations.
 
 Status: the standalone package now owns the physical-inventory domain, CLI,
