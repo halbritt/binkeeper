@@ -8,7 +8,13 @@ from urllib.request import Request
 
 import pytest
 
-from binkeeper.bin_vision import BinVisionError, OllamaVisionClient, propose_bin_label
+from binkeeper.bin_vision import (
+    BinVisionError,
+    GeminiVisionClient,
+    OllamaVisionClient,
+    default_vision_client,
+    propose_bin_label,
+)
 
 
 class _FakeVisionClient:
@@ -245,3 +251,115 @@ def test_read_timeout_becomes_a_vision_error(monkeypatch: pytest.MonkeyPatch) ->
 
     with pytest.raises(BinVisionError, match="did not respond within 60"):
         propose_bin_label(client, [b"not-a-real-image"])
+
+
+class _FakeGeminiResponse:
+    def __init__(self, text: str | None = '{"items": [], "theme": "empty", "summary": ""}') -> None:
+        self._text = text
+
+    def __enter__(self) -> _FakeGeminiResponse:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: object,
+        exc_value: object,
+        traceback: object,
+    ) -> None:
+        return None
+
+    def read(self) -> bytes:
+        parts = [] if self._text is None else [{"text": self._text}]
+        return json.dumps({"candidates": [{"content": {"parts": parts}}]}).encode("utf-8")
+
+
+# ADR 0004: the cloud backend sends only the inference image and prompt text,
+# authenticates via header, and asks Gemini for bounded JSON output.
+def test_gemini_request_shape_and_key_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(request: Request, *, timeout: float) -> _FakeGeminiResponse:
+        captured["url"] = request.full_url
+        captured["timeout"] = timeout
+        captured["key"] = request.get_header("X-goog-api-key")
+        captured["payload"] = _request_payload(request)
+        return _FakeGeminiResponse(_ONE_PHOTO)
+
+    monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
+    client = GeminiVisionClient(model="gemini-test", api_key="synthetic-key", timeout_s=45)
+
+    proposal = propose_bin_label(client, [b"not-a-real-image"])
+
+    assert proposal.theme == "hand tools"
+    assert captured["url"] == (
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent"
+    )
+    assert captured["timeout"] == 45
+    assert captured["key"] == "synthetic-key"
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    config = payload["generationConfig"]
+    assert isinstance(config, dict)
+    assert config["responseMimeType"] == "application/json"
+    contents = payload["contents"]
+    assert isinstance(contents, list)
+    part_keys = {key for part in contents[0]["parts"] for key in part}
+    assert part_keys == {"inline_data", "text"}
+
+
+def test_gemini_missing_key_is_a_vision_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BINKEEPER_GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    client = GeminiVisionClient()
+
+    with pytest.raises(BinVisionError, match="no Gemini API key"):
+        client.analyze("Describe this bin", b"not-a-real-image")
+
+
+def test_gemini_http_error_is_a_vision_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+    import urllib.error
+
+    def fake_urlopen(request: Request, *, timeout: float) -> _FakeGeminiResponse:
+        raise urllib.error.HTTPError(
+            request.full_url,
+            404,
+            "Not Found",
+            hdrs=None,  # type: ignore[arg-type]
+            fp=io.BytesIO(b'{"error": {"message": "model retired"}}'),
+        )
+
+    monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
+    client = GeminiVisionClient(api_key="synthetic-key")
+
+    with pytest.raises(BinVisionError, match=r"HTTP 404.*model retired"):
+        client.analyze("Describe this bin", b"not-a-real-image")
+
+
+def test_gemini_read_timeout_is_a_vision_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_urlopen(request: Request, *, timeout: float) -> _FakeGeminiResponse:
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
+    client = GeminiVisionClient(api_key="synthetic-key", timeout_s=60)
+
+    with pytest.raises(BinVisionError, match="did not respond within 60"):
+        client.analyze("Describe this bin", b"not-a-real-image")
+
+
+def test_gemini_empty_candidates_is_a_vision_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_urlopen(request: Request, *, timeout: float) -> _FakeGeminiResponse:
+        return _FakeGeminiResponse(None)
+
+    monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
+    client = GeminiVisionClient(api_key="synthetic-key")
+
+    with pytest.raises(BinVisionError, match="missing message content"):
+        client.analyze("Describe this bin", b"not-a-real-image")
+
+
+def test_default_vision_client_selects_the_configured_backend() -> None:
+    assert isinstance(default_vision_client("gemini"), GeminiVisionClient)
+    assert isinstance(default_vision_client("local"), OllamaVisionClient)
+    with pytest.raises(BinVisionError, match="unsupported vision provider"):
+        default_vision_client("mystery")

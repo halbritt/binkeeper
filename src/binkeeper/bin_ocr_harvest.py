@@ -172,12 +172,14 @@ def _observed_at(meta: Mapping[str, Any], fallback: datetime) -> datetime:
 
 
 def _default_code_reader() -> CodeReader:
-    """The live OCR reader: Qwen3-VL on peecee via the bin vision worker."""
-    from binkeeper.bin_vision import OllamaVisionClient, read_visible_bin_codes
-
-    client = OllamaVisionClient()
+    """The live OCR reader: the configured vision backend (ADR 0004)."""
+    from binkeeper.bin_vision import BinVisionError, default_vision_client, read_visible_bin_codes
 
     def read(image: bytes) -> list[str]:
+        try:
+            client = default_vision_client()
+        except BinVisionError:
+            return []  # a misconfigured provider corroborates nothing
         return read_visible_bin_codes(client, image)
 
     return read

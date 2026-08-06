@@ -364,10 +364,10 @@ def _analyze(
 
     proposal: dict[str, object] | None = None
     label_error: str | None = None
-    from binkeeper.bin_vision import BinVisionError, OllamaVisionClient, propose_bin_label
+    from binkeeper.bin_vision import BinVisionError, default_vision_client, propose_bin_label
 
     try:
-        proposal = propose_bin_label(OllamaVisionClient(), images, notes=notes).to_json()
+        proposal = propose_bin_label(default_vision_client(), images, notes=notes).to_json()
     except BinVisionError as exc:
         label_error = str(exc)
 
@@ -511,9 +511,12 @@ def _detect_bin_code(*, image: bytes | None, entered: str | None) -> tuple[str |
     code = decode_bin_code(image)
     if code:
         return (code, "the label QR")
-    from binkeeper.bin_vision import OllamaVisionClient, read_bin_code
+    from binkeeper.bin_vision import BinVisionError, default_vision_client, read_bin_code
 
-    code = read_bin_code(OllamaVisionClient(), image)
+    try:
+        code = read_bin_code(default_vision_client(), image)
+    except BinVisionError:
+        return (None, "")
     if code:
         return (code, "the printed label")
     return (None, "")

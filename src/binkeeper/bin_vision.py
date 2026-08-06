@@ -1,14 +1,15 @@
-"""RFC 0088 T4 / RFC 0093 P5 local vision worker for BinKeeper.
+"""RFC 0088 T4 / RFC 0093 P5 vision worker for BinKeeper.
 
 Turns photos of a bin's contents (plus the owner's free-text notes) into a
-PROVISIONAL bin-label proposal using the local Qwen3-VL model served on peecee
-(Ollama, OpenAI-compatible). Vision output is advisory: it never mutates
+PROVISIONAL bin-label proposal. Vision output is advisory: it never mutates
 inventory, never writes location, and the owner confirms before anything is
 captured or printed.
 
-Each photo is analyzed in its own call (one image per request stays well under
-the model's safe context on peecee's 24 GiB card) and the results are
-merged. No cloud calls: the endpoint is the local/tailnet peecee host.
+Two backends implement the same ``VisionClient`` seam (ADR 0004): the Gemini
+API (default; the owner approved exporting the downscaled inference JPEG and
+prompt text, nothing else) and the local Qwen3-VL model served on peecee
+(Ollama, OpenAI-compatible), which remains the fallback and rollback target.
+Each photo is analyzed in its own call and the results are merged.
 """
 
 from __future__ import annotations
@@ -47,6 +48,16 @@ DEFAULT_ITEM_CONFIDENCE_FLOOR: Final[float] = float(
 DEFAULT_VISION_MAX_EDGE: Final[int] = int(os.environ.get("BINKEEPER_BIN_VISION_MAX_EDGE", "1280"))
 DEFAULT_VISION_JPEG_QUALITY: Final[int] = int(
     os.environ.get("BINKEEPER_BIN_VISION_JPEG_QUALITY", "85")
+)
+DEFAULT_VISION_PROVIDER: Final[str] = os.environ.get("BINKEEPER_BIN_VISION_PROVIDER", "gemini")
+DEFAULT_GEMINI_ENDPOINT: Final[str] = os.environ.get(
+    "BINKEEPER_BIN_VISION_GEMINI_ENDPOINT",
+    "https://generativelanguage.googleapis.com/v1beta",
+)
+# Model names retire under callers (gemini-2.5-flash 404'd during the ADR 0004
+# evaluation), so the served model is configuration, never code.
+DEFAULT_GEMINI_MODEL: Final[str] = os.environ.get(
+    "BINKEEPER_BIN_VISION_GEMINI_MODEL", "gemini-3.5-flash"
 )
 _JSON_OBJECT_RE: Final[re.Pattern[str]] = re.compile(r"\{.*\}", re.DOTALL)
 _TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"[a-z0-9]+", re.IGNORECASE)
@@ -233,6 +244,105 @@ class OllamaVisionClient:
                 continue
             return candidate
         return content or reasoning
+
+
+class GeminiVisionClient:
+    """Gemini generateContent vision client (ADR 0004 cloud backend).
+
+    Sends only the downscaled inference JPEG and the lane's prompt text. The
+    key is read from the service environment at request time so a missing key
+    surfaces as a BinVisionError inside the advisory lane, which degrades
+    instead of failing the owner surface.
+    """
+
+    def __init__(
+        self,
+        *,
+        endpoint: str = DEFAULT_GEMINI_ENDPOINT,
+        model: str = DEFAULT_GEMINI_MODEL,
+        api_key: str | None = None,
+        timeout_s: float = DEFAULT_VISION_TIMEOUT_S,
+        max_edge: int = DEFAULT_VISION_MAX_EDGE,
+        jpeg_quality: int = DEFAULT_VISION_JPEG_QUALITY,
+    ) -> None:
+        self.endpoint = endpoint.rstrip("/")
+        self.model = model
+        self.api_key = api_key
+        self.timeout_s = timeout_s
+        self.max_edge = max_edge
+        self.jpeg_quality = jpeg_quality
+
+    def _key(self) -> str:
+        key = (
+            self.api_key
+            or os.environ.get("BINKEEPER_GEMINI_API_KEY")
+            or os.environ.get("GEMINI_API_KEY")
+        )
+        if not key or not key.strip():
+            raise BinVisionError(
+                "no Gemini API key configured; set BINKEEPER_GEMINI_API_KEY (or "
+                "GEMINI_API_KEY), or set BINKEEPER_BIN_VISION_PROVIDER=local"
+            )
+        return key.strip()
+
+    def analyze(self, prompt: str, image: bytes) -> str:
+        prepared, mime = _prepare_image(image, max_edge=self.max_edge, quality=self.jpeg_quality)
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "inline_data": {
+                                "mime_type": mime,
+                                "data": base64.b64encode(prepared).decode("ascii"),
+                            }
+                        },
+                        {"text": prompt},
+                    ]
+                }
+            ],
+            "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
+        }
+        request = urllib.request.Request(
+            f"{self.endpoint}/models/{self.model}:generateContent",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-goog-api-key": self._key()},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_s) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            raise BinVisionError(
+                f"vision model returned HTTP {exc.code}: {_http_error_detail(exc)}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise BinVisionError(
+                f"vision endpoint {self.endpoint} unreachable: {exc.reason}"
+            ) from exc
+        except TimeoutError as exc:
+            raise BinVisionError(
+                f"vision model {self.model} at {self.endpoint} did not respond "
+                f"within {self.timeout_s:g}s"
+            ) from exc
+        try:
+            parts = body["candidates"][0]["content"]["parts"]
+            text = "".join(str(part.get("text") or "") for part in parts if isinstance(part, dict))
+        except (KeyError, IndexError, TypeError) as exc:
+            raise BinVisionError("vision response missing message content") from exc
+        if not text.strip():
+            raise BinVisionError("vision response missing message content")
+        return text
+
+
+def default_vision_client(provider: str | None = None) -> VisionClient:
+    """Build the configured vision backend (ADR 0004): gemini or local."""
+    selected = (provider or DEFAULT_VISION_PROVIDER).strip().lower()
+    if selected == "gemini":
+        return GeminiVisionClient()
+    if selected == "local":
+        return OllamaVisionClient()
+    raise BinVisionError(f"unsupported vision provider {selected!r} (use 'gemini' or 'local')")
 
 
 def propose_bin_label(

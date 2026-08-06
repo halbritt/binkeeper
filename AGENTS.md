@@ -21,7 +21,9 @@ repository.
 - Preserve provenance, confidence, idempotency keys, and audit history.
 - Keep storage, models, printer access, and owner data local. Do not add hosted
   services, telemetry, cloud APIs, or external persistence without explicit
-  owner approval.
+  owner approval. The one accepted exception is ADR 0004: the advisory vision
+  lane may call the configured cloud vision provider with the downscaled
+  inference image and prompt text only.
 - Tests and fixtures must be deterministic and synthetic. Never commit real bin
   contents, photos, coordinates, credentials, or database dumps.
 - Tailnet-fronted HTTPS is the owner access path. Verify fronted behavior before

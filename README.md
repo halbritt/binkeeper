@@ -33,7 +33,10 @@ BinKeeper-owned key while retaining both source and target manifests.
 
 ## Invariants
 
-- Owner data stays on the local machine unless the owner explicitly exports it.
+- Owner data stays on the local machine unless the owner explicitly exports
+  it. One standing owner-approved export exists ([ADR 0004](docs/adr/0004-cloud-vision-backend.md)):
+  the advisory vision lane may send the downscaled inference JPEG and its
+  prompt text to the configured cloud vision provider. Nothing else leaves.
 - Raw captures, moves, observations, receipts, and owner decisions are
   append-only.
 - Current location and other current state are folds over evidence, not mutable
@@ -42,7 +45,8 @@ BinKeeper-owned key while retaining both source and target manifests.
   unpack evidence. A contained bin moves with its outermost container.
 - Derived passports, confidence, routes, and manifests are rebuildable.
 - Vision output is advisory. It cannot move a bin, register a bin, or accept a
-  placement without an explicit owner action.
+  placement without an explicit owner action. This holds for every vision
+  backend, local or cloud.
 - Owner web surfaces must work through tailnet HTTPS; loopback-only success is
   not sufficient.
 
