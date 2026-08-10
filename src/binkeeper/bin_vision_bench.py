@@ -78,6 +78,7 @@ class CallScore:
     """Scores for one model call on one photo."""
 
     bin_code: str
+    photo_sha256: str
     repeat: int
     seconds: float
     json_ok: bool
@@ -99,6 +100,7 @@ class CallScore:
     def to_json(self) -> dict[str, object]:
         return {
             "bin_code": self.bin_code,
+            "photo_sha256": self.photo_sha256,
             "repeat": self.repeat,
             "seconds": round(self.seconds, 2),
             "json_ok": self.json_ok,
@@ -169,6 +171,131 @@ class ModelReport:
         }
 
 
+@dataclass(frozen=True)
+class PairReport:
+    """Aggregate union score for two model reports over the same calls."""
+
+    left_model_id: str
+    right_model_id: str
+    mean_union_recall: float | None
+    uplift_vs_best_member: float | None
+    latency_range: tuple[float, float, float] | None
+    pair_call_count: int
+    scored_recall_call_count: int
+    member_error_call_count: int
+    member_invalid_json_call_count: int
+    left_only_match_occurrences: int
+    right_only_match_occurrences: int
+    shared_match_occurrences: int
+
+    def to_json(self) -> dict[str, object]:
+        latency = self.latency_range
+        return {
+            "left_model_id": self.left_model_id,
+            "right_model_id": self.right_model_id,
+            "mean_union_recall": self.mean_union_recall,
+            "uplift_vs_best_member": self.uplift_vs_best_member,
+            "parallel_latency_min_mean_max_s": (
+                [round(seconds, 2) for seconds in latency] if latency else None
+            ),
+            "pair_call_count": self.pair_call_count,
+            "scored_recall_call_count": self.scored_recall_call_count,
+            "member_error_call_count": self.member_error_call_count,
+            "member_invalid_json_call_count": self.member_invalid_json_call_count,
+            "left_only_match_occurrences": self.left_only_match_occurrences,
+            "right_only_match_occurrences": self.right_only_match_occurrences,
+            "shared_match_occurrences": self.shared_match_occurrences,
+        }
+
+
+def _calls_by_identity(report: ModelReport) -> dict[tuple[str, str, int], CallScore]:
+    calls: dict[tuple[str, str, int], CallScore] = {}
+    for call in report.calls:
+        key = (call.bin_code, call.photo_sha256, call.repeat)
+        if key in calls:
+            raise ValueError(f"duplicate benchmark call in {report.model_id!r}: {key!r}")
+        calls[key] = call
+    return calls
+
+
+def _aligned_model_calls(
+    left: ModelReport, right: ModelReport
+) -> list[tuple[CallScore, CallScore]]:
+    left_calls = _calls_by_identity(left)
+    right_calls = _calls_by_identity(right)
+    if left_calls.keys() != right_calls.keys():
+        raise ValueError("model reports do not contain the same benchmark calls")
+    aligned: list[tuple[CallScore, CallScore]] = []
+    for key in sorted(left_calls):
+        left_call = left_calls[key]
+        right_call = right_calls[key]
+        owner_items = set(left_call.matched_items) | set(left_call.missed_items)
+        right_owner_items = set(right_call.matched_items) | set(right_call.missed_items)
+        if owner_items != right_owner_items:
+            raise ValueError(f"model reports disagree on owner evidence for call {key!r}")
+        aligned.append((left_call, right_call))
+    return aligned
+
+
+def score_model_pair(left: ModelReport, right: ModelReport) -> PairReport:
+    """Union matching evidence from two reports with aligned call identities."""
+    aligned_calls = _aligned_model_calls(left, right)
+    recalls: list[float] = []
+    parallel_latencies: list[float] = []
+    member_error_call_count = 0
+    member_invalid_json_call_count = 0
+    left_only_match_occurrences = 0
+    right_only_match_occurrences = 0
+    shared_match_occurrences = 0
+    for left_call, right_call in aligned_calls:
+        owner_items = set(left_call.matched_items) | set(left_call.missed_items)
+        left_matches = set(left_call.matched_items)
+        right_matches = set(right_call.matched_items)
+        if owner_items:
+            recalls.append(len(left_matches | right_matches) / len(owner_items))
+        parallel_latencies.append(max(left_call.seconds, right_call.seconds))
+        member_error_call_count += int(left_call.error is not None) + int(
+            right_call.error is not None
+        )
+        member_invalid_json_call_count += int(not left_call.json_ok) + int(not right_call.json_ok)
+        left_only_match_occurrences += len(left_matches - right_matches)
+        right_only_match_occurrences += len(right_matches - left_matches)
+        shared_match_occurrences += len(left_matches & right_matches)
+
+    mean_union_recall = sum(recalls) / len(recalls) if recalls else None
+    member_recalls = [
+        recall for recall in (left.mean_recall, right.mean_recall) if recall is not None
+    ]
+    uplift = (
+        mean_union_recall - max(member_recalls)
+        if mean_union_recall is not None and member_recalls
+        else None
+    )
+    latency_range = (
+        (
+            min(parallel_latencies),
+            sum(parallel_latencies) / len(parallel_latencies),
+            max(parallel_latencies),
+        )
+        if parallel_latencies
+        else None
+    )
+    return PairReport(
+        left_model_id=left.model_id,
+        right_model_id=right.model_id,
+        mean_union_recall=mean_union_recall,
+        uplift_vs_best_member=uplift,
+        latency_range=latency_range,
+        pair_call_count=len(parallel_latencies),
+        scored_recall_call_count=len(recalls),
+        member_error_call_count=member_error_call_count,
+        member_invalid_json_call_count=member_invalid_json_call_count,
+        left_only_match_occurrences=left_only_match_occurrences,
+        right_only_match_occurrences=right_only_match_occurrences,
+        shared_match_occurrences=shared_match_occurrences,
+    )
+
+
 def _match_items(
     owner_items: Sequence[str], predictions: Sequence[tuple[str, frozenset[str]]]
 ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
@@ -216,6 +343,7 @@ def score_raw_output(photo: BenchPhoto, raw: str, seconds: float, repeat: int) -
             missed_items=photo.owner_items,
             unmatched_predictions=(),
             theme_match=False,
+            photo_sha256=photo.photo_sha256,
         )
     predictions: list[tuple[str, frozenset[str]]] = []
     raw_items = parsed.get("items")
@@ -244,6 +372,7 @@ def score_raw_output(photo: BenchPhoto, raw: str, seconds: float, repeat: int) -
         missed_items=missed,
         unmatched_predictions=unmatched,
         theme_match=theme_match,
+        photo_sha256=photo.photo_sha256,
     )
 
 
@@ -284,6 +413,7 @@ def run_model(
                         missed_items=photo.owner_items,
                         unmatched_predictions=(),
                         theme_match=False,
+                        photo_sha256=photo.photo_sha256,
                     )
                 )
                 progress(f"{model_id} {photo.bin_code} r{repeat}: ERROR {exc}")

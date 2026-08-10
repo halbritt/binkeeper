@@ -189,9 +189,11 @@ timeout is reported "unknown", never retried.
 
 The benchmark harness (`scripts/vision_bench.py`) scores candidate backends
 over the owner's real photo drops through the production `analyze` seam;
-results are owner data and stay outside the repo. ADR 0005's default was
-selected this way after the benchmark showed ADR 0004's anecdote-chosen
-default scored worst of the live candidates.
+raw results are owner data and stay outside the repo. Sanitized aggregate
+records, model/runtime provenance, and hashes binding them to the private raw
+evidence are append-only under [`docs/benchmarks/`](benchmarks/). ADR 0005's
+default was selected this way after the benchmark showed ADR 0004's
+anecdote-chosen default scored worst of the live candidates.
 
 ### Media and durability (`blob_vault`, `bin_photo_media`, `backup`, `restore_drill`, `transfer`)
 

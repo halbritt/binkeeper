@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+import pytest
+
 from binkeeper.bin_vision_bench import (
     BenchPhoto,
     CallScore,
     ModelReport,
     parse_owner_items,
     render_summary,
+    score_model_pair,
     score_raw_output,
     significant_tokens,
 )
@@ -48,6 +53,7 @@ def test_score_matches_items_by_significant_tokens() -> None:
     assert score.unmatched_predictions == ("shop rag",)
     assert score.recall is not None and abs(score.recall - 1 / 3) < 1e-9
     assert score.theme_match  # "measuring" is shared with the owner theme
+    assert score.to_json()["photo_sha256"] == _PHOTO.photo_sha256
 
 
 def test_score_without_json_counts_every_item_missed() -> None:
@@ -86,6 +92,7 @@ def test_report_aggregates_and_ranks_in_summary() -> None:
         calls=[
             CallScore(
                 bin_code="TST-001",
+                photo_sha256=_PHOTO.photo_sha256,
                 repeat=0,
                 seconds=9.0,
                 json_ok=False,
@@ -109,3 +116,120 @@ def test_report_aggregates_and_ranks_in_summary() -> None:
     lines = summary.splitlines()
     assert "good-model" in lines[2]  # scored model ranks above the errored one
     assert "bad-model" in lines[3]
+
+
+def test_pair_report_unions_matches_and_models_parallel_latency() -> None:
+    left = ModelReport(
+        model_id="left-model",
+        calls=[
+            score_raw_output(
+                _PHOTO,
+                '{"items": [{"label": "Mitutoyo calipers"}, {"label": "micrometer"}],'
+                ' "theme": "measuring tools"}',
+                seconds=2.0,
+                repeat=0,
+            )
+        ],
+    )
+    right = ModelReport(
+        model_id="right-model",
+        calls=[
+            score_raw_output(
+                _PHOTO,
+                '{"items": [{"label": "feeler gauges"}], "theme": "measuring tools"}',
+                seconds=3.0,
+                repeat=0,
+            )
+        ],
+    )
+
+    pair = score_model_pair(left, right)
+
+    assert pair.mean_union_recall == 1.0
+    assert pair.uplift_vs_best_member is not None
+    assert abs(pair.uplift_vs_best_member - 1 / 3) < 1e-9
+    assert pair.latency_range == (3.0, 3.0, 3.0)
+    assert pair.left_only_match_occurrences == 2
+    assert pair.right_only_match_occurrences == 1
+    assert pair.shared_match_occurrences == 0
+    assert "calls" not in pair.to_json()
+
+
+def test_pair_report_counts_each_member_error_and_invalid_response() -> None:
+    invalid = score_raw_output(_PHOTO, "not JSON", seconds=1.0, repeat=0)
+    errored = replace(invalid, error="endpoint unreachable")
+
+    pair = score_model_pair(
+        ModelReport(model_id="left-model", calls=[invalid]),
+        ModelReport(model_id="right-model", calls=[errored]),
+    )
+
+    assert pair.member_error_call_count == 1
+    assert pair.member_invalid_json_call_count == 2
+
+
+def test_pair_report_rejects_different_owner_evidence() -> None:
+    changed_photo = BenchPhoto(
+        bin_code=_PHOTO.bin_code,
+        photo_sha256=_PHOTO.photo_sha256,
+        owner_theme=_PHOTO.owner_theme,
+        owner_items=("Mitutoyo calipers", "dial indicator"),
+    )
+    left = ModelReport(
+        model_id="left-model",
+        calls=[score_raw_output(_PHOTO, '{"items": []}', seconds=1.0, repeat=0)],
+    )
+    right = ModelReport(
+        model_id="right-model",
+        calls=[score_raw_output(changed_photo, '{"items": []}', seconds=1.0, repeat=0)],
+    )
+
+    with pytest.raises(ValueError, match="owner evidence"):
+        score_model_pair(left, right)
+
+
+def test_pair_report_rejects_duplicate_call_identity() -> None:
+    call = score_raw_output(_PHOTO, '{"items": []}', seconds=1.0, repeat=0)
+    left = ModelReport(model_id="left-model", calls=[call, call])
+    right = ModelReport(model_id="right-model", calls=[call])
+
+    with pytest.raises(ValueError, match="duplicate benchmark call"):
+        score_model_pair(left, right)
+
+
+def test_pair_report_rejects_different_photo_versions() -> None:
+    revised_photo = BenchPhoto(
+        bin_code=_PHOTO.bin_code,
+        photo_sha256="3" * 64,
+        owner_theme=_PHOTO.owner_theme,
+        owner_items=_PHOTO.owner_items,
+    )
+    left = ModelReport(
+        model_id="left-model",
+        calls=[score_raw_output(_PHOTO, '{"items": []}', seconds=1.0, repeat=0)],
+    )
+    right = ModelReport(
+        model_id="right-model",
+        calls=[score_raw_output(revised_photo, '{"items": []}', seconds=1.0, repeat=0)],
+    )
+
+    with pytest.raises(ValueError, match="same benchmark calls"):
+        score_model_pair(left, right)
+
+
+def test_pair_report_distinguishes_multiple_photos_for_one_bin() -> None:
+    second_photo = BenchPhoto(
+        bin_code=_PHOTO.bin_code,
+        photo_sha256="4" * 64,
+        owner_theme=_PHOTO.owner_theme,
+        owner_items=_PHOTO.owner_items,
+    )
+    first_call = score_raw_output(_PHOTO, '{"items": []}', seconds=1.0, repeat=0)
+    second_call = score_raw_output(second_photo, '{"items": []}', seconds=1.0, repeat=0)
+
+    pair = score_model_pair(
+        ModelReport(model_id="left-model", calls=[first_call, second_call]),
+        ModelReport(model_id="right-model", calls=[first_call, second_call]),
+    )
+
+    assert pair.pair_call_count == 2

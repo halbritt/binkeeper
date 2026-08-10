@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import sys
 import time
+from itertools import combinations
 from pathlib import Path
 
 import psycopg
@@ -31,6 +33,7 @@ from binkeeper.bin_vision_bench import (
     render_summary,
     reports_to_json,
     run_model,
+    score_model_pair,
 )
 from binkeeper.blob_vault import blob_store_from_config, open_blob, vault_key_from_config
 
@@ -139,8 +142,16 @@ def main() -> int:
     (run_dir / "results.json").write_text(reports_to_json(reports), encoding="utf-8")
     summary = render_summary(reports)
     (run_dir / "summary.md").write_text(summary + "\n", encoding="utf-8")
+    pair_reports = [score_model_pair(left, right) for left, right in combinations(reports, 2)]
+    if pair_reports:
+        (run_dir / "pair-summary.json").write_text(
+            json.dumps([report.to_json() for report in pair_reports], indent=2) + "\n",
+            encoding="utf-8",
+        )
     print()
     print(summary)
+    if pair_reports:
+        print(f"\ntwo-model aggregate: {run_dir / 'pair-summary.json'}")
     print(f"\nraw results: {run_dir} (owner data -- do not commit)")
     return 0
 
