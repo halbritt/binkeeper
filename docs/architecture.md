@@ -53,7 +53,9 @@ flowchart TD
     timer1[binkeeper-backup.timer 03:15] --> pg
     timer2[binkeeper-ocr-harvest.timer 03:30] -->|local model only| vision
     timer2 --> pg
-    timer3[binkeeper-restore-smoke.timer Sun 04:15] --> pg
+    timer3[binkeeper-label-drift.timer 04:00] -->|Opus 5 + local 8B| vision
+    timer3 --> pg
+    timer4[binkeeper-restore-smoke.timer Sun 04:15] --> pg
 ```
 
 Everything runs on this host. The only bytes that ever leave are the advisory
@@ -173,7 +175,7 @@ runs ~4.3 s and the 13–21 s ensembles are excluded from the first pass
 |---|---|---|---|
 | Interactive first pass (photo drop) | hosted `qwen/qwen3-vl-32b-instruct` via OpenRouter | on photo drop, advisory label proposal | downscaled JPEG + prompt (ADR 0004/0005) |
 | Nightly peripheral-OCR true-up | local `qwen3-vl:32b` on peecee | `binkeeper-ocr-harvest.timer`, 03:30 | nothing (pinned `--local-only`) |
-| Label-drift review queue (ADR 0006, accepted, not yet built) | `claude-opus-5` + local `qwen3-vl:8b` union ensemble | nightly, input-keyed | downscaled JPEG + prompt via OpenRouter to Anthropic |
+| Label-drift review queue (ADR 0006) | `claude-opus-5` + local `qwen3-vl:8b` union ensemble | `binkeeper-label-drift.timer`, 04:00, input-keyed | downscaled JPEG + prompt via OpenRouter to Anthropic |
 
 Geofencing resolves a photo's EXIF GPS against owner-local site anchors and
 abstains on ambiguity or a fix looser than 100 m. The site *vocabulary*
@@ -229,7 +231,8 @@ original bytes first, as the guaranteed action; vision proposal failure is a
 calm, retryable label error, never a lost photo. The CLI (15 subcommands)
 and MCP (13 tools) are one surface: MCP reconstructs CLI arguments and calls
 the same `execute`, so semantics and the writer gate cannot drift.
-`bin-anchor-label` and `bin-ocr-harvest` are deliberately CLI-only.
+`bin-anchor-label`, `bin-ocr-harvest`, and `bin-label-drift-harvest` are
+deliberately CLI-only.
 
 ## Deployment
 
@@ -238,13 +241,16 @@ the same `execute`, so semantics and the writer gate cannot drift.
 | `binkeeper.service` | persistent | `binkeeper-serve` | hardened; only the blob root writable |
 | `binkeeper-backup.timer` | daily 03:15 (+15 m jitter) | `binkeeper-backup create` | writes only `/var/lib/binkeeper/backups` |
 | `binkeeper-ocr-harvest.timer` | nightly 03:30 (+15 m jitter) | `binkeeper bin-ocr-harvest --local-only` | autocommit; exit 3 = no geofence, exit 4 = zero codes read |
+| `binkeeper-label-drift.timer` | nightly 04:00 (+15 m jitter), after OCR | gpu-fleet lease + `binkeeper bin-label-drift-harvest` | exact local 8B route; autocommit; exit 5 = one or more strict ensemble failures |
 | `binkeeper-restore-smoke.timer` | Sundays 04:15 (+30 m jitter) | `binkeeper-restore-drill` | disposable `binkeeper_restore_*` target only |
 
 Configuration is layered: `/etc/binkeeper/binkeeper.env` (root-only; database
 URL, writer gate, vision provider and keys, backup root) is shared by every
-unit, and the OCR harvest layers `/etc/binkeeper/binkeeper-ocr-harvest.env`
-after it — systemd's later-file-wins ordering is the mechanism that pins the
-nightly lane to the local model regardless of the service's cloud default.
+unit. The OCR harvest layers `/etc/binkeeper/binkeeper-ocr-harvest.env` after
+it to pin local 32B. The label-drift pass layers
+`/etc/binkeeper/binkeeper-label-drift.env`, then obtains its local 8B endpoint
+from a fenced gpu-fleet lease; the shared file supplies only the owner-local
+OpenRouter key and writer authority.
 Blob and backup key material lives only in `/etc/binkeeper/blob-vault.json`
 (0600). Wheels install to `/opt/binkeeper/venv`. See
 [deployment.md](deployment.md) for procedures and
@@ -259,10 +265,11 @@ re-encoded) and the lane's prompt text to the configured cloud vision
 provider. Original photo bytes, bin codes, coordinates, and every ledger stay
 local. Per lane: the interactive pass exports to OpenRouter (ADR 0005); the
 nightly OCR true-up exports nothing and is doubly pinned local (env layering
-plus a `--local-only` refusal that aborts before any photo is read); the
-accepted-but-unbuilt drift queue will add Anthropic as an upstream via
-OpenRouter under the same scope (ADR 0006). Rollback for any lane is
-configuration: `BINKEEPER_BIN_VISION_PROVIDER=local` ends all cloud export.
+plus a `--local-only` refusal that aborts before any photo is read); the nightly
+drift queue exports the same bounded inference input through OpenRouter to
+Anthropic (ADR 0006). Its rollback is
+`BINKEEPER_BIN_LABEL_DRIFT_MODE=local` or disabling its timer. The interactive
+lane separately rolls back with `BINKEEPER_BIN_VISION_PROVIDER=local`.
 
 ## Decision records
 

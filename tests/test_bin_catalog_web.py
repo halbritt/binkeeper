@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
+from datetime import UTC, datetime
 from io import BytesIO
 
 import pytest
@@ -13,6 +14,7 @@ from PIL import ExifTags, Image
 
 from binkeeper import bin_catalog_web
 from binkeeper.bin_catalog_web import BinCatalogPhotoError, BinCatalogUnavailableError, create_app
+from binkeeper.bin_label_drift import LabelDriftQueueEntry
 from binkeeper.bin_passport import BinPassport
 
 
@@ -130,6 +132,52 @@ def test_catalog_shows_bin_codes_contents_and_locations() -> None:
     assert ">Contents<" in response.text
     assert "Recorded contents" not in response.text
     assert "https://" not in response.text
+
+
+def test_catalog_shows_a_pending_label_review_count_and_manage_link() -> None:
+    pending = LabelDriftQueueEntry(
+        proposal_external_id="proposal-1",
+        bin_code="AGR-014",
+        proposed_at=datetime(2026, 8, 11, 4, tzinfo=UTC),
+        proposed_theme="Mechanic tools",
+        current_theme="Precision tools",
+        current_contents="hex keys and digital calipers",
+        new_item_labels=("torque wrench", "socket set"),
+        photo_hashes=("a" * 64,),
+        model_versions=("anthropic/claude-opus-5", "qwen3-vl:8b"),
+    )
+    app = create_app(
+        base_path="/bins",
+        authoring_enabled=True,
+        passport_loader=lambda: [_passport()],
+        label_drift_loader=lambda: [pending],
+        photo_source=_PhotoSource({}),
+    )
+
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+        response = client.get("/")
+
+    assert response.status_code == 200
+    assert "1 pending label review" in response.text
+    assert "Mechanic tools" in response.text
+    assert "torque wrench" in response.text
+    assert 'href="/bin-photo/manage/AGR-014#label-drift-review"' in response.text
+    assert "aaaaaaaa" not in response.text
+
+
+def test_catalog_omits_the_review_section_when_the_queue_is_empty() -> None:
+    app = create_app(
+        base_path="/bins",
+        passport_loader=lambda: [_passport()],
+        label_drift_loader=lambda: [],
+        photo_source=_PhotoSource({}),
+    )
+
+    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+        response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Pending label review" not in response.text
 
 
 def test_catalog_navigation_stays_inside_binkeeper() -> None:

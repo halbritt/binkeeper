@@ -33,7 +33,7 @@
   .bin-catalog-intro { max-width: 46rem; margin: 0; }
   .bin-catalog-stats {
     display: grid;
-    grid-template-columns: repeat(3, minmax(6.5rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
     gap: var(--space-2);
   }
   .bin-catalog-stat {
@@ -204,6 +204,12 @@
   .bin-catalog-attributes { display: flex; flex-wrap: wrap; gap: var(--space-1); }
   .bin-catalog-profile-list { margin-top: var(--space-2); }
   .bin-catalog-no-match { text-align: center; }
+  .bin-label-review-list { display: grid; gap: var(--space-3); }
+  .bin-label-review-row {
+    display: flex; justify-content: space-between; gap: var(--space-3); align-items: center;
+    padding-top: var(--space-3); border-top: 1px solid var(--color-border);
+  }
+  .bin-label-review-row:first-child { padding-top: 0; border-top: 0; }
   .bin-catalog-card[hidden],
   .bin-catalog-no-match[hidden],
   [data-clear-filters][hidden] { display: none; }
@@ -244,6 +250,12 @@
         <strong>{{ visibility_pct }}%</strong>
         <span>map visibility</span>
       </div>
+      {% if label_drift_count %}
+      <div class="bin-catalog-stat" aria-label="{{ label_drift_count }} pending label review{% if label_drift_count != 1 %}s{% endif %}">
+        <strong>{{ label_drift_count }}</strong>
+        <span>pending label review{% if label_drift_count != 1 %}s{% endif %}</span>
+      </div>
+      {% endif %}
     </div>
     {% endif %}
   </header>
@@ -282,6 +294,26 @@
       </div>
     </form>
   </section>
+
+  {% if label_drift_count %}
+  <section class="panel panel-padded stack" aria-labelledby="label-review-heading">
+    <div>
+      <h2 id="label-review-heading">Pending label review</h2>
+      <p class="muted">The nightly vision pass found possible label changes. Nothing changes until you review it.</p>
+    </div>
+    <div class="bin-label-review-list">
+      {% for review in label_drift_entries %}
+      <div class="bin-label-review-row">
+        <div>
+          <strong><code>{{ review.bin_code }}</code> · {{ review.proposed_theme }}</strong>
+          {% if review.new_item_labels %}<p class="muted">Newly detected: {{ review.new_item_labels|join(', ') }}</p>{% endif %}
+        </div>
+        {% if review.manage_url %}<a class="button" href="{{ review.manage_url }}">Review change</a>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
 
   <section class="stack" aria-labelledby="results-heading">
     <div class="bin-catalog-results-head">

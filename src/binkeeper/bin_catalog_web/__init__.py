@@ -20,6 +20,7 @@ from PIL import Image
 
 from binkeeper.bin_colocation import ContainmentBelief, containment_by_bin
 from binkeeper.bin_inventory import BinInventoryError
+from binkeeper.bin_label_drift import LabelDriftError, LabelDriftQueueEntry
 from binkeeper.bin_passport import (
     BIN_CAPTURE_KIND,
     BinPassport,
@@ -49,6 +50,7 @@ _TEMPLATE_DIR: Final[Path] = Path(str(resources.files("binkeeper.bin_catalog_web
 _LOOPBACK_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "localhost", "::1", "testserver"})
 
 PassportLoader = Callable[[], Sequence[BinPassport]]
+LabelDriftLoader = Callable[[], Sequence[LabelDriftQueueEntry]]
 PhotoState = Literal["available", "missing", "unavailable"]
 logger = logging.getLogger(__name__)
 
@@ -226,6 +228,7 @@ def create_app(
     photo_source: BinCatalogPhotoSource | None = None,
     containment_loader: ContainmentLoader | None = None,
     virtual_loader: VirtualLoader | None = None,
+    label_drift_loader: LabelDriftLoader | None = None,
 ) -> FastAPI:
     """Build the loopback-bound, paired-tailnet-safe BinKeeper catalog app."""
     normalized_host = host.strip()
@@ -275,6 +278,19 @@ def create_app(
         tenant_id=tenant_id,
         corpus_id=corpus_id,
     )
+    if label_drift_loader is not None:
+        load_label_drift = label_drift_loader
+    elif passport_loader is not None:
+        # A supplied passport loader defines a complete synthetic/read-model
+        # boundary (the browser harness relies on this). Do not reach around it
+        # into the production database for a second projection.
+        load_label_drift = lambda: ()
+    else:
+        load_label_drift = partial(
+            _load_label_drift_queue,
+            tenant_id=tenant_id,
+            corpus_id=corpus_id,
+        )
     catalog_photos = photo_source or _ConfiguredCatalogPhotos(
         tenant_id=tenant_id,
         corpus_id=corpus_id,
@@ -314,6 +330,7 @@ def create_app(
         selected_site = site.strip()
         try:
             passports = sorted(load_passports(), key=lambda passport: passport.bin_code.casefold())
+            label_drift_queue = list(load_label_drift())
             try:
                 witnessed = load_containment()
             except BinCatalogUnavailableError:
@@ -367,6 +384,8 @@ def create_app(
                     total_count=0,
                     contents_count=0,
                     visibility_pct=0,
+                    label_drift_entries=(),
+                    label_drift_count=0,
                     virtual_bins=[],
                     query=query,
                     selected_site=selected_site,
@@ -384,6 +403,19 @@ def create_app(
             and (not selected_site or selected_site == entry["current_site_key"])
         ]
         contents_count = sum(1 for entry in all_entries if entry["current_contents"])
+        label_drift_entries = [
+            {
+                "bin_code": entry.bin_code,
+                "proposed_theme": entry.proposed_theme,
+                "new_item_labels": entry.new_item_labels,
+                "manage_url": (
+                    authoring_path(f"/manage/{quote(entry.bin_code, safe='')}#label-drift-review")
+                    if authoring_enabled
+                    else None
+                ),
+            }
+            for entry in label_drift_queue
+        ]
         return page_response(
             chrome.render(
                 "bin_catalog.html",
@@ -393,6 +425,8 @@ def create_app(
                 total_count=len(all_entries),
                 contents_count=contents_count,
                 visibility_pct=_visibility_pct(all_entries, site_key=selected_site or None),
+                label_drift_entries=label_drift_entries,
+                label_drift_count=len(label_drift_entries),
                 virtual_bins=virtual_bins,
                 query=query,
                 selected_site=selected_site,
@@ -619,3 +653,14 @@ def _load_passports(*, tenant_id: str, corpus_id: str) -> Sequence[BinPassport]:
         psycopg.Error,
     ) as exc:
         raise BinCatalogUnavailableError("could not load bin catalog") from exc
+
+
+def _load_label_drift_queue(*, tenant_id: str, corpus_id: str) -> Sequence[LabelDriftQueueEntry]:
+    """Rebuild pending label reviews through the least-privilege serving role."""
+    from binkeeper.bin_label_drift import load_label_drift_queue
+
+    try:
+        with connect(role="serving") as conn:
+            return load_label_drift_queue(conn, tenant_id=tenant_id, corpus_id=corpus_id)
+    except (LabelDriftError, ServingRoleUnavailableError, psycopg.Error) as exc:
+        raise BinCatalogUnavailableError("could not load label-drift queue") from exc
