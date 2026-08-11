@@ -15,7 +15,9 @@ direct inventory writer were retired under `BINK-13` after the accepted
 consumer and rollback-window gates. The advisory vision lane with its
 benchmark-selected cloud default (ADR 0005) and the nightly local-only
 peripheral-OCR true-up timer (`binkeeper-ocr-harvest.timer`) are also
-deployed.
+deployed. ADR 0006's input-keyed Opus 5 + local Qwen3-VL 8B label-drift pass,
+rebuildable owner review queue, and append-only accept/dismiss workflow are
+deployed as `binkeeper-label-drift.timer` after the OCR pass.
 
 The whole-system design is described in
 [docs/architecture.md](docs/architecture.md).
@@ -44,9 +46,9 @@ BinKeeper-owned key while retaining both source and target manifests.
   the advisory vision lane may send the downscaled inference JPEG and its
   prompt text to the configured cloud vision provider. Nothing else leaves.
   The default provider inside that unchanged scope is benchmark-selected in
-  [ADR 0005](docs/adr/0005-benchmarked-vision-default.md);
-  [ADR 0006](docs/adr/0006-label-drift-review-queue.md) (accepted, not yet
-  implemented) will add a nightly ensemble upstream under the same scope.
+  [ADR 0005](docs/adr/0005-benchmarked-vision-default.md). The deployed
+  [ADR 0006](docs/adr/0006-label-drift-review-queue.md) nightly ensemble also
+  sends that bounded inference input through OpenRouter to Anthropic.
 - Raw captures, moves, observations, receipts, and owner decisions are
   append-only.
 - Current location and other current state are folds over evidence, not mutable
@@ -110,6 +112,15 @@ geolocated vault photos with the local model only and records corroborative
 `peripheral_ocr` location observations. It is idempotent, never relocates a
 bin, and fails closed: exit 3 means no geofence site is configured, exit 4
 means photos were read but no code was legible anywhere. See
+[docs/deployment.md](docs/deployment.md).
+
+The follow-on label-drift pass runs at 04:00 through an exact-model gpu-fleet
+lease. It fans each changed bin photo out concurrently to OpenRouter Anthropic
+Opus 5 and local peecee `qwen3-vl:8b`, stores the union as append-only advisory
+evidence, and queues only material diffs. The catalog shows the rebuildable
+pending count; the manage page lets the owner edit and save a normal profile
+snapshot or append a proposal-linked dismissal. It never changes a label by
+itself. See [ADR 0006](docs/adr/0006-label-drift-review-queue.md) and
 [docs/deployment.md](docs/deployment.md).
 
 `make check` runs the full verification sequence; the editable install is a

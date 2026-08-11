@@ -12,7 +12,10 @@
     background: var(--color-surface-muted); object-fit: contain;
   }
   .bin-manage-code { font-size: var(--type-heading); }
+  .bin-label-drift-review { border-top: 3px solid var(--color-accent); }
+  .bin-label-drift-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   @media (max-width: 760px) { .bin-manage-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 560px) { .bin-label-drift-comparison { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
 
@@ -37,6 +40,54 @@
 {% endif %}
 
 <div class="bin-manage-grid">
+  {% if label_drift %}
+  <section id="label-drift-review" class="panel panel-padded stack bin-photo-card bin-manage-wide bin-label-drift-review" aria-labelledby="label-drift-heading">
+    <div class="bin-photo-card-header">
+      <h2 id="label-drift-heading">Review detected label changes</h2>
+      <p class="bin-photo-card-copy">The nightly vision pass found possible changes in stored photos. This is a suggestion only; nothing changes until you save it.</p>
+    </div>
+    <div class="bin-label-drift-comparison">
+      <div class="stack">
+        <h3>Current label</h3>
+        <p><strong>{{ label_drift.current_theme or "No theme recorded" }}</strong></p>
+        <p>{{ label_drift.current_contents or "No contents recorded" }}</p>
+      </div>
+      <div class="stack">
+        <h3>Suggested label</h3>
+        <p><strong>{{ label_drift.proposed_theme }}</strong></p>
+        {% if label_drift.new_item_labels %}<p>Newly detected: {{ label_drift.new_item_labels|join(', ') }}</p>{% endif %}
+      </div>
+    </div>
+    <form method="post" action="{{ profile_action }}" class="form-grid bin-photo-form" data-submit-form>
+      <input type="hidden" name="action_id" value="{{ label_drift_accept_action_id }}">
+      <input type="hidden" name="reviewed_proposal_external_id" value="{{ label_drift.proposal_external_id }}">
+      <input type="hidden" name="home_site" value="{{ home_site }}">
+      <label for="label-drift-theme">Theme to save
+        <input id="label-drift-theme" name="theme" value="{{ label_drift.proposed_theme }}" maxlength="120" autocomplete="off">
+      </label>
+      <label for="label-drift-contents">Contents to save
+        <textarea id="label-drift-contents" name="contents" rows="4" maxlength="1200">{{ label_drift.proposed_contents }}</textarea>
+        <span class="field-help">Edit either field before saving if the suggestion is partly right.</span>
+      </label>
+      <div class="action-bar">
+        <button type="submit" class="bin-photo-primary" data-submit-button data-busy-label="Saving reviewed label…"><span data-button-label>Save reviewed label</span></button>
+      </div>
+    </form>
+    <form method="post" action="{{ label_drift_dismiss_action }}" class="bin-photo-form" data-submit-form>
+      <input type="hidden" name="action_id" value="{{ label_drift_dismiss_action_id }}">
+      <input type="hidden" name="proposal_external_id" value="{{ label_drift.proposal_external_id }}">
+      <div class="action-bar bin-photo-action-row">
+        <button type="submit" data-submit-button data-busy-label="Dismissing suggestion…"><span data-button-label>Dismiss suggestion</span></button>
+        <span class="field-help">Dismissal is recorded in history and demotes the same suggestions for 90 days. New photos can raise them again.</span>
+      </div>
+    </form>
+    <details class="details-block">
+      <summary>Proposal provenance</summary>
+      <div class="details-body"><p>Models: {{ label_drift.model_versions|join(' + ') }}. Proposed {{ label_drift.proposed_at.strftime('%Y-%m-%d %H:%M UTC') }}.</p></div>
+    </details>
+  </section>
+  {% endif %}
+
   <section class="panel panel-padded stack bin-photo-card bin-manage-wide" aria-labelledby="profile-heading">
     <div class="bin-photo-card-header">
       <h2 id="profile-heading">Details</h2>

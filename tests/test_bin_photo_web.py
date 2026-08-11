@@ -19,6 +19,7 @@ from PIL import Image
 from binkeeper import bin_photo_web
 from binkeeper.bin_inventory import bin_where
 from binkeeper.bin_label import PrintPlan
+from binkeeper.bin_label_drift import LabelDriftQueueEntry
 from binkeeper.bin_photo_web import manage as bin_manage_web
 from binkeeper.bin_photo_web import stash as bin_stash_web
 from binkeeper.bin_register import RegisterResult
@@ -161,6 +162,79 @@ def test_manage_bin_page_prefills_current_state_and_exposes_clear_actions() -> N
     _assert_isolated_binkeeper_navigation(body, current="catalog")
 
 
+def test_manage_page_prefills_a_pending_label_change_for_owner_review() -> None:
+    pending = LabelDriftQueueEntry(
+        proposal_external_id="proposal-1",
+        bin_code="AGR-014",
+        proposed_at=datetime(2026, 8, 11, 4, tzinfo=UTC),
+        proposed_theme="Mechanic tools",
+        current_theme="Power tools",
+        current_contents="cordless drills",
+        new_item_labels=("torque wrench", "socket set"),
+        photo_hashes=("a" * 64,),
+        model_versions=("anthropic/claude-opus-5", "qwen3-vl:8b"),
+    )
+
+    def load_view(**_kwargs: str) -> bin_manage_web.ManageView:
+        return {
+            "bin_code": "AGR-014",
+            "theme": "Power tools",
+            "contents": "cordless drills",
+            "home_site": "alameda-garage",
+            "current_site": "oakland-fab-east",
+            "catalog_photo_url": None,
+            "container_code": "",
+            "containment_path": (),
+            "contained_bin_codes": (),
+            "container_options": (),
+            "label_drift": pending,
+        }
+
+    app = bin_photo_web.create_app(manage_loader=load_view)
+    response = TestClient(app).get("/manage/AGR-014")
+
+    assert response.status_code == 200
+    assert 'id="label-drift-review"' in response.text
+    assert "Mechanic tools" in response.text
+    assert "torque wrench" in response.text
+    assert 'value="Mechanic tools"' in response.text
+    assert "cordless drills, torque wrench, socket set" in response.text
+    assert 'name="proposal_external_id" value="proposal-1"' in response.text
+    assert "aaaaaaaa" not in response.text
+
+
+def test_manage_dismiss_requires_origin_and_records_the_exact_proposal() -> None:
+    recorded: list[bin_manage_web.LabelDriftDismissAction] = []
+
+    def record(
+        action: bin_manage_web.LabelDriftDismissAction,
+        _scope: object,
+    ) -> None:
+        recorded.append(action)
+
+    app = bin_photo_web.create_app(label_drift_dismissal_recorder=record)
+    client = TestClient(app, base_url="http://testserver:8765")
+    form = {
+        "proposal_external_id": "proposal-1",
+        "action_id": "2f1eb067-e4fa-4451-b833-f8e8e0fe695d",
+    }
+
+    refused = client.post("/manage/AGR-014/label-drift-dismiss", data=form)
+    accepted = client.post(
+        "/manage/AGR-014/label-drift-dismiss",
+        data=form,
+        headers=_LOOPBACK_ORIGIN,
+        follow_redirects=False,
+    )
+
+    assert refused.status_code == 403
+    assert accepted.status_code == 303
+    assert accepted.headers["location"].endswith("notice=label-drift-dismissed")
+    assert [(action.bin_code, action.proposal_external_id) for action in recorded] == [
+        ("AGR-014", "proposal-1")
+    ]
+
+
 def test_manage_profile_post_appends_reviewed_snapshot_and_redirects(
     conn: psycopg.Connection,
     monkeypatch: pytest.MonkeyPatch,
@@ -201,6 +275,66 @@ def test_manage_profile_post_appends_reviewed_snapshot_and_redirects(
     assert passport.theme == "Power tools"
     assert passport.sibling_contents == ("drills and impact drivers",)
     assert passport.home_site == "alameda-garage"
+
+
+def test_accepting_a_drift_suggestion_uses_profile_snapshot_and_clears_the_queue(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import db
+    from binkeeper.bin_label_drift import harvest_label_drift, load_label_drift_queue
+    from binkeeper.bin_register import register_bin
+
+    class _SyntheticEnsemble:
+        model = "anthropic/claude-opus-5+qwen3-vl:8b"
+        model_versions = ("anthropic/claude-opus-5", "qwen3-vl:8b")
+
+        def analyze(self, prompt: str, image: bytes) -> str:
+            return (
+                '{"items": [{"label": "torque wrench", "confidence": 0.9}, '
+                '{"label": "socket set", "confidence": 0.8}], '
+                '"theme": "Mechanic tools", "summary": "synthetic"}'
+            )
+
+    observed = datetime(2026, 8, 11, 1, 0, tzinfo=UTC)
+    register_bin(
+        conn,
+        bin_code="AGR-014",
+        site="alameda-garage",
+        theme="Hand tools",
+        contents_text="hex keys",
+        photo_sha256="a" * 64,
+        observed_at=observed,
+    )
+    harvest_label_drift(
+        conn,
+        client=_SyntheticEnsemble(),
+        open_photo=lambda _conn, _sha: b"synthetic-photo",
+        now=observed.replace(hour=2),
+    )
+    assert len(load_label_drift_queue(conn, now=observed.replace(hour=2, minute=30))) == 1
+    monkeypatch.setattr(db, "connect", lambda **_kwargs: nullcontext(conn))
+    app = bin_photo_web.create_app(host="127.0.0.1", port=8765)
+
+    with TestClient(app, base_url="http://testserver:8765") as client:
+        before = client.get("/manage/AGR-014")
+        accepted = client.post(
+            "/manage/AGR-014/profile",
+            data={
+                "theme": "Mechanic tools",
+                "contents": "hex keys, torque wrench, socket set",
+                "home_site": "alameda-garage",
+                "action_id": "b7ec5acb-b964-4719-8a21-a42f71db42dd",
+            },
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+        after = client.get("/manage/AGR-014")
+
+    assert 'id="label-drift-review"' in before.text
+    assert accepted.headers["location"].endswith("notice=profile-saved")
+    assert 'id="label-drift-review"' not in after.text
+    assert load_label_drift_queue(conn, now=datetime.now(UTC)) == []
 
 
 def test_manage_profile_write_stays_in_the_selected_corpus(

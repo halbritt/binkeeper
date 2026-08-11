@@ -8,7 +8,7 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal, Protocol, TypedDict
+from typing import Literal, NotRequired, Protocol, TypedDict
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -21,6 +21,7 @@ from starlette.datastructures import FormData, UploadFile
 
 from binkeeper.bin_inventory import BinInventoryError
 from binkeeper.bin_label import BinLabelError
+from binkeeper.bin_label_drift import LabelDriftError, LabelDriftQueueEntry
 from binkeeper.bin_manage import (
     BinActionScope,
     BinLabelPrintIntent,
@@ -55,6 +56,7 @@ class ManageView(TypedDict):
     containment_path: tuple[str, ...]
     contained_bin_codes: tuple[str, ...]
     container_options: tuple[str, ...]
+    label_drift: NotRequired[LabelDriftQueueEntry | None]
 
 
 class ManageLoader(Protocol):
@@ -108,6 +110,19 @@ RetrievalRecorder = Callable[["RetrievalAction", BinActionScope], None]
 
 
 @dataclass(frozen=True)
+class LabelDriftDismissAction:
+    """One exact owner dismissal submitted from a pending review card."""
+
+    bin_code: str
+    proposal_external_id: str
+    action_id: str
+    received_at: datetime
+
+
+LabelDriftDismissalRecorder = Callable[[LabelDriftDismissAction, BinActionScope], None]
+
+
+@dataclass(frozen=True)
 class ManageRouteConfig:
     """Dependencies shared by the contextual management routes."""
 
@@ -119,6 +134,7 @@ class ManageRouteConfig:
     strict_origin: OriginCheck
     load_triage: TriageLoader | None = None
     record_retrieval: RetrievalRecorder | None = None
+    record_label_drift_dismissal: LabelDriftDismissalRecorder | None = None
 
 
 @dataclass(frozen=True)
@@ -231,6 +247,14 @@ def install_manage_routes(app: FastAPI, config: ManageRouteConfig) -> None:
     ) -> RedirectResponse:
         return await _not_found_response(request, bin_code, config)
 
+    @app.post("/manage/{bin_code}/label-drift-dismiss")
+    async def manage_label_drift_dismiss(
+        request: Request,
+        bin_code: str = ApiPath(min_length=1, max_length=120),
+        _origin: None = Depends(strict_origin),
+    ) -> RedirectResponse:
+        return await _label_drift_dismiss_response(request, bin_code, config)
+
     @app.get("/manage/{bin_code}/triage")
     def manage_triage(
         bin_code: str = ApiPath(min_length=1, max_length=120),
@@ -256,7 +280,7 @@ def _manage_page(config: ManageRouteConfig, bin_code: str, notice: str) -> objec
         )
     except BinManageNotFoundError:
         raise HTTPException(status_code=404, detail="bin not found") from None
-    except (psycopg.Error, ServingRoleUnavailableError):
+    except (LabelDriftError, psycopg.Error, ServingRoleUnavailableError):
         _LOGGER.warning("BinKeeper could not load a management page")
         raise HTTPException(status_code=503, detail="bin details are unavailable") from None
     action_urls = _action_urls(config.base_path, bin_code)
@@ -267,6 +291,7 @@ def _manage_page(config: ManageRouteConfig, bin_code: str, notice: str) -> objec
             **view,
             **action_urls,
             **action_ids,
+            label_drift_accept_action_id=str(uuid4()),
             all_sites=list(config.sites),
             notice=_manage_notice(notice),
             catalog_url="/bins/",
@@ -426,6 +451,28 @@ async def _not_found_response(
     return _triage_redirect(config.base_path, bin_code, "not-found-recorded")
 
 
+async def _label_drift_dismiss_response(
+    request: Request,
+    bin_code: str,
+    config: ManageRouteConfig,
+) -> RedirectResponse:
+    form = await request.form()
+    action = LabelDriftDismissAction(
+        bin_code=bin_code,
+        proposal_external_id=_form_text(form.get("proposal_external_id")),
+        action_id=_form_text(form.get("action_id")),
+        received_at=datetime.now(UTC),
+    )
+    record = config.record_label_drift_dismissal or record_label_drift_dismissal
+    notice = "label-drift-dismissed"
+    try:
+        await run_in_threadpool(record, action, config.scope)
+    except (LabelDriftError, PersonalMemoryError, psycopg.Error):
+        _LOGGER.warning("BinKeeper label-drift dismissal failed")
+        notice = "label-drift-failed"
+    return _redirect(config.base_path, bin_code, notice)
+
+
 def _triage_page(config: ManageRouteConfig, bin_code: str, notice: str) -> object:
     try:
         view = config.load_view(
@@ -552,6 +599,7 @@ def load_triage_view(
 def load_manage_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> ManageView:
     """Load the current owner-safe fields for one exact known bin."""
     from binkeeper.bin_inventory import bin_where
+    from binkeeper.bin_label_drift import load_label_drift_queue
     from binkeeper.bin_nesting import load_bin_containment
     from binkeeper.bin_passport import bin_passport, load_known_bin_codes
     from binkeeper.db import connect
@@ -583,6 +631,18 @@ def load_manage_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> Manage
             bin_code=code,
             scope=BinActionScope(tenant_id=tenant_id, corpus_id=corpus_id),
         )
+        label_drift = next(
+            (
+                entry
+                for entry in load_label_drift_queue(
+                    conn,
+                    tenant_id=tenant_id,
+                    corpus_id=corpus_id,
+                )
+                if entry.bin_code == code
+            ),
+            None,
+        )
     return {
         "bin_code": passport.bin_code,
         "theme": passport.theme or "",
@@ -596,7 +656,28 @@ def load_manage_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> Manage
         "catalog_photo_url": (
             f"/bins/photo/{quote(passport.bin_code, safe='')}" if has_photo else None
         ),
+        "label_drift": label_drift,
     }
+
+
+def record_label_drift_dismissal(
+    action: LabelDriftDismissAction,
+    scope: BinActionScope,
+) -> None:
+    """Append an exact proposal-linked dismissal on the owner connection."""
+    from binkeeper.bin_label_drift import dismiss_label_drift_proposal
+    from binkeeper.db import connect
+
+    with connect() as conn:
+        dismiss_label_drift_proposal(
+            conn,
+            bin_code=action.bin_code,
+            proposal_external_id=action.proposal_external_id,
+            action_id=action.action_id,
+            observed_at=action.received_at,
+            tenant_id=scope.tenant_id,
+            corpus_id=scope.corpus_id,
+        )
 
 
 def save_bin_profile(
@@ -850,6 +931,7 @@ def _action_urls(base_path: str, bin_code: str) -> dict[str, str]:
             ("photo_action", "photo"),
             ("print_action", "print"),
             ("not_found_action", "not-found"),
+            ("label_drift_dismiss_action", "label-drift-dismiss"),
         )
     }
 
@@ -886,6 +968,14 @@ def _manage_notice(key: str) -> dict[str, str] | None:
             "That print request was already handled; no second attempt was made.",
         ),
         "save-failed": ("error", "Nothing was changed. Check the fields and try again."),
+        "label-drift-dismissed": (
+            "ok",
+            "Suggestion dismissed. It will stay demoted unless new photo evidence arrives.",
+        ),
+        "label-drift-failed": (
+            "error",
+            "Nothing was changed. Reload the current review and try again.",
+        ),
         "photo-failed": ("error", "The photo was not added. Choose it again and retry."),
         "print-failed": ("error", "The label could not be requested. Check the printer."),
         "print-unknown": (

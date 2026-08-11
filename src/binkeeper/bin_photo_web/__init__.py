@@ -24,6 +24,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import FormData, UploadFile
 
 from binkeeper.bin_photo_web.manage import (
+    LabelDriftDismissalRecorder,
     ManageLoader,
     ManageRouteConfig,
     RetrievalRecorder,
@@ -69,6 +70,7 @@ def create_app(
     manage_loader: ManageLoader | None = None,
     triage_loader: TriageLoader | None = None,
     retrieval_recorder: RetrievalRecorder | None = None,
+    label_drift_dismissal_recorder: LabelDriftDismissalRecorder | None = None,
     stash_deck_loader: StashDeckLoader | None = None,
     stash_run_lister: StashRunLister | None = None,
     stash_run_creator: StashRunCreator | None = None,
@@ -274,6 +276,7 @@ def create_app(
             strict_origin=strict_origin_check,
             load_triage=triage_loader,
             record_retrieval=retrieval_recorder,
+            record_label_drift_dismissal=label_drift_dismissal_recorder,
         ),
     )
 
