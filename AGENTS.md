@@ -25,8 +25,13 @@ peripheral-OCR location true-up is deployed as
 `binkeeper bin-ocr-harvest --local-only` with the local peecee `qwen3-vl:32b`
 pinned by an environment pin file, and fails closed (exit 3 = no geofence site
 configured, exit 4 = photos read but zero codes seen). ADR 0006 (accepted
-2026-08-06) records the async label-drift review queue; it is designed but not
-yet implemented (`BINK-42`..`BINK-44`).
+2026-08-06) is deployed as `binkeeper-label-drift.{service,timer}`
+(`deploy/systemd/`, 04:00 with up to 15 minutes of jitter, ordered after OCR).
+It runs an input-keyed union of OpenRouter `anthropic/claude-opus-5` and an
+exact gpu-fleet lease for peecee `qwen3-vl:8b`, then writes append-only
+proposals for the rebuildable owner review queue. A model error fails the
+affected bin closed; exit 5 reports one or more model failures. `BINK-42`..
+`BINK-44` completed on 2026-08-11.
 
 ## Architecture constraints
 
@@ -39,8 +44,8 @@ yet implemented (`BINK-42`..`BINK-44`).
   owner approval. The one accepted export exception is ADR 0004: the advisory
   vision lane may call the configured cloud vision provider with the
   downscaled inference image and prompt text only. ADR 0005 selects the
-  current default provider inside that unchanged scope; accepted ADR 0006 will
-  add a nightly ensemble upstream under the same scope once implemented.
+  current default provider inside that unchanged scope; ADR 0006 adds the
+  deployed nightly ensemble upstream under the same scope.
 - Tests and fixtures must be deterministic and synthetic. Never commit real bin
   contents, photos, coordinates, credentials, or database dumps.
 - Tailnet-fronted HTTPS is the owner access path. Verify fronted behavior before

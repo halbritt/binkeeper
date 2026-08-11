@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-08-06
+- Implemented: 2026-08-11 (`BINK-42`..`BINK-44`)
 
 ## Context
 
@@ -87,6 +88,6 @@ triggers: junk rate high enough to cause queue fatigue, a benchmark rerun on
 a grown photo set moving the standings, or OpenRouter/Anthropic pricing or
 routing changes that break the ~$0.02/photo assumption.
 
-Implementation slices (tracked in Plane): (1) `label_drift_proposal` evidence
-kind + nightly writer sharing the 03:30 window, (2) queue fold + read-only
-catalog surface, (3) accept/dismiss actions with idempotency keys.
+Implementation slices (completed in Plane): (1) `label_drift_proposal`
+evidence kind + the 04:00 timer ordered after the 03:30 OCR pass, (2) queue fold
++ read-only catalog surface, (3) accept/dismiss actions with idempotency keys.
