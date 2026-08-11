@@ -46,10 +46,11 @@ class PersonalMemoryService:
         self._conn = conn
 
     def capture(self, request: CaptureRequest) -> CaptureResult:
-        identity = "\0".join(
-            (request.tenant_id, request.corpus_id, request.idempotency_key)
-        ).encode()
-        external_id = "capture:" + hashlib.sha256(identity).hexdigest()
+        external_id = capture_external_id(
+            idempotency_key=request.idempotency_key,
+            tenant_id=request.tenant_id,
+            corpus_id=request.corpus_id,
+        )
         observed_at = request.observed_at.astimezone(UTC)
         payload = {
             "schema_version": "binkeeper.capture.v1",
@@ -97,6 +98,12 @@ class PersonalMemoryService:
         ).fetchone()
         assert inserted is not None
         return CaptureResult(str(inserted[0]), False)
+
+
+def capture_external_id(*, idempotency_key: str, tenant_id: str, corpus_id: str) -> str:
+    """Return the capture identity used for one scoped idempotency key."""
+    identity = "\0".join((tenant_id, corpus_id, idempotency_key)).encode()
+    return "capture:" + hashlib.sha256(identity).hexdigest()
 
 
 def _canonical(value: Any) -> str:

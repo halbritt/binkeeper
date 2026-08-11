@@ -87,6 +87,44 @@ so wall-clock grows with the vault — revisit before the vault approaches the
 unit's 4 h `TimeoutStartSec`. Rollback: `systemctl disable --now
 binkeeper-ocr-harvest.timer`.
 
+## Nightly label-drift review pass
+
+`binkeeper-label-drift.{service,timer}` runs at 04:00 with up to 15 minutes of
+jitter and is ordered after `binkeeper-ocr-harvest.service`. It uses
+`gpu-fleet-run` to claim the exact peecee `qwen3-vl:8b` batch slot and passes
+the leased endpoint and served model to `binkeeper bin-label-drift-harvest`.
+Each photo then runs concurrently through local 8B and OpenRouter Anthropic
+Opus 5. A proposal is recorded only if both legs return valid model JSON.
+
+Install `deploy/systemd/binkeeper-label-drift.env` mode 0600 as
+`/etc/binkeeper/binkeeper-label-drift.env`; it contains no secret. The
+OpenRouter key and `BINKEEPER_WRITES_ENABLED` remain in the shared
+`/etc/binkeeper/binkeeper.env`. Install both unit files, verify them, then
+enable the timer:
+
+```sh
+systemd-analyze verify \
+  /etc/systemd/system/binkeeper-label-drift.service \
+  /etc/systemd/system/binkeeper-label-drift.timer
+systemctl daemon-reload
+systemctl enable --now binkeeper-label-drift.timer
+systemctl start binkeeper-label-drift.service
+journalctl -u binkeeper-label-drift.service -n 100 --no-pager
+```
+
+The CLI runs autocommit, so proposals already appended for other bins survive
+a later model error. Exit 5 means at least one bin failed strict two-model
+analysis; unchanged inputs are skipped only after a proposal exists, so the
+next night retries failed bins. An unavailable slot returns the fleet runner's
+temporary-failure exit 75. The journal summary reports scanned, analyzed, recorded,
+unchanged, unreadable, and model-error counts without naming owner contents.
+
+Rollback is one lane-local setting plus a rerun:
+`BINKEEPER_BIN_LABEL_DRIFT_MODE=local` stops the Anthropic export while keeping
+the queue, or `systemctl disable --now binkeeper-label-drift.timer` stops the
+pass. Existing proposals and dismissals remain immutable evidence in either
+case.
+
 The reviewed backup and restore-smoke units are timer-driven templates, not an
 authorization to install or enable them. Their key material belongs only in the
 owner-local mode-0600 vault configuration. See

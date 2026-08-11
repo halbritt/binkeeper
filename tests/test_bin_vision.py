@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from threading import Event
 from urllib.request import Request
 
 import pytest
 
 from binkeeper.bin_vision import (
     BinVisionError,
+    EnsembleVisionClient,
     GeminiVisionClient,
     OllamaVisionClient,
     default_vision_client,
@@ -92,6 +94,14 @@ def test_tolerates_one_unparseable_photo_among_several() -> None:
     assert proposal.photo_count == 2
 
 
+def test_strict_proposal_rejects_one_unparseable_photo() -> None:
+    good = '{"items": [{"label": "drill bits", "confidence": 0.9}], "theme": "power tools"}'
+    client = _FakeVisionClient(["sorry, no idea", good])
+
+    with pytest.raises(BinVisionError, match="no JSON object"):
+        propose_bin_label(client, [b"bad", b"good"], fail_on_error=True)
+
+
 def test_all_unparseable_output_raises() -> None:
     client = _FakeVisionClient(["I could not read the image, sorry."])
     with pytest.raises(BinVisionError):
@@ -102,6 +112,76 @@ def test_no_photos_raises() -> None:
     client = _FakeVisionClient([_ONE_PHOTO])
     with pytest.raises(BinVisionError, match="at least one photo"):
         propose_bin_label(client, [])
+
+
+def test_ensemble_unions_items_and_prefers_the_cloud_theme() -> None:
+    cloud = _FakeVisionClient(
+        [
+            '{"items": [{"label": "hex keys", "confidence": 0.8}], '
+            '"theme": "hand tools", "summary": "cloud summary"}'
+        ]
+    )
+    cloud.model = "anthropic/claude-opus-5"
+    local = _FakeVisionClient(
+        [
+            '{"items": [{"label": "hex keys", "confidence": 0.9}, '
+            '{"label": "torque wrench", "confidence": 0.7}], '
+            '"theme": "mechanic tools", "summary": "local summary"}'
+        ]
+    )
+    local.model = "qwen3-vl:8b"
+
+    proposal = propose_bin_label(EnsembleVisionClient(cloud=cloud, local=local), [b"photo"])
+
+    assert proposal.theme == "hand tools"
+    assert proposal.summary == "cloud summary"
+    assert {item.label: item.confidence for item in proposal.items} == {
+        "hex keys": 0.9,
+        "torque wrench": 0.7,
+    }
+    assert proposal.model_version == "anthropic/claude-opus-5+qwen3-vl:8b"
+
+
+def test_ensemble_starts_both_model_legs_concurrently() -> None:
+    cloud_started = Event()
+    local_started = Event()
+
+    class _BlockingClient:
+        def __init__(self, model: str, started: Event, peer_started: Event) -> None:
+            self.model = model
+            self.started = started
+            self.peer_started = peer_started
+
+        def analyze(self, prompt: str, image: bytes) -> str:
+            self.started.set()
+            if not self.peer_started.wait(timeout=1):
+                raise BinVisionError("the other model leg did not start concurrently")
+            return '{"items": [], "theme": "tools", "summary": ""}'
+
+    ensemble = EnsembleVisionClient(
+        cloud=_BlockingClient("cloud", cloud_started, local_started),
+        local=_BlockingClient("local", local_started, cloud_started),
+    )
+
+    assert propose_bin_label(ensemble, [b"photo"]).theme == "tools"
+
+
+def test_ensemble_fails_closed_when_either_model_leg_fails() -> None:
+    class _FailingClient:
+        model = "cloud"
+
+        def analyze(self, prompt: str, image: bytes) -> str:
+            raise BinVisionError("synthetic cloud failure")
+
+    healthy = _FakeVisionClient([_ONE_PHOTO])
+    healthy.model = "local"
+
+    with pytest.raises(BinVisionError, match="synthetic cloud failure"):
+        propose_bin_label(
+            EnsembleVisionClient(cloud=_FailingClient(), local=healthy),
+            [b"photo"],
+            fail_on_error=True,
+        )
 
 
 class _FakeHttpResponse:
@@ -125,6 +205,17 @@ class _FakeHttpResponse:
 
     def read(self) -> bytes:
         return json.dumps({"choices": [{"message": self._message}]}).encode("utf-8")
+
+
+class _FakeRawHttpResponse:
+    def __enter__(self) -> _FakeRawHttpResponse:
+        return self
+
+    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return b"upstream returned HTML instead of JSON"
 
 
 def _request_payload(request: Request) -> dict[str, object]:
@@ -251,6 +342,19 @@ def test_read_timeout_becomes_a_vision_error(monkeypatch: pytest.MonkeyPatch) ->
 
     with pytest.raises(BinVisionError, match="did not respond within 60"):
         propose_bin_label(client, [b"not-a-real-image"])
+
+
+def test_invalid_http_response_becomes_a_vision_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "binkeeper.bin_vision.urllib.request.urlopen",
+        lambda request, *, timeout: _FakeRawHttpResponse(),
+    )
+    client = OllamaVisionClient(endpoint="https://synthetic.invalid/v1")
+
+    with pytest.raises(BinVisionError, match="response was not valid JSON"):
+        client.analyze("Describe this bin", b"not-a-real-image")
 
 
 class _FakeGeminiResponse:

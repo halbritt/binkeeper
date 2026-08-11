@@ -24,6 +24,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Final, Protocol
 
@@ -125,6 +126,36 @@ class VisionClient(Protocol):
     def analyze(self, prompt: str, image: bytes) -> str:
         """Return the model's raw text answer for one image and prompt."""
         ...
+
+
+class EnsembleVisionClient:
+    """Run the ADR 0006 cloud and local legs concurrently and union their JSON."""
+
+    def __init__(self, *, cloud: VisionClient, local: VisionClient) -> None:
+        self.cloud = cloud
+        self.local = local
+        self.model_versions = (cloud.model, local.model)
+        self.model = "+".join(self.model_versions)
+
+    def analyze(self, prompt: str, image: bytes) -> str:
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="binkeeper-label-drift") as pool:
+            cloud_future = pool.submit(self.cloud.analyze, prompt, image)
+            local_future = pool.submit(self.local.analyze, prompt, image)
+            cloud = _parse_vision_json(cloud_future.result())
+            local = _parse_vision_json(local_future.result())
+
+        merged: dict[str, DetectedItem] = {}
+        for parsed in (cloud, local):
+            for item in _items_from(parsed):
+                key = _normalize(item.label)
+                if key and (key not in merged or item.confidence > merged[key].confidence):
+                    merged[key] = item
+        payload = {
+            "items": [item.to_json() for item in merged.values()],
+            "theme": _clean(cloud.get("theme")) or _clean(local.get("theme")) or "",
+            "summary": _clean(cloud.get("summary")) or _clean(local.get("summary")) or "",
+        }
+        return json.dumps(payload, sort_keys=True)
 
 
 class OllamaVisionClient:
@@ -243,6 +274,8 @@ class OllamaVisionClient:
                 f"vision model {self.model} at {self.endpoint} did not respond "
                 f"within {timeout_s:g}s (it may still be loading; try again)"
             ) from exc
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise BinVisionError("vision response was not valid JSON") from exc
         try:
             message = body["choices"][0]["message"]
         except (KeyError, IndexError, TypeError) as exc:
@@ -342,6 +375,8 @@ class GeminiVisionClient:
                 f"vision model {self.model} at {self.endpoint} did not respond "
                 f"within {self.timeout_s:g}s"
             ) from exc
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise BinVisionError("vision response was not valid JSON") from exc
         try:
             parts = body["candidates"][0]["content"]["parts"]
             text = "".join(str(part.get("text") or "") for part in parts if isinstance(part, dict))
@@ -382,6 +417,7 @@ def propose_bin_label(
     *,
     notes: str | None = None,
     confidence_floor: float = DEFAULT_ITEM_CONFIDENCE_FLOOR,
+    fail_on_error: bool = False,
 ) -> BinLabelProposal:
     """Analyze each photo, merge the results, and propose a provisional label."""
     if not images:
@@ -398,6 +434,8 @@ def propose_bin_label(
         try:
             parsed = _parse_vision_json(client.analyze(prompt, image))
         except BinVisionError as exc:
+            if fail_on_error:
+                raise
             failures.append(str(exc))
             continue
         parsed_any = True

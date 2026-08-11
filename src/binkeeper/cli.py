@@ -157,6 +157,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="refuse to run unless the configured vision provider is 'local'",
     )
     _scope(harvest)
+    drift = subparsers.add_parser(
+        "bin-label-drift-harvest",
+        help="re-propose changed bin labels for the owner review queue",
+    )
+    drift.add_argument("--mode", choices=("ensemble", "local"))
+    drift.add_argument("--local-endpoint")
+    drift.add_argument("--local-model")
+    _scope(drift)
     return parser
 
 
@@ -181,6 +189,7 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
         "bin-anchor-label",
         "bin-virtual-define",
         "bin-ocr-harvest",
+        "bin-label-drift-harvest",
     }:
         require_writer_authority()
     common = {"tenant_id": args.tenant, "corpus_id": args.corpus}
@@ -310,6 +319,18 @@ def execute(args: argparse.Namespace, conn: psycopg.Connection) -> dict[str, Any
                     "set BINKEEPER_BIN_VISION_PROVIDER=local"
                 )
         return harvest_peripheral_ocr(conn, max_photos=args.max_photos, **common).to_json()
+    if args.command == "bin-label-drift-harvest":
+        from binkeeper.bin_label_drift import (
+            default_label_drift_client,
+            harvest_label_drift,
+        )
+
+        client = default_label_drift_client(
+            mode=args.mode,
+            local_endpoint=args.local_endpoint,
+            local_model=args.local_model,
+        )
+        return harvest_label_drift(conn, client=client, **common).to_json()
     raise ValueError(f"unsupported command {args.command!r}")
 
 
@@ -342,6 +363,11 @@ def harvest_exit_code(payload: dict[str, Any]) -> int:
     return 0
 
 
+def label_drift_exit_code(payload: dict[str, Any]) -> int:
+    """Exit 5 when any bin failed its strict two-model analysis."""
+    return 5 if payload.get("model_errors", 0) else 0
+
+
 def main() -> None:
     args = build_parser().parse_args()
     read_only = args.command in {
@@ -357,9 +383,11 @@ def main() -> None:
     # The OCR harvest is incremental by design (idempotency-keyed observations) and
     # can run for hours against a slow local model; autocommit keeps each recorded
     # observation durable if the pass is killed, instead of rolling back the night.
-    autocommit = args.command == "bin-ocr-harvest"
+    autocommit = args.command in {"bin-ocr-harvest", "bin-label-drift-harvest"}
     with connect(role="serving" if read_only else "owner", autocommit=autocommit) as conn:
         payload = execute(args, conn)
         print(json.dumps(payload, sort_keys=True))
     if args.command == "bin-ocr-harvest":
         sys.exit(harvest_exit_code(payload))
+    if args.command == "bin-label-drift-harvest":
+        sys.exit(label_drift_exit_code(payload))

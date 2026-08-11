@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly BinKeeper two-model label-drift review harvest
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=binkeeper-label-drift.service
+
+[Install]
+WantedBy=timers.target
