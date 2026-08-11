@@ -284,7 +284,7 @@ def create_app(
         # A supplied passport loader defines a complete synthetic/read-model
         # boundary (the browser harness relies on this). Do not reach around it
         # into the production database for a second projection.
-        load_label_drift = lambda: ()
+        load_label_drift = _empty_label_drift_queue
     else:
         load_label_drift = partial(
             _load_label_drift_queue,
@@ -470,6 +470,11 @@ def _private_photo_headers() -> dict[str, str]:
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
     }
+
+
+def _empty_label_drift_queue() -> tuple[LabelDriftQueueEntry, ...]:
+    """Return the empty half of a fully injected synthetic catalog boundary."""
+    return ()
 
 
 def _passport_view(
