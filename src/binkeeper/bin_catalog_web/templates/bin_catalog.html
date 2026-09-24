@@ -18,9 +18,7 @@
   .bin-catalog-page { display: grid; gap: var(--space-5); }
   .bin-catalog-hero {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--space-4);
-    align-items: end;
   }
   .bin-catalog-kicker {
     margin: 0;
@@ -33,7 +31,7 @@
   .bin-catalog-intro { max-width: 46rem; margin: 0; }
   .bin-catalog-stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--space-2);
   }
   .bin-catalog-stat {
@@ -105,6 +103,11 @@
     border-radius: 6px;
     background: var(--color-surface-muted);
     padding: 0;
+  }
+  .bin-catalog-photo[data-photo-state="missing"],
+  .bin-catalog-photo[data-photo-state="unavailable"] {
+    aspect-ratio: auto;
+    min-height: 3rem;
   }
   .bin-catalog-photo-button {
     cursor: zoom-in;
@@ -214,9 +217,8 @@
   .bin-catalog-no-match[hidden],
   [data-clear-filters][hidden] { display: none; }
   @media (max-width: 760px) {
-    .bin-catalog-hero,
     .bin-catalog-filter { grid-template-columns: 1fr; align-items: stretch; }
-    .bin-catalog-stats { width: 100%; }
+    .bin-catalog-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 480px) {
     .bin-catalog-card-head { align-items: stretch; flex-direction: column; }
@@ -237,7 +239,7 @@
       </p>
     </div>
     {% if not catalog_unavailable %}
-    <div class="bin-catalog-stats" aria-label="Catalog summary">
+    <div class="bin-catalog-stats" role="group" aria-label="Catalog summary">
       <div class="bin-catalog-stat">
         <strong>{{ total_count }}</strong>
         <span>known bin{% if total_count != 1 %}s{% endif %}</span>
@@ -251,7 +253,7 @@
         <span>map visibility</span>
       </div>
       {% if label_drift_count %}
-      <div class="bin-catalog-stat" aria-label="{{ label_drift_count }} pending label review{% if label_drift_count != 1 %}s{% endif %}">
+      <div class="bin-catalog-stat">
         <strong>{{ label_drift_count }}</strong>
         <span>pending label review{% if label_drift_count != 1 %}s{% endif %}</span>
       </div>
@@ -379,7 +381,7 @@
         </div>
         {% endif %}
 
-        <div class="bin-catalog-attributes" aria-label="Capacity, volume, and location freshness">
+        <div class="bin-catalog-attributes" role="group" aria-label="Capacity, volume, and location freshness">
           <span class="chip">{{ entry.capacity_label }}</span>
           <span class="chip">{{ entry.volume_label }}</span>
           <span class="chip" data-fog-chip>{{ entry.fog_label }} · {{ entry.location_confidence_label }}</span>

@@ -7,11 +7,11 @@
 <header class="bin-photo-hero">
   <div class="bin-photo-heading-row">
     <span class="bin-photo-kicker">BinKeeper</span>
-    <span class="status-chip" data-status="active">Local vision</span>
+    <span class="status-chip" data-status="active">Label proposal</span>
   </div>
   <h1>Bin photo drop</h1>
-  <p class="bin-photo-intro">Upload photos of a bin's contents. The local vision model proposes a label;
-    nothing is captured or printed until you confirm.</p>
+  <p class="bin-photo-intro">Upload photos of a bin's contents. The originals are stored when you submit;
+    a configured vision provider proposes a label. Nothing is registered or printed until you confirm.</p>
 </header>
 
 <section class="panel panel-padded bin-photo-card" aria-labelledby="photo-details-heading">
@@ -51,13 +51,13 @@
               data-busy-label="Analyzing photos…">
         <span data-button-label>Propose label</span>
       </button>
-      <span class="field-help bin-photo-action-note">Stored locally; no cloud upload.</span>
+      <span class="field-help bin-photo-action-note">Originals stay local. A downscaled image and prompt may be sent to the configured cloud vision provider.</span>
     </div>
 
     <p class="bin-photo-progress" data-submit-progress hidden role="status"
        aria-live="polite" aria-atomic="true">
       <span class="bin-photo-progress-marker" aria-hidden="true"></span>
-      <span>Photos are uploading. The local vision model is preparing a label proposal. Keep this page open.</span>
+      <span>Saving photos and preparing a label proposal. Keep this page open.</span>
     </p>
   </form>
 </section>

@@ -73,6 +73,16 @@ make migration-test
 make package-test
 ```
 
+Run the synthetic browser matrix with UIPass v0.1 from this checkout:
+
+```sh
+uipass run --manifest .uipass.yaml --output /tmp/binkeeper-uipass-run
+```
+
+The [first browser and UX review](docs/verification/uipass-2026-09-24.md)
+records the baseline defects, fixes, and selected evidence. The fixture has no
+database connection or write path.
+
 The primary entry points are `binkeeper` and `binkeeper-mcp-stdio`; both
 require an explicit local `BINKEEPER_DATABASE_URL`, and neither imports the
 Engram package or reaches its database. The package also installs

@@ -1,0 +1,421 @@
+{
+  "axe_version": "4.13.0",
+  "base_url": "http://127.0.0.1:32831",
+  "browser_version": "141.0.7390.37",
+  "cases": [
+    {
+      "axe": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.ZGVza3RvcA/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.ZGVza3RvcA/console.json",
+      "findings": [],
+      "id": "Y2F0YWxvZw.bm9fbWF0Y2g.ZGVza3RvcA",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.ZGVza3RvcA/screenshot.png",
+      "state": "no_match",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "desktop"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93/console.json",
+      "findings": [],
+      "id": "Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93/screenshot.png",
+      "state": "no_match",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "narrow"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.cGhvbmU/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.cGhvbmU/console.json",
+      "findings": [],
+      "id": "Y2F0YWxvZw.bm9fbWF0Y2g.cGhvbmU",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.cGhvbmU/screenshot.png",
+      "state": "no_match",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "phone"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/console.json",
+      "findings": [],
+      "id": "Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/screenshot.png",
+      "state": "populated",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "desktop"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/console.json",
+      "findings": [],
+      "id": "Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/screenshot.png",
+      "state": "populated",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "narrow"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/console.json",
+      "findings": [],
+      "id": "Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/screenshot.png",
+      "state": "populated",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "phone"
+    },
+    {
+      "axe": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.ZGVza3RvcA/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.ZGVza3RvcA/console.json",
+      "findings": [],
+      "id": "bWFuYWdl.cGVuZGluZ19yZXZpZXc.ZGVza3RvcA",
+      "responses": [],
+      "screenshot": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.ZGVza3RvcA/screenshot.png",
+      "state": "pending_review",
+      "status": "completed",
+      "surface": "manage",
+      "viewport": "desktop"
+    },
+    {
+      "axe": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.bmFycm93/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.bmFycm93/console.json",
+      "findings": [],
+      "id": "bWFuYWdl.cGVuZGluZ19yZXZpZXc.bmFycm93",
+      "responses": [],
+      "screenshot": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.bmFycm93/screenshot.png",
+      "state": "pending_review",
+      "status": "completed",
+      "surface": "manage",
+      "viewport": "narrow"
+    },
+    {
+      "axe": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.cGhvbmU/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.cGhvbmU/console.json",
+      "findings": [],
+      "id": "bWFuYWdl.cGVuZGluZ19yZXZpZXc.cGhvbmU",
+      "responses": [],
+      "screenshot": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.cGhvbmU/screenshot.png",
+      "state": "pending_review",
+      "status": "completed",
+      "surface": "manage",
+      "viewport": "phone"
+    },
+    {
+      "axe": "cases/cGhvdG9fZHJvcA.Zm9ybQ.ZGVza3RvcA/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/cGhvdG9fZHJvcA.Zm9ybQ.ZGVza3RvcA/console.json",
+      "findings": [],
+      "id": "cGhvdG9fZHJvcA.Zm9ybQ.ZGVza3RvcA",
+      "responses": [],
+      "screenshot": "cases/cGhvdG9fZHJvcA.Zm9ybQ.ZGVza3RvcA/screenshot.png",
+      "state": "form",
+      "status": "completed",
+      "surface": "photo_drop",
+      "viewport": "desktop"
+    },
+    {
+      "axe": "cases/cGhvdG9fZHJvcA.Zm9ybQ.bmFycm93/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/cGhvdG9fZHJvcA.Zm9ybQ.bmFycm93/console.json",
+      "findings": [],
+      "id": "cGhvdG9fZHJvcA.Zm9ybQ.bmFycm93",
+      "responses": [],
+      "screenshot": "cases/cGhvdG9fZHJvcA.Zm9ybQ.bmFycm93/screenshot.png",
+      "state": "form",
+      "status": "completed",
+      "surface": "photo_drop",
+      "viewport": "narrow"
+    },
+    {
+      "axe": "cases/cGhvdG9fZHJvcA.Zm9ybQ.cGhvbmU/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/cGhvdG9fZHJvcA.Zm9ybQ.cGhvbmU/console.json",
+      "findings": [],
+      "id": "cGhvdG9fZHJvcA.Zm9ybQ.cGhvbmU",
+      "responses": [],
+      "screenshot": "cases/cGhvdG9fZHJvcA.Zm9ybQ.cGhvbmU/screenshot.png",
+      "state": "form",
+      "status": "completed",
+      "surface": "photo_drop",
+      "viewport": "phone"
+    },
+    {
+      "axe": "cases/cmVnaXN0ZXI.Zm9ybQ.ZGVza3RvcA/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/cmVnaXN0ZXI.Zm9ybQ.ZGVza3RvcA/console.json",
+      "findings": [],
+      "id": "cmVnaXN0ZXI.Zm9ybQ.ZGVza3RvcA",
+      "responses": [],
+      "screenshot": "cases/cmVnaXN0ZXI.Zm9ybQ.ZGVza3RvcA/screenshot.png",
+      "state": "form",
+      "status": "completed",
+      "surface": "register",
+      "viewport": "desktop"
+    },
+    {
+      "axe": "cases/cmVnaXN0ZXI.Zm9ybQ.bmFycm93/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/cmVnaXN0ZXI.Zm9ybQ.bmFycm93/console.json",
+      "findings": [],
+      "id": "cmVnaXN0ZXI.Zm9ybQ.bmFycm93",
+      "responses": [],
+      "screenshot": "cases/cmVnaXN0ZXI.Zm9ybQ.bmFycm93/screenshot.png",
+      "state": "form",
+      "status": "completed",
+      "surface": "register",
+      "viewport": "narrow"
+    },
+    {
+      "axe": "cases/cmVnaXN0ZXI.Zm9ybQ.cGhvbmU/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/cmVnaXN0ZXI.Zm9ybQ.cGhvbmU/console.json",
+      "findings": [],
+      "id": "cmVnaXN0ZXI.Zm9ybQ.cGhvbmU",
+      "responses": [],
+      "screenshot": "cases/cmVnaXN0ZXI.Zm9ybQ.cGhvbmU/screenshot.png",
+      "state": "form",
+      "status": "completed",
+      "surface": "register",
+      "viewport": "phone"
+    }
+  ],
+  "check_policy_version": 1,
+  "counts": {
+    "blocking": 0,
+    "suppressed": 0,
+    "warning": 0
+  },
+  "effective_inputs": {
+    "case_routes": {
+      "catalog/no_match": "/bins/?q=no-such-bin",
+      "catalog/populated": "/bins/",
+      "manage/pending_review": "/manage/AGR-014",
+      "photo_drop/form": "/",
+      "register/form": "/register"
+    },
+    "timeouts": {
+      "build": 300,
+      "case": 30,
+      "startup": 30,
+      "total": 600
+    },
+    "viewports": {
+      "desktop": {
+        "height": 800,
+        "width": 1280
+      },
+      "narrow": {
+        "height": 720,
+        "width": 320
+      },
+      "phone": {
+        "height": 844,
+        "width": 390
+      }
+    }
+  },
+  "environment": {
+    "color_scheme": "light",
+    "fixed_time": "2026-09-24T21:00:13.713623+00:00",
+    "locale": "en-US",
+    "timezone": "UTC"
+  },
+  "errors": [],
+  "excluded_surfaces": [],
+  "exit_code": 0,
+  "finished_at": "2026-09-24T21:00:24.134201+00:00",
+  "manifest": "/home/halbritt/git/binkeeper/.uipass.yaml",
+  "mode": "managed",
+  "run_id": "d6682838-94ca-4c80-a391-14f6fa361f3f",
+  "schema_version": 1,
+  "selected_cases": [
+    [
+      "catalog",
+      "no_match",
+      "desktop"
+    ],
+    [
+      "catalog",
+      "no_match",
+      "narrow"
+    ],
+    [
+      "catalog",
+      "no_match",
+      "phone"
+    ],
+    [
+      "catalog",
+      "populated",
+      "desktop"
+    ],
+    [
+      "catalog",
+      "populated",
+      "narrow"
+    ],
+    [
+      "catalog",
+      "populated",
+      "phone"
+    ],
+    [
+      "manage",
+      "pending_review",
+      "desktop"
+    ],
+    [
+      "manage",
+      "pending_review",
+      "narrow"
+    ],
+    [
+      "manage",
+      "pending_review",
+      "phone"
+    ],
+    [
+      "photo_drop",
+      "form",
+      "desktop"
+    ],
+    [
+      "photo_drop",
+      "form",
+      "narrow"
+    ],
+    [
+      "photo_drop",
+      "form",
+      "phone"
+    ],
+    [
+      "register",
+      "form",
+      "desktop"
+    ],
+    [
+      "register",
+      "form",
+      "narrow"
+    ],
+    [
+      "register",
+      "form",
+      "phone"
+    ]
+  ],
+  "selected_surfaces": [
+    "catalog",
+    "manage",
+    "photo_drop",
+    "register"
+  ],
+  "source": {
+    "git_dirty": true,
+    "git_head": "4692fa8772b17be662f5adae5a31489a429080b7",
+    "input_sha256": {
+      ".uipass.yaml": "6781616c5db2fe9754da31fed633468a65363acef0c8b944e9dfedb73a01818f"
+    },
+    "working_directory": "/home/halbritt/git/binkeeper"
+  },
+  "started_at": "2026-09-24T21:00:13.713623+00:00",
+  "tool_version": "0.1.0",
+  "verdict": "pass",
+  "warnings": []
+}

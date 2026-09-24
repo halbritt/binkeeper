@@ -1,0 +1,792 @@
+{
+  "axe_version": "4.13.0",
+  "base_url": "http://127.0.0.1:40601",
+  "browser_version": "141.0.7390.37",
+  "cases": [
+    {
+      "axe": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.ZGVza3RvcA/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.ZGVza3RvcA/console.json",
+      "findings": [
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.ZGVza3RvcA/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.ZGVza3RvcA/screenshot.png"
+          },
+          "id": "467edbef91ef0b76",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": ".bin-catalog-stats",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.ZGVza3RvcA/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.ZGVza3RvcA/screenshot.png"
+          },
+          "id": "84416c5d157d4dbf",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": "div[aria-label=\"1 pending label review\"]",
+          "severity": "warning"
+        }
+      ],
+      "id": "Y2F0YWxvZw.bm9fbWF0Y2g.ZGVza3RvcA",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.ZGVza3RvcA/screenshot.png",
+      "state": "no_match",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "desktop"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93/console.json",
+      "findings": [
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93/screenshot.png"
+          },
+          "id": "608b12cf08811bd5",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": ".bin-catalog-stats",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93/screenshot.png"
+          },
+          "id": "2267a20db2088566",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": "div[aria-label=\"1 pending label review\"]",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:color-contrast",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93/screenshot.png"
+          },
+          "id": "055a658eee1211c7",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must meet minimum color contrast ratio thresholds",
+          "selector": "a[href$=\"stash\"]",
+          "severity": "warning"
+        }
+      ],
+      "id": "Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.bmFycm93/screenshot.png",
+      "state": "no_match",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "narrow"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.cGhvbmU/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.cGhvbmU/console.json",
+      "findings": [
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.cGhvbmU/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.cGhvbmU/screenshot.png"
+          },
+          "id": "eca3293dc78615fe",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": ".bin-catalog-stats",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.cGhvbmU/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.cGhvbmU/screenshot.png"
+          },
+          "id": "7ad839c1aeaddb31",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": "div[aria-label=\"1 pending label review\"]",
+          "severity": "warning"
+        }
+      ],
+      "id": "Y2F0YWxvZw.bm9fbWF0Y2g.cGhvbmU",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.bm9fbWF0Y2g.cGhvbmU/screenshot.png",
+      "state": "no_match",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "phone"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/console.json",
+      "findings": [
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/screenshot.png"
+          },
+          "id": "53aa33f478676afb",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": ".bin-catalog-stats",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/screenshot.png"
+          },
+          "id": "c09d8d0ee8909752",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": "div[aria-label=\"1 pending label review\"]",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/screenshot.png"
+          },
+          "id": "f7b29874fd5e3b15",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": "article[data-site=\"alameda-garage\"] > .bin-catalog-attributes",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/screenshot.png"
+          },
+          "id": "7316ab125c811e7f",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": "article[data-site=\"oakland-fab-east\"] > .bin-catalog-attributes",
+          "severity": "warning"
+        }
+      ],
+      "id": "Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.ZGVza3RvcA/screenshot.png",
+      "state": "populated",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "desktop"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/console.json",
+      "findings": [
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/screenshot.png"
+          },
+          "id": "a4c0940d9182512e",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": ".bin-catalog-stats",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/screenshot.png"
+          },
+          "id": "048b42795b56518e",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": "div[aria-label=\"1 pending label review\"]",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/screenshot.png"
+          },
+          "id": "8b12d7fd4bf6a9c0",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": "article[data-site=\"alameda-garage\"] > .bin-catalog-attributes",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/screenshot.png"
+          },
+          "id": "dbc84b18aa077c7a",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": "article[data-site=\"oakland-fab-east\"] > .bin-catalog-attributes",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:color-contrast",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/screenshot.png"
+          },
+          "id": "ad8b946ad1260468",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must meet minimum color contrast ratio thresholds",
+          "selector": "a[href$=\"stash\"]",
+          "severity": "warning"
+        }
+      ],
+      "id": "Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.bmFycm93/screenshot.png",
+      "state": "populated",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "narrow"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/console.json",
+      "findings": [
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/screenshot.png"
+          },
+          "id": "f3facf485cf6458c",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": ".bin-catalog-stats",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/screenshot.png"
+          },
+          "id": "71de5a5a8027bb39",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": "div[aria-label=\"1 pending label review\"]",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/screenshot.png"
+          },
+          "id": "a507fa5e33e6088e",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": "article[data-site=\"alameda-garage\"] > .bin-catalog-attributes",
+          "severity": "warning"
+        },
+        {
+          "check": "axe:aria-prohibited-attr",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/axe.json",
+            "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/screenshot.png"
+          },
+          "id": "91ceb1231cc195ac",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must only use permitted ARIA attributes",
+          "selector": "article[data-site=\"oakland-fab-east\"] > .bin-catalog-attributes",
+          "severity": "warning"
+        }
+      ],
+      "id": "Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/screenshot.png",
+      "state": "populated",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "phone"
+    },
+    {
+      "axe": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.ZGVza3RvcA/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.ZGVza3RvcA/console.json",
+      "findings": [],
+      "id": "bWFuYWdl.cGVuZGluZ19yZXZpZXc.ZGVza3RvcA",
+      "responses": [],
+      "screenshot": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.ZGVza3RvcA/screenshot.png",
+      "state": "pending_review",
+      "status": "completed",
+      "surface": "manage",
+      "viewport": "desktop"
+    },
+    {
+      "axe": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.bmFycm93/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.bmFycm93/console.json",
+      "findings": [
+        {
+          "bounds": {
+            "height": 63.5,
+            "width": 343,
+            "x": 29,
+            "y": 2048.9375
+          },
+          "check": "overflow",
+          "effective_severity": "blocking",
+          "evidence": {
+            "screenshot": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.bmFycm93/screenshot.png"
+          },
+          "id": "d4633db4252ab85a",
+          "measurement": {
+            "client": 320,
+            "scroll": 372
+          },
+          "message": "Document overflows by 52 CSS px",
+          "selector": "#main > div:nth-of-type(1) > div:nth-of-type(1) > section:nth-of-type(3) > form:nth-of-type(1) > label:nth-of-type(1)",
+          "severity": "blocking"
+        },
+        {
+          "check": "axe:color-contrast",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.bmFycm93/axe.json",
+            "screenshot": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.bmFycm93/screenshot.png"
+          },
+          "id": "ca8aa92ea9b8ff44",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must meet minimum color contrast ratio thresholds",
+          "selector": "a[href$=\"stash\"]",
+          "severity": "warning"
+        }
+      ],
+      "id": "bWFuYWdl.cGVuZGluZ19yZXZpZXc.bmFycm93",
+      "responses": [],
+      "screenshot": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.bmFycm93/screenshot.png",
+      "state": "pending_review",
+      "status": "completed",
+      "surface": "manage",
+      "viewport": "narrow"
+    },
+    {
+      "axe": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.cGhvbmU/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.cGhvbmU/console.json",
+      "findings": [],
+      "id": "bWFuYWdl.cGVuZGluZ19yZXZpZXc.cGhvbmU",
+      "responses": [],
+      "screenshot": "cases/bWFuYWdl.cGVuZGluZ19yZXZpZXc.cGhvbmU/screenshot.png",
+      "state": "pending_review",
+      "status": "completed",
+      "surface": "manage",
+      "viewport": "phone"
+    },
+    {
+      "axe": "cases/cGhvdG9fZHJvcA.Zm9ybQ.ZGVza3RvcA/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/cGhvdG9fZHJvcA.Zm9ybQ.ZGVza3RvcA/console.json",
+      "findings": [],
+      "id": "cGhvdG9fZHJvcA.Zm9ybQ.ZGVza3RvcA",
+      "responses": [],
+      "screenshot": "cases/cGhvdG9fZHJvcA.Zm9ybQ.ZGVza3RvcA/screenshot.png",
+      "state": "form",
+      "status": "completed",
+      "surface": "photo_drop",
+      "viewport": "desktop"
+    },
+    {
+      "axe": "cases/cGhvdG9fZHJvcA.Zm9ybQ.bmFycm93/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/cGhvdG9fZHJvcA.Zm9ybQ.bmFycm93/console.json",
+      "findings": [
+        {
+          "bounds": {
+            "height": 21.75,
+            "width": 343,
+            "x": 29,
+            "y": 437.390625
+          },
+          "check": "overflow",
+          "effective_severity": "blocking",
+          "evidence": {
+            "screenshot": "cases/cGhvdG9fZHJvcA.Zm9ybQ.bmFycm93/screenshot.png"
+          },
+          "id": "31e8739db67c2d2a",
+          "measurement": {
+            "client": 320,
+            "scroll": 372
+          },
+          "message": "Document overflows by 52 CSS px",
+          "selector": "#main > div:nth-of-type(1) > section:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(1) > label:nth-of-type(1)",
+          "severity": "blocking"
+        },
+        {
+          "check": "axe:color-contrast",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/cGhvdG9fZHJvcA.Zm9ybQ.bmFycm93/axe.json",
+            "screenshot": "cases/cGhvdG9fZHJvcA.Zm9ybQ.bmFycm93/screenshot.png"
+          },
+          "id": "6fc03ff2c375e044",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must meet minimum color contrast ratio thresholds",
+          "selector": "a[href$=\"stash\"]",
+          "severity": "warning"
+        }
+      ],
+      "id": "cGhvdG9fZHJvcA.Zm9ybQ.bmFycm93",
+      "responses": [],
+      "screenshot": "cases/cGhvdG9fZHJvcA.Zm9ybQ.bmFycm93/screenshot.png",
+      "state": "form",
+      "status": "completed",
+      "surface": "photo_drop",
+      "viewport": "narrow"
+    },
+    {
+      "axe": "cases/cGhvdG9fZHJvcA.Zm9ybQ.cGhvbmU/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/cGhvdG9fZHJvcA.Zm9ybQ.cGhvbmU/console.json",
+      "findings": [],
+      "id": "cGhvdG9fZHJvcA.Zm9ybQ.cGhvbmU",
+      "responses": [],
+      "screenshot": "cases/cGhvdG9fZHJvcA.Zm9ybQ.cGhvbmU/screenshot.png",
+      "state": "form",
+      "status": "completed",
+      "surface": "photo_drop",
+      "viewport": "phone"
+    },
+    {
+      "axe": "cases/cmVnaXN0ZXI.Zm9ybQ.ZGVza3RvcA/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/cmVnaXN0ZXI.Zm9ybQ.ZGVza3RvcA/console.json",
+      "findings": [],
+      "id": "cmVnaXN0ZXI.Zm9ybQ.ZGVza3RvcA",
+      "responses": [],
+      "screenshot": "cases/cmVnaXN0ZXI.Zm9ybQ.ZGVza3RvcA/screenshot.png",
+      "state": "form",
+      "status": "completed",
+      "surface": "register",
+      "viewport": "desktop"
+    },
+    {
+      "axe": "cases/cmVnaXN0ZXI.Zm9ybQ.bmFycm93/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/cmVnaXN0ZXI.Zm9ybQ.bmFycm93/console.json",
+      "findings": [
+        {
+          "bounds": {
+            "height": 21.75,
+            "width": 343,
+            "x": 29,
+            "y": 482.53125
+          },
+          "check": "overflow",
+          "effective_severity": "blocking",
+          "evidence": {
+            "screenshot": "cases/cmVnaXN0ZXI.Zm9ybQ.bmFycm93/screenshot.png"
+          },
+          "id": "e44f49169c4d94a2",
+          "measurement": {
+            "client": 320,
+            "scroll": 372
+          },
+          "message": "Document overflows by 52 CSS px",
+          "selector": "#main > div:nth-of-type(1) > section:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(1) > label:nth-of-type(1)",
+          "severity": "blocking"
+        },
+        {
+          "check": "axe:color-contrast",
+          "effective_severity": "warning",
+          "evidence": {
+            "diagnostic": "cases/cmVnaXN0ZXI.Zm9ybQ.bmFycm93/axe.json",
+            "screenshot": "cases/cmVnaXN0ZXI.Zm9ybQ.bmFycm93/screenshot.png"
+          },
+          "id": "c7cb1d0cbb223739",
+          "incomplete": true,
+          "message": "Further assessment needed: Elements must meet minimum color contrast ratio thresholds",
+          "selector": "a[href$=\"stash\"]",
+          "severity": "warning"
+        }
+      ],
+      "id": "cmVnaXN0ZXI.Zm9ybQ.bmFycm93",
+      "responses": [],
+      "screenshot": "cases/cmVnaXN0ZXI.Zm9ybQ.bmFycm93/screenshot.png",
+      "state": "form",
+      "status": "completed",
+      "surface": "register",
+      "viewport": "narrow"
+    },
+    {
+      "axe": "cases/cmVnaXN0ZXI.Zm9ybQ.cGhvbmU/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/cmVnaXN0ZXI.Zm9ybQ.cGhvbmU/console.json",
+      "findings": [],
+      "id": "cmVnaXN0ZXI.Zm9ybQ.cGhvbmU",
+      "responses": [],
+      "screenshot": "cases/cmVnaXN0ZXI.Zm9ybQ.cGhvbmU/screenshot.png",
+      "state": "form",
+      "status": "completed",
+      "surface": "register",
+      "viewport": "phone"
+    }
+  ],
+  "check_policy_version": 1,
+  "counts": {
+    "blocking": 3,
+    "suppressed": 0,
+    "warning": 23
+  },
+  "effective_inputs": {
+    "case_routes": {
+      "catalog/no_match": "/bins/?q=no-such-bin",
+      "catalog/populated": "/bins/",
+      "manage/pending_review": "/manage/AGR-014",
+      "photo_drop/form": "/",
+      "register/form": "/register"
+    },
+    "timeouts": {
+      "build": 300,
+      "case": 30,
+      "startup": 30,
+      "total": 600
+    },
+    "viewports": {
+      "desktop": {
+        "height": 800,
+        "width": 1280
+      },
+      "narrow": {
+        "height": 720,
+        "width": 320
+      },
+      "phone": {
+        "height": 844,
+        "width": 390
+      }
+    }
+  },
+  "environment": {
+    "color_scheme": "light",
+    "fixed_time": "2026-09-24T20:55:16.560349+00:00",
+    "locale": "en-US",
+    "timezone": "UTC"
+  },
+  "errors": [],
+  "excluded_surfaces": [],
+  "exit_code": 1,
+  "finished_at": "2026-09-24T20:55:28.801240+00:00",
+  "manifest": "/home/halbritt/git/binkeeper/.uipass.yaml",
+  "mode": "managed",
+  "run_id": "a5d53b95-60b3-42e1-baac-1a8f54e614ab",
+  "schema_version": 1,
+  "selected_cases": [
+    [
+      "catalog",
+      "no_match",
+      "desktop"
+    ],
+    [
+      "catalog",
+      "no_match",
+      "narrow"
+    ],
+    [
+      "catalog",
+      "no_match",
+      "phone"
+    ],
+    [
+      "catalog",
+      "populated",
+      "desktop"
+    ],
+    [
+      "catalog",
+      "populated",
+      "narrow"
+    ],
+    [
+      "catalog",
+      "populated",
+      "phone"
+    ],
+    [
+      "manage",
+      "pending_review",
+      "desktop"
+    ],
+    [
+      "manage",
+      "pending_review",
+      "narrow"
+    ],
+    [
+      "manage",
+      "pending_review",
+      "phone"
+    ],
+    [
+      "photo_drop",
+      "form",
+      "desktop"
+    ],
+    [
+      "photo_drop",
+      "form",
+      "narrow"
+    ],
+    [
+      "photo_drop",
+      "form",
+      "phone"
+    ],
+    [
+      "register",
+      "form",
+      "desktop"
+    ],
+    [
+      "register",
+      "form",
+      "narrow"
+    ],
+    [
+      "register",
+      "form",
+      "phone"
+    ]
+  ],
+  "selected_surfaces": [
+    "catalog",
+    "manage",
+    "photo_drop",
+    "register"
+  ],
+  "source": {
+    "git_dirty": true,
+    "git_head": "4692fa8772b17be662f5adae5a31489a429080b7",
+    "input_sha256": {
+      ".uipass.yaml": "6781616c5db2fe9754da31fed633468a65363acef0c8b944e9dfedb73a01818f"
+    },
+    "working_directory": "/home/halbritt/git/binkeeper"
+  },
+  "started_at": "2026-09-24T20:55:16.560349+00:00",
+  "tool_version": "0.1.0",
+  "verdict": "fail",
+  "warnings": []
+}

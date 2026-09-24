@@ -2,15 +2,14 @@
 
 A tailnet-fronted write surface: the owner uploads photos of a bin's contents
 plus free-text notes; the surface stores each photo in the A11 blob vault and
-runs the local vision worker (Qwen3-VL on peecee) to propose a bin label. The
+runs the configured vision provider to propose a bin label. The
 proposal is advisory -- it never captures a bin or mutates inventory on its own.
 Reviewed registration and existing-bin profile/photo/location/print actions are
 separate explicit routes in this isolated owner surface.
 
 Follows the RFC 0081 chrome contract (HTML only through templates + chrome) and
 the D124/D136 origin discipline (loopback bind, paired-origin gate, HTTPS
-terminated by Tailscale Serve). Mounted by operator_web; served by the persistent
-binkeeper-operator unit.
+terminated by Tailscale Serve). Served by the standalone BinKeeper service.
 """
 
 from __future__ import annotations

@@ -106,6 +106,12 @@ def test_get_renders_upload_form() -> None:
     assert "Bin photo drop" in body
     assert 'type="file"' in body
     assert 'name="notes"' in body
+    assert "The originals are stored when you submit" in body
+    assert "A downscaled image and prompt may be sent" in body
+    assert "Nothing is registered or printed until you confirm" in body
+    assert "configured vision may use cloud" in body
+    assert "No cloud service" not in body
+    assert "no network egress" not in body
 
 
 def test_binkeeper_photo_and_register_pages_have_only_local_navigation() -> None:
@@ -870,7 +876,7 @@ def test_photo_drop_submit_exposes_pending_feedback() -> None:
     assert "data-submit-progress hidden" in body
     assert 'role="status"' in body
     assert 'aria-live="polite"' in body
-    assert "Photos are uploading." in body
+    assert "Saving photos and preparing a label proposal." in body
 
 
 def test_post_renders_proposal(monkeypatch) -> None:

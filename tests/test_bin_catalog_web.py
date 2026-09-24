@@ -158,7 +158,8 @@ def test_catalog_shows_a_pending_label_review_count_and_manage_link() -> None:
         response = client.get("/")
 
     assert response.status_code == 200
-    assert "1 pending label review" in response.text
+    assert "<strong>1</strong>" in response.text
+    assert "<span>pending label review</span>" in response.text
     assert "Mechanic tools" in response.text
     assert "torque wrench" in response.text
     assert 'href="/bin-photo/manage/AGR-014#label-drift-review"' in response.text

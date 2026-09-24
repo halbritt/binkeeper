@@ -133,6 +133,10 @@ input, textarea, select {
   padding: var(--space-2);
   max-width: 100%;
 }
+input[type="file"] {
+  width: 100%;
+  min-width: 0;
+}
 textarea {
   width: 100%;
   min-height: 92px;
@@ -189,6 +193,17 @@ textarea {
   width: min(1180px, calc(100vw - 32px));
   margin: 0 auto;
   overflow-x: auto;
+}
+@media (max-width: 480px) {
+  .surface-tabs[aria-label="BinKeeper"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 var(--space-3);
+    overflow-x: visible;
+  }
+  .surface-tabs[aria-label="BinKeeper"] .surface-tab {
+    white-space: normal;
+  }
 }
 .surface-tab {
   color: var(--color-fg-muted);

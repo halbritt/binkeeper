@@ -2,7 +2,7 @@
      aria-labelledby="help-modal-title">
   <h2 id="help-modal-title">{{ help_title|default("BinKeeper operator help") }}</h2>
   <p class="muted">
-    BinKeeper runs entirely on your machine. No cloud service. No telemetry. No CDN. The browser fetches assets from this process only.
+    BinKeeper stores inventory locally and serves browser assets from this process. A configured vision provider may receive a downscaled image and prompt when analyzing photos. No telemetry or CDN is used.
   </p>
 
   {% if verdict_help_rows %}
@@ -61,4 +61,3 @@
 
   <button type="button" data-help-close data-key="Escape">Close</button>
 </div>
-

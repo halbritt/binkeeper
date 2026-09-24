@@ -22,21 +22,22 @@ if TYPE_CHECKING:
     from starlette.templating import Jinja2Templates
 
 LOCAL_ONLY_HELP_COPY: str = (
-    "BinKeeper runs entirely on your machine. No cloud service. No telemetry. "
-    "No CDN. The browser fetches assets from this process only."
+    "BinKeeper stores inventory locally and serves browser assets from this process. "
+    "A configured vision provider may receive a downscaled image and prompt when analyzing "
+    "photos. No telemetry or CDN is used."
 )
 
 PHASE4_FUTURE_COPY: str = "Phase 4 work is not yet built. Tracked in RFC 0021 / D044 / D069 / D079."
 
-AUDIT_EGRESS_STATUS: str = "no network egress"
+AUDIT_EGRESS_STATUS: str = "configured vision may use cloud"
 
 SHARED_STATIC_MOUNT_PATH: str = "/shared-static"
 SHARED_STATIC_MOUNT_NAME: str = "shared-static"
 
 
 def audit_footer_copy(bind_address: str, *, egress_status: str = AUDIT_EGRESS_STATUS) -> str:
-    """Render the local-only audit footer sentence."""
-    return f"local-only · loopback bind: {bind_address} · {egress_status}."
+    """Render the local inventory and configured vision status sentence."""
+    return f"local inventory · loopback bind: {bind_address} · {egress_status}."
 
 
 def asset_version() -> str:

@@ -1,0 +1,22 @@
+schema_version: 1
+app:
+  serve: [.venv/bin/python, scripts/uipass_fixture.py, "{port}"]
+  ready_path: /bins/
+viewports:
+  narrow: {width: 320, height: 720}
+  phone: {width: 390, height: 844}
+  desktop: {width: 1280, height: 800}
+surfaces:
+  catalog:
+    states:
+      populated: {route: /bins/, ready: h1}
+      no_match: {route: "/bins/?q=no-such-bin", ready: h1}
+  photo_drop:
+    states:
+      form: {route: /, ready: h1}
+  register:
+    states:
+      form: {route: /register, ready: h1}
+  manage:
+    states:
+      pending_review: {route: /manage/AGR-014, ready: h1}
