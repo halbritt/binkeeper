@@ -16,6 +16,11 @@ surfaces:
         ready: h1
         actions:
           - {type: click, selector: ".bin-catalog-card:first-child .bin-catalog-details > summary"}
+      review_open:
+        route: /bins/
+        ready: h1
+        actions:
+          - {type: click, selector: ".bin-label-review-panel > summary"}
   photo_drop:
     states:
       form: {route: /, ready: h1}

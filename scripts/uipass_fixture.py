@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from io import BytesIO
 
@@ -55,6 +56,18 @@ PROPOSAL = LabelDriftQueueEntry(
     new_item_labels=("tape measure",),
     photo_hashes=(),
     model_versions=("synthetic-model",),
+)
+PROPOSALS = (
+    PROPOSAL,
+    *(
+        replace(
+            PROPOSAL,
+            proposal_external_id=f"synthetic-proposal-{number}",
+            bin_code=f"AGR-{number:03d}",
+            new_item_labels=("instruction manual", "small boxed parts", "yellow-tipped fastener"),
+        )
+        for number in range(101, 113)
+    ),
 )
 
 
@@ -117,7 +130,7 @@ def create_app(port: int) -> FastAPI:
             passport_loader=lambda: PASSPORTS,
             containment_loader=lambda: {},
             virtual_loader=lambda: [],
-            label_drift_loader=lambda: [PROPOSAL],
+            label_drift_loader=lambda: PROPOSALS,
             photo_source=_SyntheticPhotos(),
         ),
     )

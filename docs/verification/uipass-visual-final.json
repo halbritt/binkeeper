@@ -1,6 +1,6 @@
 {
   "axe_version": "4.13.0",
-  "base_url": "http://127.0.0.1:39151",
+  "base_url": "http://127.0.0.1:39067",
   "browser_version": "141.0.7390.37",
   "cases": [
     {
@@ -161,6 +161,60 @@
       "responses": [],
       "screenshot": "cases/Y2F0YWxvZw.cG9wdWxhdGVk.cGhvbmU/screenshot.png",
       "state": "populated",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "phone"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.cmV2aWV3X29wZW4.ZGVza3RvcA/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.cmV2aWV3X29wZW4.ZGVza3RvcA/console.json",
+      "findings": [],
+      "id": "Y2F0YWxvZw.cmV2aWV3X29wZW4.ZGVza3RvcA",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.cmV2aWV3X29wZW4.ZGVza3RvcA/screenshot.png",
+      "state": "review_open",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "desktop"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.cmV2aWV3X29wZW4.bmFycm93/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.cmV2aWV3X29wZW4.bmFycm93/console.json",
+      "findings": [],
+      "id": "Y2F0YWxvZw.cmV2aWV3X29wZW4.bmFycm93",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.cmV2aWV3X29wZW4.bmFycm93/screenshot.png",
+      "state": "review_open",
+      "status": "completed",
+      "surface": "catalog",
+      "viewport": "narrow"
+    },
+    {
+      "axe": "cases/Y2F0YWxvZw.cmV2aWV3X29wZW4.cGhvbmU/axe.json",
+      "checks": {
+        "axe": "completed",
+        "console": "completed",
+        "overflow": "completed",
+        "pageerror": "completed"
+      },
+      "console": "cases/Y2F0YWxvZw.cmV2aWV3X29wZW4.cGhvbmU/console.json",
+      "findings": [],
+      "id": "Y2F0YWxvZw.cmV2aWV3X29wZW4.cGhvbmU",
+      "responses": [],
+      "screenshot": "cases/Y2F0YWxvZw.cmV2aWV3X29wZW4.cGhvbmU/screenshot.png",
+      "state": "review_open",
       "status": "completed",
       "surface": "catalog",
       "viewport": "phone"
@@ -447,6 +501,7 @@
       "catalog/details_open": "/bins/",
       "catalog/no_match": "/bins/?q=no-such-bin",
       "catalog/populated": "/bins/",
+      "catalog/review_open": "/bins/",
       "manage/location_jump": "/manage/AGR-014",
       "manage/pending_review": "/manage/AGR-014",
       "photo_drop/form": "/",
@@ -476,17 +531,17 @@
   },
   "environment": {
     "color_scheme": "light",
-    "fixed_time": "2026-09-25T03:23:23.100956+00:00",
+    "fixed_time": "2026-09-25T03:31:18.524720+00:00",
     "locale": "en-US",
     "timezone": "UTC"
   },
   "errors": [],
   "excluded_surfaces": [],
   "exit_code": 0,
-  "finished_at": "2026-09-25T03:23:38.315832+00:00",
+  "finished_at": "2026-09-25T03:31:37.275087+00:00",
   "manifest": "/home/halbritt/git/binkeeper/.uipass.yaml",
   "mode": "managed",
-  "run_id": "feabb974-eaea-4242-8329-355eedc47831",
+  "run_id": "804a58bd-eb8f-4278-91dd-afde656e12a0",
   "schema_version": 1,
   "selected_cases": [
     [
@@ -532,6 +587,21 @@
     [
       "catalog",
       "populated",
+      "phone"
+    ],
+    [
+      "catalog",
+      "review_open",
+      "desktop"
+    ],
+    [
+      "catalog",
+      "review_open",
+      "narrow"
+    ],
+    [
+      "catalog",
+      "review_open",
       "phone"
     ],
     [
@@ -618,13 +688,13 @@
   ],
   "source": {
     "git_dirty": true,
-    "git_head": "d15b1feffd1794bea06472ca313b69fcbb9a39de",
+    "git_head": "edc80da3a4ffbfb8103361d71cf79c692a674a1c",
     "input_sha256": {
-      ".uipass.yaml": "57b2f71b4dfcc9bcad79c5fac0c10c8ac1a9dd91e2c73e4eb331f3907e14c55d"
+      ".uipass.yaml": "3bced25b4cc870bda1fe4c679aecff59f277e8a802c0c3abfa844b0948a4798d"
     },
     "working_directory": "/home/halbritt/git/binkeeper"
   },
-  "started_at": "2026-09-25T03:23:23.100956+00:00",
+  "started_at": "2026-09-25T03:31:18.524720+00:00",
   "tool_version": "0.1.0",
   "verdict": "pass",
   "warnings": []
