@@ -88,8 +88,9 @@ class BinLabelPrintIntent:
     bin_code: str
     action_id: str
     requested_at: datetime
-    queue: str
-    tspl_sha256: str
+    target: str
+    payload_format: str
+    payload_sha256: str
 
 
 def update_bin_profile(
@@ -170,18 +171,20 @@ def reserve_label_print_intent(
 ) -> CaptureResult:
     """Append one immutable print reservation; an exact replay is a no-op."""
     code, action_id = _existing_bin_action(conn, intent.bin_code, intent.action_id, scope)
-    queue = intent.queue.strip()
-    if not queue:
-        raise BinManageError("queue is required")
-    digest = _sha256(intent.tspl_sha256, "tspl_sha256")
+    target = intent.target.strip()
+    if not target:
+        raise BinManageError("printer target is required")
+    if intent.payload_format not in {"tspl", "png"}:
+        raise BinManageError("unsupported label payload format")
+    digest = _sha256(intent.payload_sha256, "payload_sha256")
     idempotency_key = f"binprint:{code}:{action_id}"
     requested_at = _stable_capture_time(conn, idempotency_key, intent.requested_at, scope)
     normalized_intent = replace(
         intent,
         action_id=action_id,
         requested_at=requested_at,
-        queue=queue,
-        tspl_sha256=digest,
+        target=target,
+        payload_sha256=digest,
     )
     request = _scoped_capture(
         _print_capture_request(code, normalized_intent, idempotency_key),
@@ -239,12 +242,13 @@ def _print_capture_request(
 ) -> CaptureRequest:
     metadata: dict[str, object] = {
         "kind": BIN_LABEL_PRINT_INTENT_KIND,
-        "schema_version": "bin_label_print_intent.v1",
+        "schema_version": "bin_label_print_intent.v2",
         "bin_code": code,
         "intent_id": intent.action_id,
         "requested_at": intent.requested_at.isoformat(),
-        "queue": intent.queue,
-        "tspl_sha256": intent.tspl_sha256,
+        "target": intent.target,
+        "payload_format": intent.payload_format,
+        "payload_sha256": intent.payload_sha256,
         "app": "binkeeper-bin-manage/0.1",
     }
     return _capture_request(

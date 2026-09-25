@@ -114,9 +114,9 @@
               data-busy-label="Creating bin…">
         <span data-button-label>Create without printing</span>
       </button>
-      <button type="button" data-align-label data-align-action="{{ align_action }}">
+      {% if can_align_label %}<button type="button" data-align-label data-align-action="{{ align_action }}">
         Align label
-      </button>
+      </button>{% endif %}
       <button type="submit" class="bin-photo-primary" name="print_label" value="1"
               data-submit-button data-busy-label="Creating and printing…">
         <span data-button-label>Create and print label</span>

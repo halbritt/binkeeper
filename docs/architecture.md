@@ -48,7 +48,7 @@ flowchart TD
     serve --> core[Domain library\nevidence writers + folds]
     core --> pg[(PostgreSQL binkeeper\nappend-only ledgers)]
     core --> vault[Blob vault\nAES-256-GCM under /var/lib/binkeeper/blobs]
-    core --> cups[CUPS label printer\nTSPL, one-attempt discipline]
+    core --> cups[CUPS TSPL or local B1 BLE printer\none-attempt discipline]
     core -.->|ADR 0004 scope only| vision[Vision providers\nOpenRouter default / Gemini fallback / local peecee]
     timer1[binkeeper-backup.timer 03:15] --> pg
     timer2[binkeeper-ocr-harvest.timer 03:30] -->|local model only| vision
@@ -184,10 +184,12 @@ are owner-local data in a gitignored 0600 `sites.json` — canonically
 `~/.config/binkeeper/sites.json`. The nightly OCR harvester resolves the
 geofence before spending a vision call, accepts only codes the registry
 already knows, and can therefore refresh known bins but never mint one.
-Printed labels are pure-rendered TSPL (QR + human code + base-36 check
-badge) behind the one-attempt print discipline: a durable print-intent
-capture lands before any printer I/O, replays never reprint, and a CUPS
-timeout is reported "unknown", never retried.
+Printed labels use pure TSPL rendering for the CUPS printer or a 384×240 PNG
+for the 50×30 mm Niimbot B1. Both carry a QR of the bare bin code, a human
+code, and a base-36 check badge. Existing-bin reprints append a durable v2
+print-intent capture with target, format, and payload hash before printer I/O;
+historical v1 TSPL intents stay immutable. Replays never reprint, and a CUPS
+timeout or uncertain B1 completion is reported "unknown", never retried.
 
 The benchmark harness (`scripts/vision_bench.py`) scores candidate backends
 over the owner's real photo drops through the production `analyze` seam;

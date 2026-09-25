@@ -1,4 +1,4 @@
-"""RFC 0088 T1b — bin labels: render a QR + human-readable label as TSPL and print it.
+"""Bin label rendering and local printer selection.
 
 RFC 0088 §5 fixes bin identity as a short, site-prefixed string (``ALA-014``)
 "printed on a label *and* etched on the lid", and "a future QR encodes the same
@@ -21,6 +21,9 @@ Layering (RFC 0012 pure/IO split):
   a code + site into a TSPL string, unit-tested without a printer.
 - IO: ``default_device`` / ``send_to_printer`` — write the bytes to a raw device
   node or a CUPS raw queue.
+
+The Niimbot B1 uses a separate 50x30 mm PNG/BlueZ path in ``bin_b1``. The
+``make_label_job`` seam selects one renderer and target before any printer I/O.
 """
 
 from __future__ import annotations
@@ -49,6 +52,7 @@ BIN_LABEL_DEVICE: Final[str] = os.environ.get("BINKEEPER_BIN_LABEL_DEVICE", "")
 # Optional raw CUPS queue used by the reviewed BinKeeper web action. Empty keeps
 # browser printing unavailable until an operator selects an explicit local queue.
 BIN_LABEL_CUPS_QUEUE: Final[str] = os.environ.get("BINKEEPER_BIN_LABEL_CUPS_QUEUE", "")
+BIN_LABEL_PRINTER: Final[str] = os.environ.get("BINKEEPER_BIN_LABEL_PRINTER", "cups").strip()
 # Bound the synchronous CUPS handoff so a wedged local spooler cannot leave the
 # owner-facing request busy forever after registration has already committed.
 BIN_LABEL_PRINT_TIMEOUT_S: Final[float] = float(
@@ -342,6 +346,58 @@ class PrintPlan:
     def to_json(self) -> dict[str, object]:
         """Return the stable JSON shape for the print result."""
         return {"transport": self.transport, "target": self.target, "byte_count": self.byte_count}
+
+
+@dataclass(frozen=True)
+class LabelJob:
+    target: str
+    format: str
+    payload: bytes
+    copies: int
+
+
+def make_label_job(
+    bin_code: str,
+    *,
+    theme: str | None = None,
+    site: str | None = None,
+    contents: str | None = None,
+    copies: int = 1,
+) -> LabelJob:
+    """Render for the selected local printer without sending anything."""
+    if copies not in (1, 2):
+        raise BinLabelError("label count must be one or two")
+    if BIN_LABEL_PRINTER == "cups":
+        queue = BIN_LABEL_CUPS_QUEUE.strip()
+        if not queue:
+            raise BinLabelError("No local CUPS queue is configured for BinKeeper labels.")
+        payload = render_tspl(
+            bin_code, theme=theme, site=site, contents=contents, copies=copies
+        ).encode("utf-8")
+        return LabelJob(f"cups:{queue}", "tspl", payload, copies)
+    if BIN_LABEL_PRINTER == "niimbot-b1":
+        from binkeeper.bin_b1 import B1_ADDRESS, render_b1_png
+
+        if not B1_ADDRESS:
+            raise BinLabelError("No B1 Bluetooth address is configured")
+        return LabelJob(
+            f"niimbot-b1:{B1_ADDRESS}",
+            "png",
+            render_b1_png(bin_code, theme=theme, site=site, contents=contents),
+            copies,
+        )
+    raise BinLabelError(f"Unknown label printer {BIN_LABEL_PRINTER!r}")
+
+
+def send_label_job(job: LabelJob) -> PrintPlan:
+    """Submit exactly the already rendered job to its configured local target."""
+    if job.format == "tspl" and job.target.startswith("cups:"):
+        return send_to_printer(job.payload.decode("utf-8"), cups_queue=job.target[5:])
+    if job.format == "png" and job.target.startswith("niimbot-b1:"):
+        from binkeeper.bin_b1 import send_b1
+
+        return send_b1(job.payload, address=job.target[11:], copies=job.copies)
+    raise BinLabelError("Unsupported label job format or target")
 
 
 def default_device() -> str | None:

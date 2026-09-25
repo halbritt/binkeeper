@@ -254,8 +254,9 @@ def test_label_print_intent_is_reserved_at_most_once(conn: psycopg.Connection) -
         bin_code="AGR-014",
         action_id="3a581aa2-589e-4626-a31b-62124a193917",
         requested_at=datetime(2026, 7, 14, 9, tzinfo=PACIFIC_DAYLIGHT),
-        queue="OmezizyD450",
-        tspl_sha256="b" * 64,
+        target="cups:OmezizyD450",
+        payload_format="tspl",
+        payload_sha256="b" * 64,
     )
 
     first = reserve_label_print_intent(conn, intent)
@@ -265,8 +266,9 @@ def test_label_print_intent_is_reserved_at_most_once(conn: psycopg.Connection) -
             bin_code=intent.bin_code,
             action_id=intent.action_id,
             requested_at=datetime(2026, 7, 14, 17, tzinfo=UTC),
-            queue=intent.queue,
-            tspl_sha256=intent.tspl_sha256,
+            target=intent.target,
+            payload_format=intent.payload_format,
+            payload_sha256=intent.payload_sha256,
         ),
     )
 
@@ -275,10 +277,22 @@ def test_label_print_intent_is_reserved_at_most_once(conn: psycopg.Connection) -
     assert replay.capture_id == first.capture_id
     rows = conn.execute(
         """
-        SELECT raw_payload->'metadata'->>'kind'
+        SELECT raw_payload->'metadata'->>'kind',
+               raw_payload->'metadata'->>'schema_version',
+               raw_payload->'metadata'->>'target',
+               raw_payload->'metadata'->>'payload_format',
+               raw_payload->'metadata'->>'payload_sha256'
         FROM captures
         WHERE raw_payload->'metadata'->>'bin_code' = 'AGR-014'
           AND raw_payload->'metadata'->>'kind' = 'bin_label_print_intent'
         """
     ).fetchall()
-    assert rows == [("bin_label_print_intent",)]
+    assert rows == [
+        (
+            "bin_label_print_intent",
+            "bin_label_print_intent.v2",
+            "cups:OmezizyD450",
+            "tspl",
+            "b" * 64,
+        )
+    ]

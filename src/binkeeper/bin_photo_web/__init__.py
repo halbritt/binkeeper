@@ -134,6 +134,8 @@ def create_app(
 
     @app.post("/")
     async def submit(request: Request, _origin: None = Depends(origin_check)) -> object:
+        from binkeeper.bin_label import BIN_LABEL_PRINTER
+
         form_data = await request.form()
         notes = _clean(form_data.get("notes"))
         site = _clean(form_data.get("site"))
@@ -155,6 +157,7 @@ def create_app(
                 new_href=surface_path(normalized_base_path, "/"),
                 confirm_action=surface_path(normalized_base_path, "/register/confirm"),
                 align_action=surface_path(normalized_base_path, "/printer/align"),
+                can_align_label=BIN_LABEL_PRINTER == "cups",
                 catalog_url="/bins/",
                 photo_url=surface_path(normalized_base_path, "/"),
                 register_url=surface_path(normalized_base_path, "/register"),
@@ -323,6 +326,10 @@ def _harvest_colocations(images: list[bytes]) -> None:
 def _align_label() -> str:
     from binkeeper import bin_label
 
+    if bin_label.BIN_LABEL_PRINTER == "niimbot-b1":
+        raise bin_label.BinLabelError(
+            "The B1 advances labels during printing; manual align is unavailable."
+        )
     queue = bin_label.BIN_LABEL_CUPS_QUEUE.strip()
     if not queue:
         raise bin_label.BinLabelError("No local CUPS queue is configured for BinKeeper labels.")
@@ -608,30 +615,23 @@ def _register_and_view(
     print_target = ""
     print_error: str | None = None
     if label_count:
-        from binkeeper.bin_label import (
-            BIN_LABEL_CUPS_QUEUE,
-            BinLabelError,
-            render_tspl,
-            send_to_printer,
-        )
+        from binkeeper.bin_label import BinLabelError, make_label_job, send_label_job
 
         if result.already_existed:
             print_error = (
                 "This registration already existed, so no label was sent to avoid a "
                 "duplicate label."
             )
-        elif not BIN_LABEL_CUPS_QUEUE:
-            print_error = "No local CUPS queue is configured for BinKeeper labels."
         else:
             try:
-                tspl = render_tspl(
+                job = make_label_job(
                     result.bin_code,
                     theme=theme,
                     site=result.site,
                     contents=contents,
                     copies=label_count,
                 )
-                plan = send_to_printer(tspl, cups_queue=BIN_LABEL_CUPS_QUEUE)
+                plan = send_label_job(job)
                 printed = True
                 print_target = plan.target
             except BinLabelError as exc:

@@ -20,7 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import FormData, UploadFile
 
 from binkeeper.bin_inventory import BinInventoryError
-from binkeeper.bin_label import BinLabelError
+from binkeeper.bin_label import BinLabelError, LabelJob
 from binkeeper.bin_label_drift import LabelDriftError, LabelDriftQueueEntry
 from binkeeper.bin_manage import (
     BinActionScope,
@@ -181,11 +181,10 @@ class PrintAction:
 
 @dataclass(frozen=True)
 class PreparedLabel:
-    """Current saved label content and its configured local queue."""
+    """Current saved label content and its configured local printer."""
 
     bin_code: str
-    queue: str
-    tspl: str
+    job: LabelJob
 
 
 def install_manage_routes(app: FastAPI, config: ManageRouteConfig) -> None:
@@ -804,14 +803,10 @@ def change_bin_containment(action: ContainmentAction, scope: BinActionScope) -> 
 
 def reprint_bin(action: PrintAction, scope: BinActionScope) -> PrintOutcome:
     """Reserve and attempt one current saved label without replaying registration."""
-    from binkeeper import bin_label
     from binkeeper.db import connect
 
-    queue = bin_label.BIN_LABEL_CUPS_QUEUE.strip()
-    if not queue:
-        return "failed"
     with connect() as conn:
-        label = _prepare_label(conn, action.bin_code, scope, queue)
+        label = _prepare_label(conn, action.bin_code, scope)
         reservation = _reserve_print_intent(conn, action, scope, label)
     if reservation.already_existed:
         return "replayed"
@@ -822,7 +817,6 @@ def _prepare_label(
     conn: psycopg.Connection,
     bin_code: str,
     scope: BinActionScope,
-    queue: str,
 ) -> PreparedLabel:
     """Render one label from the bin's current saved profile."""
     from binkeeper import bin_label
@@ -844,8 +838,7 @@ def _prepare_label(
     contents = passport.sibling_contents[-1] if passport.sibling_contents else None
     return PreparedLabel(
         bin_code=code,
-        queue=queue,
-        tspl=bin_label.render_tspl(
+        job=bin_label.make_label_job(
             passport.bin_code,
             theme=passport.theme,
             site=passport.home_site,
@@ -867,19 +860,24 @@ def _reserve_print_intent(
         bin_code=label.bin_code,
         action_id=action.action_id,
         requested_at=action.received_at,
-        queue=label.queue,
-        tspl_sha256=hashlib.sha256(label.tspl.encode("utf-8")).hexdigest(),
+        target=label.job.target,
+        payload_format=label.job.format,
+        payload_sha256=hashlib.sha256(label.job.payload).hexdigest(),
     )
     return reserve_label_print_intent(conn, intent, scope=scope)
 
 
 def _attempt_print(label: PreparedLabel) -> PrintOutcome:
-    """Classify exactly one local CUPS handoff attempt."""
+    """Classify the one reserved local printer submission."""
     from binkeeper import bin_label
 
     try:
-        bin_label.send_to_printer(label.tspl, cups_queue=label.queue)
+        bin_label.send_label_job(label.job)
     except BinLabelError as exc:
+        from binkeeper.bin_b1 import B1PrintUnknown
+
+        if isinstance(exc, B1PrintUnknown):
+            return "unknown"
         if isinstance(exc.__cause__, subprocess.TimeoutExpired):
             return "unknown"
         return "failed"
