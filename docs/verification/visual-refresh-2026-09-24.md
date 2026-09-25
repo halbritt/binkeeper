@@ -24,4 +24,6 @@ The catalog and photo web tests passed: 79 passed, 17 skipped. Ruff lint and for
 
 ## Deployment
 
-Pending live installation and tailnet verification.
+BinKeeper `edc80da` shipped the visual refresh. The live-content check then exposed the long review queue, so `090cef3` changed it to a disclosure and was pushed to `master` and installed into `/opt/binkeeper/venv`. Before each install, a rollback wheel matching the installed revision was built and checked. The service is active and `/readyz` is healthy over tailnet HTTPS. Installed templates and the served catalog match `090cef3`.
+
+A read-only browser check against the live catalog returned HTTP 200 at 1280 and 320 CSS px. All four navigation links were visible, the review queue was collapsed, and document width equaled viewport width at both sizes. The first bin card started at 702 px on desktop and 919 px on the narrow phone, after the search and compact review summary. The live browser screenshots remained under `/tmp` and were not added to version control because they contain owner inventory.
