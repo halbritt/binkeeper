@@ -134,7 +134,8 @@ def create_app(
 
     @app.post("/")
     async def submit(request: Request, _origin: None = Depends(origin_check)) -> object:
-        from binkeeper.bin_label import BIN_LABEL_PRINTER
+        from binkeeper.bin_b1 import B1_ADDRESS
+        from binkeeper.bin_label import BIN_LABEL_CUPS_QUEUE
 
         form_data = await request.form()
         notes = _clean(form_data.get("notes"))
@@ -157,7 +158,8 @@ def create_app(
                 new_href=surface_path(normalized_base_path, "/"),
                 confirm_action=surface_path(normalized_base_path, "/register/confirm"),
                 align_action=surface_path(normalized_base_path, "/printer/align"),
-                can_align_label=BIN_LABEL_PRINTER == "cups",
+                can_align_label=bool(BIN_LABEL_CUPS_QUEUE.strip()),
+                b1_available=bool(B1_ADDRESS),
                 catalog_url="/bins/",
                 photo_url=surface_path(normalized_base_path, "/"),
                 register_url=surface_path(normalized_base_path, "/register"),
@@ -232,6 +234,7 @@ def create_app(
             photo_sha256=_clean(form_data.get("photo_sha256")),
             code_source=_clean(form_data.get("code_source")),
             label_count=label_count,
+            printer=_clean(form_data.get("printer")) or "cups",
         )
         return _render_register(view)
 
@@ -326,10 +329,6 @@ def _harvest_colocations(images: list[bytes]) -> None:
 def _align_label() -> str:
     from binkeeper import bin_label
 
-    if bin_label.BIN_LABEL_PRINTER == "niimbot-b1":
-        raise bin_label.BinLabelError(
-            "The B1 advances labels during printing; manual align is unavailable."
-        )
     queue = bin_label.BIN_LABEL_CUPS_QUEUE.strip()
     if not queue:
         raise bin_label.BinLabelError("No local CUPS queue is configured for BinKeeper labels.")
@@ -543,6 +542,7 @@ def _register_confirmed(
     photo_sha256: str | None,
     code_source: str | None = None,
     label_count: int = 0,
+    printer: str = "cups",
 ) -> dict[str, object]:
     """Finish a registration after the owner picked the site; establish its anchor."""
     if not bin_code or not site:
@@ -573,6 +573,7 @@ def _register_confirmed(
         code_source=code_source or "",
         theme=theme,
         label_count=label_count,
+        printer=printer,
     )
 
 
@@ -586,6 +587,7 @@ def _register_and_view(
     code_source: str = "",
     theme: str | None = None,
     label_count: int = 0,
+    printer: str = "cups",
 ) -> dict[str, object]:
     try:
         from binkeeper.bin_register import register_bin
@@ -626,6 +628,7 @@ def _register_and_view(
             try:
                 job = make_label_job(
                     result.bin_code,
+                    printer=printer,
                     theme=theme,
                     site=result.site,
                     contents=contents,

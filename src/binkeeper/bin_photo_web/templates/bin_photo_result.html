@@ -109,13 +109,20 @@
       <p class="field-help">Used only when you choose “Create and print.”</p>
     </fieldset>
 
+    <label for="label-printer">Print on
+      <select id="label-printer" name="printer">
+        <option value="cups" selected>Large label printer (CUPS)</option>
+        {% if b1_available %}<option value="niimbot-b1">Niimbot B1 (50 × 30 mm)</option>{% endif %}
+      </select>
+    </label>
+
     <div class="action-bar bin-photo-action-row">
       <button type="submit" name="print_label" value="0" data-submit-button
               data-busy-label="Creating bin…">
         <span data-button-label>Create without printing</span>
       </button>
       {% if can_align_label %}<button type="button" data-align-label data-align-action="{{ align_action }}">
-        Align label
+        Align large label printer
       </button>{% endif %}
       <button type="submit" class="bin-photo-primary" name="print_label" value="1"
               data-submit-button data-busy-label="Creating and printing…">
@@ -159,7 +166,7 @@
       status.textContent = error.message;
     }).finally(function () {
       button.disabled = false;
-      button.textContent = "Align label";
+      button.textContent = "Align large label printer";
     });
   });
 })();

@@ -184,8 +184,9 @@ are owner-local data in a gitignored 0600 `sites.json` — canonically
 `~/.config/binkeeper/sites.json`. The nightly OCR harvester resolves the
 geofence before spending a vision call, accepts only codes the registry
 already knows, and can therefore refresh known bins but never mint one.
-Printed labels use pure TSPL rendering for the CUPS printer or a 384×240 PNG
-for the 50×30 mm Niimbot B1. Both carry a QR of the bare bin code, a human
+Printed labels default to pure TSPL rendering for the CUPS printer. The owner
+can select a 384×240 PNG for the 50×30 mm Niimbot B1 on each print action.
+Both carry a QR of the bare bin code, a human
 code, and a base-36 check badge. Existing-bin reprints append a durable v2
 print-intent capture with target, format, and payload hash before printer I/O;
 historical v1 TSPL intents stay immutable. Replays never reprint, and a CUPS

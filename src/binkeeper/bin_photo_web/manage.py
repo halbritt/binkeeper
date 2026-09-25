@@ -177,6 +177,7 @@ class PrintAction:
     bin_code: str
     action_id: str
     received_at: datetime
+    printer: str = "cups"
 
 
 @dataclass(frozen=True)
@@ -271,6 +272,8 @@ def install_manage_routes(app: FastAPI, config: ManageRouteConfig) -> None:
 
 
 def _manage_page(config: ManageRouteConfig, bin_code: str, notice: str) -> object:
+    from binkeeper.bin_b1 import B1_ADDRESS
+
     try:
         view = config.load_view(
             bin_code=bin_code,
@@ -292,6 +295,7 @@ def _manage_page(config: ManageRouteConfig, bin_code: str, notice: str) -> objec
             **action_ids,
             label_drift_accept_action_id=str(uuid4()),
             all_sites=list(config.sites),
+            b1_available=bool(B1_ADDRESS),
             notice=_manage_notice(notice),
             catalog_url="/bins/",
             photo_url=surface_path(config.base_path, "/"),
@@ -410,6 +414,7 @@ async def _print_response(
         bin_code=bin_code,
         action_id=_form_text(form.get("action_id")),
         received_at=datetime.now(UTC),
+        printer=_form_text(form.get("printer")) or "cups",
     )
     try:
         outcome = await run_in_threadpool(reprint_bin, action, config.scope)
@@ -806,7 +811,7 @@ def reprint_bin(action: PrintAction, scope: BinActionScope) -> PrintOutcome:
     from binkeeper.db import connect
 
     with connect() as conn:
-        label = _prepare_label(conn, action.bin_code, scope)
+        label = _prepare_label(conn, action.bin_code, scope, action.printer)
         reservation = _reserve_print_intent(conn, action, scope, label)
     if reservation.already_existed:
         return "replayed"
@@ -817,6 +822,7 @@ def _prepare_label(
     conn: psycopg.Connection,
     bin_code: str,
     scope: BinActionScope,
+    printer: str,
 ) -> PreparedLabel:
     """Render one label from the bin's current saved profile."""
     from binkeeper import bin_label
@@ -840,6 +846,7 @@ def _prepare_label(
         bin_code=code,
         job=bin_label.make_label_job(
             passport.bin_code,
+            printer=printer,
             theme=passport.theme,
             site=passport.home_site,
             contents=contents,

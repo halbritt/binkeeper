@@ -30,9 +30,11 @@ writable only by the separate backup unit.
 Browser label printing remains unavailable until a local printer target is
 configured: `BINKEEPER_BIN_LABEL_CUPS_QUEUE` for the default raw CUPS path, or
 the B1 Bluetooth address described below. During reviewed registration, the
-owner may choose one or two labels; BinKeeper sends that choice as one bounded
-printer job and never turns a replayed registration into another printer
-attempt. On the CUPS path, the adjacent **Align label** button makes a separate,
+owner may choose one or two labels and select the printer for that action.
+The CUPS queue is selected by default; the B1 appears when its BLE address is
+configured. BinKeeper sends the choice as one bounded printer job and never
+turns a replayed registration into another printer attempt. The adjacent
+**Align large label printer** button makes a separate,
 strict-origin `POST /printer/align` request and disables itself while the one
 feed job is pending. A timeout is reported as an unknown label position, so the
 owner checks the stock before trying again; BinKeeper never retries the feed
@@ -40,16 +42,15 @@ automatically.
 
 For the Niimbot B1, install the package with its pinned local BLE extra
 (`pip install 'binkeeper[b1]'` from the reviewed wheel), then set
-`BINKEEPER_BIN_LABEL_PRINTER=niimbot-b1` and
 `BINKEEPER_BIN_LABEL_B1_ADDRESS` to the printer's BLE address in the protected
-environment file. The B1 path renders a 384×240 PNG for the **50×30 mm** roll
+environment file. Keep `BINKEEPER_BIN_LABEL_PRINTER=cups` for the default.
+The B1 path renders a 384×240 PNG for the **50×30 mm** roll
 and sends it locally through BlueZ. It uses no vendor app, hosted account, or
 cloud service. The B1 Bluetooth address is the BLE advertisement address; some
 units also advertise a second Serial Port address. Find the BLE address with
 `bluetoothctl scan on` and inspect both candidates before configuring it.
-Registration and reprint share the selected printer; the CUPS settings remain
-available by switching `BINKEEPER_BIN_LABEL_PRINTER=cups`. B1 printing has no
-separate Align label operation. A B1 worker timeout or uncertain completion
+Registration and reprint each offer a printer choice. Align always targets the
+CUPS printer; B1 printing has no separate align operation. A B1 worker timeout or uncertain completion
 is reported as unknown so the owner checks the stock before choosing another
 print action.
 

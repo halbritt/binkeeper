@@ -359,6 +359,7 @@ class LabelJob:
 def make_label_job(
     bin_code: str,
     *,
+    printer: str | None = None,
     theme: str | None = None,
     site: str | None = None,
     contents: str | None = None,
@@ -367,7 +368,8 @@ def make_label_job(
     """Render for the selected local printer without sending anything."""
     if copies not in (1, 2):
         raise BinLabelError("label count must be one or two")
-    if BIN_LABEL_PRINTER == "cups":
+    selected_printer = printer or BIN_LABEL_PRINTER
+    if selected_printer == "cups":
         queue = BIN_LABEL_CUPS_QUEUE.strip()
         if not queue:
             raise BinLabelError("No local CUPS queue is configured for BinKeeper labels.")
@@ -375,7 +377,7 @@ def make_label_job(
             bin_code, theme=theme, site=site, contents=contents, copies=copies
         ).encode("utf-8")
         return LabelJob(f"cups:{queue}", "tspl", payload, copies)
-    if BIN_LABEL_PRINTER == "niimbot-b1":
+    if selected_printer == "niimbot-b1":
         from binkeeper.bin_b1 import B1_ADDRESS, render_b1_png
 
         if not B1_ADDRESS:
@@ -386,7 +388,7 @@ def make_label_job(
             render_b1_png(bin_code, theme=theme, site=site, contents=contents),
             copies,
         )
-    raise BinLabelError(f"Unknown label printer {BIN_LABEL_PRINTER!r}")
+    raise BinLabelError(f"Unknown label printer {selected_printer!r}")
 
 
 def send_label_job(job: LabelJob) -> PrintPlan:

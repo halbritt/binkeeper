@@ -125,7 +125,12 @@ def test_binkeeper_photo_and_register_pages_have_only_local_navigation() -> None
     _assert_isolated_binkeeper_navigation(register.text, current="register")
 
 
-def test_manage_bin_page_prefills_current_state_and_exposes_clear_actions() -> None:
+def test_manage_bin_page_prefills_current_state_and_exposes_clear_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import bin_b1
+
+    monkeypatch.setattr(bin_b1, "B1_ADDRESS", "synthetic-address")
     def load_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> bin_manage_web.ManageView:
         assert (bin_code, tenant_id, corpus_id) == ("AGR-014", "personal", "personal")
         return {
@@ -164,6 +169,8 @@ def test_manage_bin_page_prefills_current_state_and_exposes_clear_actions() -> N
     assert "Save changes" in body
     assert "Add photo" in body
     assert "Print another label" in body
+    assert '<option value="cups" selected>' in body
+    assert '<option value="niimbot-b1">Niimbot B1' in body
     assert 'src="/bins/photo/AGR-014"' in body
     _assert_isolated_binkeeper_navigation(body, current="catalog")
 
@@ -749,6 +756,57 @@ def test_manage_reprint_post_sends_one_deliberate_label_and_redirects(
     assert "PRINT 1,1" in tspl
 
 
+def test_manage_reprint_uses_explicit_b1_and_replay_never_reprints(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import bin_b1, bin_label, db
+    from binkeeper.bin_register import register_bin
+
+    register_bin(
+        conn,
+        bin_code="AGR-014",
+        site="alameda-garage",
+        observed_at=datetime(2026, 7, 13, 10, tzinfo=UTC),
+    )
+    monkeypatch.setattr(db, "connect", lambda **_kwargs: nullcontext(conn))
+    monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
+    monkeypatch.setattr(bin_b1, "B1_ADDRESS", "synthetic-address")
+    sent: list[bytes] = []
+
+    def fake_b1(payload: bytes, *, address: str, copies: int) -> PrintPlan:
+        assert (address, copies) == ("synthetic-address", 1)
+        sent.append(payload)
+        return PrintPlan("niimbot-b1", address, len(payload))
+
+    monkeypatch.setattr(bin_b1, "send_b1", fake_b1)
+    monkeypatch.setattr(
+        bin_label, "send_to_printer", lambda *_args, **_kwargs: pytest.fail("CUPS was selected")
+    )
+    action = {"action_id": "3a581aa2-589e-4626-a31b-62124a193917", "printer": "niimbot-b1"}
+    with _client() as client:
+        first = client.post(
+            "/manage/AGR-014/print", data=action, headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+        replay = client.post(
+            "/manage/AGR-014/print", data=action, headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+
+    assert first.headers["location"] == "/manage/AGR-014?notice=label-sent"
+    assert replay.headers["location"] == "/manage/AGR-014?notice=label-replayed"
+    assert len(sent) == 1
+    assert sent[0].startswith(b"\x89PNG")
+    intent = conn.execute(
+        """SELECT raw_payload->'metadata'->>'payload_format',
+                  raw_payload->'metadata'->>'target'
+           FROM captures
+           WHERE raw_payload->'metadata'->>'kind' = 'bin_label_print_intent'"""
+    ).fetchone()
+    assert intent == ("png", "niimbot-b1:synthetic-address")
+
+
 @pytest.mark.parametrize(
     ("failure_kind", "expected_notice", "expected_message"),
     [
@@ -961,6 +1019,10 @@ def test_proposal_offers_one_or_two_label_choice(
 def test_proposal_offers_label_alignment_beside_print(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from binkeeper import bin_b1, bin_label
+
+    monkeypatch.setattr(bin_b1, "B1_ADDRESS", "synthetic-address")
+    monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     monkeypatch.setattr(bin_photo_web, "_analyze", lambda **_: _canned_view())
 
     response = _client().post(
@@ -972,8 +1034,10 @@ def test_proposal_offers_label_alignment_beside_print(
     assert response.status_code == 200
     body = response.text
     assert 'type="button" data-align-label data-align-action="/printer/align"' in body
-    assert "Align label" in body
-    assert body.index("Align label") < body.index("Create and print label")
+    assert "Align large label printer" in body
+    assert body.index("Align large label printer") < body.index("Create and print label")
+    assert '<option value="cups" selected>' in body
+    assert '<option value="niimbot-b1">Niimbot B1' in body
     assert 'id="label-align-status"' in body
 
 
@@ -1232,6 +1296,45 @@ def test_confirm_route_carries_reviewed_theme_and_print_intent(
     assert '"HAND TOOLS"' in submissions[0]
     assert '"hex keys"' in submissions[0]
     assert "1 label sent to OmezizyD450" in resp.text
+
+
+def test_confirm_route_prints_on_explicit_b1_without_changing_cups_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import bin_b1, bin_label, bin_register, db
+
+    monkeypatch.setattr(db, "connect", lambda: nullcontext(object()))
+    monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
+    monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
+    monkeypatch.setattr(bin_b1, "B1_ADDRESS", "synthetic-address")
+    sent: list[tuple[bytes, str, int]] = []
+
+    def fake_b1(payload: bytes, *, address: str, copies: int) -> PrintPlan:
+        sent.append((payload, address, copies))
+        return PrintPlan("niimbot-b1", address, len(payload))
+
+    monkeypatch.setattr(bin_b1, "send_b1", fake_b1)
+    monkeypatch.setattr(
+        bin_label, "send_to_printer", lambda *_args, **_kwargs: pytest.fail("CUPS was selected")
+    )
+    response = _client().post(
+        "/register/confirm",
+        data={
+            "bin_code": "AGR-014",
+            "site": "alameda-garage",
+            "theme": "hand tools",
+            "contents": "hex keys",
+            "print_label": "1",
+            "printer": "niimbot-b1",
+        },
+        headers=_LOOPBACK_ORIGIN,
+    )
+
+    assert response.status_code == 200
+    assert len(sent) == 1
+    assert sent[0][0].startswith(b"\x89PNG")
+    assert sent[0][1:] == ("synthetic-address", 1)
+    assert "1 label sent to synthetic-address" in response.text
 
 
 def test_confirm_route_prints_two_reviewed_labels_in_one_submission(

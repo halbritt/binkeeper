@@ -257,6 +257,12 @@
     </div>
     <form method="post" action="{{ print_action }}" class="bin-photo-form" data-submit-form>
       <input type="hidden" name="action_id" value="{{ print_action_id }}">
+      <label for="manage-label-printer">Print on
+        <select id="manage-label-printer" name="printer">
+          <option value="cups" selected>Large label printer (CUPS)</option>
+          {% if b1_available %}<option value="niimbot-b1">Niimbot B1 (50 × 30 mm)</option>{% endif %}
+        </select>
+      </label>
       <div class="action-bar bin-photo-action-row">
         <button type="submit" class="bin-photo-primary" data-submit-button data-busy-label="Sending one label…">
           <span data-button-label>Print another label</span>

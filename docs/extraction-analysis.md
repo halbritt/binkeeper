@@ -185,7 +185,7 @@ witness contract under `BINK-12`, before the Engram shims were removed under
 | Raw captures and owner decisions are immutable | Import ids, payloads, observed/recorded times, privacy class, and hashes; install append-only triggers before writes open. |
 | Current profiles are projections over snapshots | Compare passports field by field, including explicit clears. |
 | Photos remain private and decryptable | Verify plaintext hashes after restore; confirm no raw hash, key, EXIF, or object path reaches HTML. |
-| Printing requires reviewed owner intent | Preserve separate registration and reprint intents, replay suppression, timeout-as-unknown, and strict Origin checks. The later B1 BLE option uses local 50×30 mm PNG output and a v2 reprint intent with target, format, and payload hash; imported or prior v1 TSPL intents remain unchanged. |
+| Printing requires reviewed owner intent | Preserve separate registration and reprint intents, replay suppression, timeout-as-unknown, and strict Origin checks. CUPS stays the default; the owner can select the later B1 BLE option per print. B1 uses local 50×30 mm PNG output and a v2 reprint intent with target, format, and payload hash; imported or prior v1 TSPL intents remain unchanged. |
 | Vision is advisory | Characterization tests must show that proposals cannot register, move, print, or accept placement without owner action. |
 | Serving is least privilege | A serving role can read catalog data and media metadata but cannot write evidence. |
 | Tailnet is the owner access path | Run the fronted HTTPS browser smoke against the standalone process. |

@@ -23,9 +23,13 @@ def test_b1_png_has_printhead_dimensions_and_scannable_bare_code() -> None:
 
 
 def test_b1_job_uses_png_and_selected_address(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(bin_label, "BIN_LABEL_PRINTER", "niimbot-b1")
+    monkeypatch.setattr(bin_label, "BIN_LABEL_PRINTER", "cups")
+    monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     monkeypatch.setattr(bin_b1, "B1_ADDRESS", "01:23:45:67:89:AB")
-    job = bin_label.make_label_job("AGR-014", theme="TOOLS", copies=2)
+    default_job = bin_label.make_label_job("AGR-014", theme="TOOLS")
+    assert default_job.target == "cups:OmezizyD450"
+    assert default_job.format == "tspl"
+    job = bin_label.make_label_job("AGR-014", printer="niimbot-b1", theme="TOOLS", copies=2)
     assert job.target == "niimbot-b1:01:23:45:67:89:AB"
     assert job.format == "png"
     assert job.copies == 2
