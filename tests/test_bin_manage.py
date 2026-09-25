@@ -275,6 +275,19 @@ def test_label_print_intent_is_reserved_at_most_once(conn: psycopg.Connection) -
     assert first.already_existed is False
     assert replay.already_existed is True
     assert replay.capture_id == first.capture_id
+    switched_printer_replay = reserve_label_print_intent(
+        conn,
+        BinLabelPrintIntent(
+            bin_code=intent.bin_code,
+            action_id=intent.action_id,
+            requested_at=datetime(2026, 7, 15, 9, tzinfo=PACIFIC_DAYLIGHT),
+            target="niimbot-b1:synthetic-address",
+            payload_format="png",
+            payload_sha256="c" * 64,
+        ),
+    )
+    assert switched_printer_replay.already_existed is True
+    assert switched_printer_replay.capture_id == first.capture_id
     rows = conn.execute(
         """
         SELECT raw_payload->'metadata'->>'kind',

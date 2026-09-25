@@ -22,7 +22,12 @@ from binkeeper.bin_inventory import (
     record_event,
 )
 from binkeeper.bin_passport import BIN_CAPTURE_KIND, load_known_bin_codes
-from binkeeper.personal_memory import CaptureRequest, CaptureResult, PersonalMemoryService
+from binkeeper.personal_memory import (
+    CaptureRequest,
+    CaptureResult,
+    PersonalMemoryService,
+    capture_external_id,
+)
 
 BIN_CAPTURE_SCHEMA_VERSION: Final[str] = "bin_capture.v1"
 BIN_MANAGE_SOURCE_LABEL: Final[str] = "binkeeper-manage"
@@ -178,6 +183,25 @@ def reserve_label_print_intent(
         raise BinManageError("unsupported label payload format")
     digest = _sha256(intent.payload_sha256, "payload_sha256")
     idempotency_key = f"binprint:{code}:{action_id}"
+    external_id = capture_external_id(
+        idempotency_key=idempotency_key,
+        tenant_id=scope.tenant_id,
+        corpus_id=scope.corpus_id,
+    )
+    existing = conn.execute(
+        "SELECT id::text, payload FROM capture_evidence WHERE external_id = %s",
+        (external_id,),
+    ).fetchone()
+    if existing is not None:
+        saved = existing[1]
+        metadata = saved.get("metadata") if isinstance(saved, dict) else None
+        if not isinstance(metadata, dict) or (
+            metadata.get("kind") != BIN_LABEL_PRINT_INTENT_KIND
+            or metadata.get("bin_code") != code
+            or metadata.get("intent_id") != action_id
+        ):
+            raise BinManageError("existing print action has invalid evidence")
+        return CaptureResult(str(existing[0]), True)
     requested_at = _stable_capture_time(conn, idempotency_key, intent.requested_at, scope)
     normalized_intent = replace(
         intent,
