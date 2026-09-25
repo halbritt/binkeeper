@@ -103,13 +103,13 @@ def test_get_renders_upload_form() -> None:
     resp = _client().get("/")
     assert resp.status_code == 200
     body = resp.text
-    assert "Bin photo drop" in body
+    assert "Make a bin label" in body
     assert 'type="file"' in body
     assert 'name="notes"' in body
     assert "The originals are stored when you submit" in body
     assert "A downscaled image and prompt may be sent" in body
-    assert "Nothing is registered or printed until you confirm" in body
-    assert "configured vision may use cloud" in body
+    assert "nothing is registered or printed until you confirm" in body
+    assert "Photo analysis may use the configured vision provider" in body
     assert "No cloud service" not in body
     assert "no network egress" not in body
 

@@ -11,12 +11,27 @@ surfaces:
     states:
       populated: {route: /bins/, ready: h1}
       no_match: {route: "/bins/?q=no-such-bin", ready: h1}
+      details_open:
+        route: /bins/
+        ready: h1
+        actions:
+          - {type: click, selector: ".bin-catalog-card:first-child .bin-catalog-details > summary"}
   photo_drop:
     states:
       form: {route: /, ready: h1}
+      options_open:
+        route: /
+        ready: h1
+        actions:
+          - {type: click, selector: ".bin-photo-options > summary"}
   register:
     states:
       form: {route: /register, ready: h1}
   manage:
     states:
       pending_review: {route: /manage/AGR-014, ready: h1}
+      location_jump:
+        route: /manage/AGR-014
+        ready: "#location"
+        actions:
+          - {type: click, selector: ".bin-manage-jumps a[href='#location']"}

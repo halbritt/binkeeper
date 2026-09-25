@@ -1,19 +1,38 @@
 {% extends "bin_photo_base.html" %}
 
 {% block title %}Manage {{ bin_code }} · BinKeeper{% endblock %}
+{% block page_class %} bin-manage-page{% endblock %}
 
 {% block head_extra %}
 {{ super() }}
 <style>
-  .bin-manage-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bin-manage-page { max-width: 1040px; }
+  .bin-manage-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .bin-manage-grid .bin-manage-wide { grid-column: 1 / -1; }
+  .bin-manage-jumps { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .bin-manage-jumps a, .bin-manage-jumps a:visited {
+    padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border);
+    border-radius: 999px; background: var(--color-surface); color: var(--color-accent);
+    font-size: var(--type-meta); font-weight: 700; text-decoration: none;
+  }
+  .bin-manage-jumps a:hover { border-color: var(--color-accent); }
+  .bin-manage-grid form label { display: grid; gap: var(--space-1); font-weight: 600; }
+  .bin-manage-grid form label input,
+  .bin-manage-grid form label textarea,
+  .bin-manage-grid form label select { width: 100%; font-weight: 400; }
+  .bin-manage-grid .field-help { font-weight: 400; }
   .bin-manage-preview {
-    width: 100%; max-height: 22rem; border-radius: var(--radius-md);
+    width: 100%; max-height: 22rem; border-radius: 10px;
     background: var(--color-surface-muted); object-fit: contain;
   }
   .bin-manage-code { font-size: var(--type-heading); }
-  .bin-label-drift-review { border-top: 3px solid var(--color-accent); }
-  .bin-label-drift-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .bin-label-drift-review { border-left: 4px solid var(--color-accent); }
+  .bin-label-drift-comparison {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4);
+    padding: var(--space-4); border-radius: 10px; background: var(--color-surface-muted);
+  }
+  .bin-label-drift-comparison p { margin: 0; }
+  .bin-manage-grid section[id] { scroll-margin-top: var(--space-4); }
   @media (max-width: 760px) { .bin-manage-grid { grid-template-columns: 1fr; } }
   @media (max-width: 560px) { .bin-label-drift-comparison { grid-template-columns: 1fr; } }
 </style>
@@ -24,13 +43,22 @@
 <header class="bin-photo-hero">
   <div class="bin-photo-heading-row">
     <div>
-      <span class="bin-photo-kicker">BinKeeper</span>
+      <span class="bin-photo-kicker">Bin details</span>
       <h1>Manage <code class="bin-manage-code">{{ bin_code }}</code></h1>
     </div>
     <span class="chip">Current · {{ current_site|replace('-', ' ')|title if current_site else 'Unknown' }}</span>
   </div>
   <p class="bin-photo-intro">Update what this bin contains, add a photo, move it, or print another label.</p>
 </header>
+
+<nav class="bin-manage-jumps" aria-label="On this page">
+  {% if label_drift %}<a href="#label-drift-review">Review suggestion</a>{% endif %}
+  <a href="#profile">Details</a>
+  <a href="#photos">Photos</a>
+  <a href="#location">Location</a>
+  <a href="#containment">Inside a bin</a>
+  <a href="#label">Label</a>
+</nav>
 
 {% if notice %}
 <div class="banner banner-{{ notice.kind }}" tabindex="-1" data-manage-notice
@@ -88,7 +116,7 @@
   </section>
   {% endif %}
 
-  <section class="panel panel-padded stack bin-photo-card bin-manage-wide" aria-labelledby="profile-heading">
+  <section id="profile" class="panel panel-padded stack bin-photo-card" aria-labelledby="profile-heading">
     <div class="bin-photo-card-header">
       <h2 id="profile-heading">Details</h2>
       <p class="bin-photo-card-copy">These are the bin's current details. Saving updates the catalog while keeping prior snapshots in history.</p>
@@ -123,7 +151,7 @@
     </form>
   </section>
 
-  <section class="panel panel-padded stack bin-photo-card" aria-labelledby="photo-heading">
+  <section id="photos" class="panel panel-padded stack bin-photo-card" aria-labelledby="photo-heading">
     <div class="bin-photo-card-header">
       <h2 id="photo-heading">Photos</h2>
       <p class="bin-photo-card-copy">Add another contents photo. The newest becomes the catalog cover; older photos remain stored.</p>
@@ -143,7 +171,7 @@
     </form>
   </section>
 
-  <section class="panel panel-padded stack bin-photo-card" aria-labelledby="location-heading">
+  <section id="location" class="panel panel-padded stack bin-photo-card" aria-labelledby="location-heading">
     <div class="bin-photo-card-header">
       <h2 id="location-heading">Current location</h2>
       <p class="bin-photo-card-copy">Moving a bin records a placement event. It does not change the return-to site printed on its label.</p>
@@ -179,7 +207,7 @@
     {% endif %}
   </section>
 
-  <section class="panel panel-padded stack bin-photo-card" aria-labelledby="containment-heading">
+  <section id="containment" class="panel panel-padded stack bin-photo-card" aria-labelledby="containment-heading">
     <div class="bin-photo-card-header">
       <h2 id="containment-heading">Bin inside a bin</h2>
       {% if container_code %}
@@ -222,7 +250,7 @@
     {% endif %}
   </section>
 
-  <section class="panel panel-padded stack bin-photo-card bin-manage-wide" aria-labelledby="print-heading">
+  <section id="label" class="panel panel-padded stack bin-photo-card bin-manage-wide" aria-labelledby="print-heading">
     <div class="bin-photo-card-header">
       <h2 id="print-heading">Label</h2>
       <p class="bin-photo-card-copy">Request one extra copy from the saved details—for example, for the other side of the bin.</p>

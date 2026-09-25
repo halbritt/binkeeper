@@ -6,10 +6,12 @@ import os
 import sys
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
+from io import BytesIO
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from PIL import Image, ImageDraw
 from starlette.responses import Response
 
 from binkeeper.bin_catalog_web import create_app as create_catalog_app
@@ -56,12 +58,26 @@ PROPOSAL = LabelDriftQueueEntry(
 )
 
 
-class _NoPhotos:
+class _SyntheticPhotos:
     def linked_bin_codes(self, bin_codes: Sequence[str]) -> frozenset[str]:
-        return frozenset()
+        return frozenset({"AGR-014"}).intersection(bin_codes)
 
     def load_original(self, bin_code: str) -> bytes | None:
-        return None
+        return _SYNTHETIC_PHOTO if bin_code == "AGR-014" else None
+
+
+def _synthetic_photo() -> bytes:
+    image = Image.new("RGB", (640, 480), "#e9e5d9")
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((80, 145, 560, 415), radius=24, fill="#5d766b")
+    draw.rounded_rectangle((65, 120, 575, 185), radius=16, fill="#334c43")
+    draw.rectangle((220, 245, 420, 330), fill="#f6f4e9")
+    output = BytesIO()
+    image.save(output, format="JPEG")
+    return output.getvalue()
+
+
+_SYNTHETIC_PHOTO = _synthetic_photo()
 
 
 def _manage_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> ManageView:
@@ -102,7 +118,7 @@ def create_app(port: int) -> FastAPI:
             containment_loader=lambda: {},
             virtual_loader=lambda: [],
             label_drift_loader=lambda: [PROPOSAL],
-            photo_source=_NoPhotos(),
+            photo_source=_SyntheticPhotos(),
         ),
     )
     app.mount("/", create_authoring_app(port=port, manage_loader=_manage_view))

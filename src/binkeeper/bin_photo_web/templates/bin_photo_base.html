@@ -4,8 +4,6 @@
 <div class="brand-line">
   <span class="brand-mark" aria-hidden="true"></span>
   <span class="brand-name">BinKeeper</span>
-  <span aria-hidden="true">·</span>
-  <span class="surface-label">{{ surface_label|default("Bins") }}</span>
 </div>
 {% endblock %}
 
@@ -17,11 +15,11 @@
        owned by the shared BinKeeper stylesheet. */
     .bin-photo-page {
       display: grid;
-      gap: var(--space-4);
+      gap: var(--space-5);
     }
     .bin-photo-hero {
       display: grid;
-      gap: var(--space-2);
+      gap: var(--space-3);
       padding-block: var(--space-1);
     }
     .bin-photo-heading-row,
@@ -47,11 +45,11 @@
     }
     .bin-photo-intro {
       max-width: 62ch;
+      font-size: 17px;
     }
     .bin-photo-card {
       gap: var(--space-4);
-      border-color: var(--color-border-strong);
-      box-shadow: 0 8px 24px rgba(22, 32, 28, 0.07);
+      border-color: var(--color-border);
     }
     .bin-photo-card-header {
       display: grid;
@@ -68,6 +66,23 @@
       color: var(--color-surface);
       font-weight: 700;
       padding-inline: var(--space-4);
+    }
+    .bin-photo-primary:hover { background: #10483f; color: var(--color-surface); }
+    .bin-photo-options { border-top: 1px solid var(--color-border); padding-top: var(--space-3); }
+    .bin-photo-options > summary { color: var(--color-accent); font-weight: 700; cursor: pointer; }
+    .bin-photo-options-body { display: grid; gap: var(--space-4); padding-top: var(--space-4); }
+    .bin-photo-privacy { margin: 0; color: var(--color-fg-muted); }
+    .bin-photo-form input[type="file"]::file-selector-button {
+      margin-right: var(--space-3);
+      padding: var(--space-2) var(--space-2);
+      border: 0;
+      border-radius: 7px;
+      background: var(--color-accent-soft);
+      color: var(--color-accent);
+      font-size: 14px;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
     }
     .bin-photo-primary:focus-visible {
       outline-offset: 3px;
@@ -115,7 +130,7 @@
 {% endblock %}
 
 {% block main %}
-<div class="container-slim bin-photo-page">
+<div class="container-slim bin-photo-page{% block page_class %}{% endblock %}">
   {% block bin_photo_main %}{% endblock %}
 </div>
 {% endblock %}

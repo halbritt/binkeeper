@@ -6,8 +6,6 @@
 <div class="brand-line">
   <span class="brand-mark" aria-hidden="true"></span>
   <span class="brand-name">BinKeeper</span>
-  <span aria-hidden="true">·</span>
-  <span class="surface-label">Catalog</span>
 </div>
 {% endblock %}
 
@@ -18,7 +16,7 @@
   .bin-catalog-page { display: grid; gap: var(--space-5); }
   .bin-catalog-hero {
     display: grid;
-    gap: var(--space-4);
+    gap: var(--space-3);
   }
   .bin-catalog-kicker {
     margin: 0;
@@ -28,26 +26,34 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
-  .bin-catalog-intro { max-width: 46rem; margin: 0; }
+  .bin-catalog-intro { max-width: 46rem; margin: 0; font-size: 17px; }
   .bin-catalog-stats {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--space-2);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-5);
+    padding-block: var(--space-3);
+    border-top: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
   }
   .bin-catalog-stat {
-    display: grid;
-    padding: var(--space-3);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    background: var(--color-surface-muted);
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-1);
   }
-  .bin-catalog-stat strong { font-size: var(--type-heading); }
+  .bin-catalog-stat strong { font-size: var(--type-body); }
   .bin-catalog-stat span { color: var(--color-fg-muted); font-size: var(--type-meta); }
+  .bin-catalog-search { border-color: var(--color-border-strong); }
   .bin-catalog-filter {
     display: grid;
     grid-template-columns: minmax(14rem, 2fr) minmax(11rem, 1fr) auto;
     gap: var(--space-3);
     align-items: end;
+  }
+  .bin-catalog-filter .field > label { font-size: var(--type-meta); }
+  .bin-catalog-filter button[type="submit"] {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    color: var(--color-surface);
   }
   .bin-catalog-query,
   .bin-catalog-site { width: 100%; }
@@ -57,58 +63,54 @@
     gap: var(--space-3);
     align-items: baseline;
   }
-  .bin-catalog-card {
-    align-content: start;
-    border-top: 3px solid var(--color-accent);
+  .bin-catalog-list { display: grid; gap: var(--space-3); }
+  .bin-catalog-card { border-left: 4px solid var(--color-accent); }
+  .bin-catalog-card[data-fog="aging"] { border-left-color: var(--color-warn-muted); }
+  .bin-catalog-card[data-fog="stale"],
+  .bin-catalog-card[data-fog="fog"] { border-left-color: var(--color-border-strong); }
+  .bin-catalog-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-4);
+    align-items: start;
   }
-  /* Fog of war (BINK-21): decayed location confidence greys the tile out.
-     The fog chip carries the same signal as text, so color is never the
-     only channel; a confirm or fetch un-greys the tile on the next render. */
-  .bin-catalog-card[data-fog="aging"] { filter: grayscale(0.35); }
-  .bin-catalog-card[data-fog="stale"] { filter: grayscale(0.65); opacity: 0.85; }
-  .bin-catalog-card[data-fog="fog"] {
-    filter: grayscale(1);
-    opacity: 0.62;
-    border-top: 3px dashed var(--color-border-strong);
-  }
+  .bin-catalog-row.has-photo { grid-template-columns: 104px minmax(0, 1fr) auto; }
+  .bin-catalog-card-copy { display: grid; gap: var(--space-2); min-width: 0; }
   .bin-catalog-card-head {
     display: flex;
     justify-content: space-between;
     gap: var(--space-3);
-    align-items: start;
+    align-items: center;
+    flex-wrap: wrap;
   }
   .bin-catalog-card-label {
     margin: 0;
     color: var(--color-fg-muted);
     font-size: var(--type-meta);
   }
-  .bin-catalog-code { font-size: var(--type-heading); }
-  .bin-catalog-theme { margin: 0; font-weight: 600; }
+  .bin-catalog-code { font-size: var(--type-meta); font-weight: 700; letter-spacing: 0.05em; }
+  .bin-catalog-theme { margin: 0; font-size: 20px; font-weight: 700; }
+  .bin-catalog-site { color: var(--color-fg-muted); font-size: var(--type-meta); }
+  .bin-catalog-actions { align-self: center; }
   .bin-catalog-owner-phrase {
     margin: 0;
-    padding: var(--space-2) var(--space-3);
-    border-left: 3px solid var(--color-border-strong);
-    background: var(--color-surface-muted);
     color: var(--color-fg-muted);
+    font-size: var(--type-meta);
   }
   .bin-catalog-photo {
     position: relative;
     display: grid;
     place-items: center;
-    width: 100%;
-    min-height: 0;
-    aspect-ratio: 4 / 3;
+    width: 104px;
+    min-height: 104px;
+    aspect-ratio: 1;
     overflow: hidden;
     border: 1px solid var(--color-border);
-    border-radius: 6px;
+    border-radius: 10px;
     background: var(--color-surface-muted);
     padding: 0;
   }
-  .bin-catalog-photo[data-photo-state="missing"],
-  .bin-catalog-photo[data-photo-state="unavailable"] {
-    aspect-ratio: auto;
-    min-height: 3rem;
-  }
+  .bin-catalog-photo-note { margin: 0; color: var(--color-fg-muted); font-size: var(--type-meta); }
   .bin-catalog-photo-button {
     cursor: zoom-in;
     -webkit-tap-highlight-color: transparent;
@@ -143,16 +145,17 @@
   }
   .bin-catalog-photo-action {
     position: absolute;
-    right: var(--space-2);
-    bottom: var(--space-2);
+    right: 4px;
+    bottom: 4px;
     z-index: 1;
-    padding: var(--space-1) var(--space-2);
+    padding: 2px 5px;
     border: 1px solid var(--color-border-strong);
-    border-radius: 999px;
+    border-radius: 5px;
     background: var(--color-surface);
     color: var(--color-fg);
-    font-size: var(--type-meta);
+    font-size: 11px;
     font-weight: 600;
+    line-height: 1.2;
   }
   .bin-photo-dialog {
     width: min(960px, calc(100vw - 32px));
@@ -197,16 +200,23 @@
     -webkit-user-drag: none;
   }
   .bin-photo-dialog-status { margin: var(--space-5); }
-  .bin-catalog-section {
-    display: grid;
-    gap: var(--space-1);
-    padding-top: var(--space-2);
-  }
+  .bin-catalog-section { display: grid; gap: 0; }
   .bin-catalog-section p,
   .bin-catalog-section ul { margin: 0; }
+  .bin-catalog-section h4 { font-size: var(--type-meta); color: var(--color-fg-muted); margin: 0; }
   .bin-catalog-attributes { display: flex; flex-wrap: wrap; gap: var(--space-1); }
   .bin-catalog-profile-list { margin-top: var(--space-2); }
+  .bin-catalog-details {
+    margin-top: var(--space-3);
+    border: 0;
+    border-top: 1px solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
+  }
+  .bin-catalog-details > summary { padding: var(--space-2) 0 0; color: var(--color-accent); font-size: var(--type-meta); font-weight: 600; }
+  .bin-catalog-details > .details-body { padding: var(--space-2) 0 0; }
   .bin-catalog-no-match { text-align: center; }
+  .bin-label-review-panel { border-color: var(--color-warn-muted); background: #fffaf0; }
   .bin-label-review-list { display: grid; gap: var(--space-3); }
   .bin-label-review-row {
     display: flex; justify-content: space-between; gap: var(--space-3); align-items: center;
@@ -218,10 +228,24 @@
   [data-clear-filters][hidden] { display: none; }
   @media (max-width: 760px) {
     .bin-catalog-filter { grid-template-columns: 1fr; align-items: stretch; }
-    .bin-catalog-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .bin-catalog-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+    .bin-catalog-row.has-photo { grid-template-columns: 80px minmax(0, 1fr); }
+    .bin-catalog-photo { width: 80px; min-height: 80px; }
+    .bin-catalog-actions { grid-column: 1 / -1; }
+  }
+  @media (min-width: 900px) {
+    .bin-catalog-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .bin-catalog-row, .bin-catalog-row.has-photo { grid-template-columns: minmax(0, 1fr); }
+    .bin-catalog-row.has-photo { grid-template-columns: 80px minmax(0, 1fr); }
+    .bin-catalog-photo { width: 80px; min-height: 80px; }
+    .bin-catalog-actions { grid-column: 1 / -1; }
   }
   @media (max-width: 480px) {
-    .bin-catalog-card-head { align-items: stretch; flex-direction: column; }
+    .bin-catalog-hero { gap: var(--space-3); }
+    .bin-catalog-stat { min-width: 42%; }
+    .bin-catalog-theme { font-size: 18px; }
+    .bin-label-review-row { align-items: stretch; flex-direction: column; }
+    .bin-label-review-row .button { width: fit-content; }
     .bin-photo-dialog-shell { padding: var(--space-3); }
     .bin-photo-dialog-head { align-items: stretch; flex-direction: column; }
   }
@@ -232,7 +256,7 @@
 <div class="bin-catalog-page">
   <header class="bin-catalog-hero">
     <div class="stack">
-      <p class="bin-catalog-kicker">BinKeeper</p>
+      <p class="bin-catalog-kicker">Your inventory</p>
       <h1>Bin catalog</h1>
       <p class="bin-catalog-intro muted">
         Find a labeled bin, see what is recorded inside, and check its latest recorded site.
@@ -272,13 +296,13 @@
     </div>
   </section>
   {% elif total_count %}
-  <section class="panel panel-padded stack" aria-labelledby="filter-heading">
+  <section class="panel panel-padded stack bin-catalog-search" aria-labelledby="filter-heading">
     <h2 id="filter-heading">Find a bin</h2>
     <form class="bin-catalog-filter" method="get" action="{{ catalog_url }}" data-catalog-filter>
       <div class="field">
         <label for="bin-search">Search bins</label>
         <input class="bin-catalog-query" type="search" id="bin-search" name="q"
-               value="{{ query }}" placeholder="Code, contents, theme, or site"
+               value="{{ query }}" placeholder="Code or contents"
                autocomplete="off" data-catalog-query>
       </div>
       <div class="field">
@@ -298,7 +322,7 @@
   </section>
 
   {% if label_drift_count %}
-  <section class="panel panel-padded stack" aria-labelledby="label-review-heading">
+  <section class="panel panel-padded stack bin-label-review-panel" aria-labelledby="label-review-heading">
     <div>
       <h2 id="label-review-heading">Pending label review</h2>
       <p class="muted">The nightly vision pass found possible label changes. Nothing changes until you review it.</p>
@@ -325,69 +349,70 @@
       </p>
     </div>
 
-    <div class="grid-fit-280" data-catalog-results>
+    <div class="bin-catalog-list" data-catalog-results>
       {% for entry in entries %}
       <article class="panel panel-padded bin-catalog-card"
                data-bin-card data-site="{{ entry.current_site_key }}"
                data-fog="{{ entry.fog_level }}"
                data-search-text="{{ entry.search_text }}">
-        <header class="bin-catalog-card-head">
-          <div>
-            <p class="bin-catalog-card-label">Bin</p>
-            <h2><code class="bin-catalog-code">{{ entry.bin_code }}</code></h2>
-          </div>
-          <span class="chip">Current · {{ entry.current_site_label }}</span>
-        </header>
-
-        {% if entry.photo_state == "available" %}
-        <button type="button" class="bin-catalog-photo bin-catalog-photo-button"
-                data-photo-state="available" data-photo-frame data-photo-preview
-                data-bin-code="{{ entry.bin_code }}"
-                aria-label="View stored photo for {{ entry.bin_code }}"
-                aria-haspopup="dialog">
-          <img src="{{ entry.photo_url }}"
-               alt="Stored bin photo for {{ entry.bin_code }}"
-               loading="lazy" decoding="async" draggable="false" data-bin-photo>
-          <span class="bin-catalog-photo-action" aria-hidden="true" data-photo-action>View photo</span>
-          <span class="bin-catalog-photo-fallback" data-photo-unavailable hidden>Photo unavailable</span>
-        </button>
-        {% elif entry.photo_state == "missing" %}
-        <div class="bin-catalog-photo" data-photo-state="missing">
-          <p>No photo recorded</p>
-        </div>
-        {% else %}
-        <div class="bin-catalog-photo" data-photo-state="unavailable">
-          <p>Photo unavailable</p>
-        </div>
-        {% endif %}
-
-        <p class="bin-catalog-theme">{{ entry.theme or "No theme recorded" }}</p>
-        {% if entry.owner_phrase %}
-        <p class="bin-catalog-owner-phrase">{{ entry.owner_phrase }}</p>
-        {% endif %}
-
-        <section class="bin-catalog-section" aria-labelledby="contents-{{ loop.index }}">
-          <h3 id="contents-{{ loop.index }}">Contents</h3>
-          {% if entry.current_contents %}
-          <p>{{ entry.current_contents }}</p>
-          {% else %}
-          <p class="muted">No contents recorded.</p>
+        <div class="bin-catalog-row{% if entry.photo_state == 'available' %} has-photo{% endif %}">
+          {% if entry.photo_state == "available" %}
+          <button type="button" class="bin-catalog-photo bin-catalog-photo-button"
+                  data-photo-state="available" data-photo-frame data-photo-preview
+                  data-bin-code="{{ entry.bin_code }}"
+                  aria-label="View stored photo for {{ entry.bin_code }}"
+                  aria-haspopup="dialog">
+            <img src="{{ entry.photo_url }}"
+                 alt="Stored bin photo for {{ entry.bin_code }}"
+                 loading="lazy" decoding="async" draggable="false" data-bin-photo>
+            <span class="bin-catalog-photo-action" aria-hidden="true" data-photo-action>View</span>
+            <span class="bin-catalog-photo-fallback" data-photo-unavailable hidden>Photo unavailable</span>
+          </button>
           {% endif %}
-        </section>
 
-        {% if entry.manage_url %}
-        <div class="action-bar">
-          <a class="button" href="{{ entry.manage_url }}">Manage bin</a>
+          <div class="bin-catalog-card-copy">
+            <header class="bin-catalog-card-head">
+              <div>
+                <p class="bin-catalog-card-label"><code class="bin-catalog-code">{{ entry.bin_code }}</code></p>
+                <h3 class="bin-catalog-theme">{{ entry.theme or "No theme recorded" }}</h3>
+              </div>
+              <span class="bin-catalog-site">Current site: {{ entry.current_site_label }}</span>
+            </header>
+
+            <section class="bin-catalog-section" aria-labelledby="contents-{{ loop.index }}">
+              <h4 id="contents-{{ loop.index }}">Contents</h4>
+              {% if entry.current_contents %}
+              <p>{{ entry.current_contents }}</p>
+              {% else %}
+              <p class="muted">No contents recorded.</p>
+              {% endif %}
+            </section>
+
+            {% if entry.owner_phrase %}
+            <p class="bin-catalog-owner-phrase">{{ entry.owner_phrase }}</p>
+            {% endif %}
+
+            {% if entry.photo_state == "missing" %}
+            <p class="bin-catalog-photo-note" data-photo-state="missing">No photo recorded</p>
+            {% elif entry.photo_state == "unavailable" %}
+            <p class="bin-catalog-photo-note" data-photo-state="unavailable">Photo unavailable</p>
+            {% endif %}
+
+            <div class="bin-catalog-attributes" role="group" aria-label="Capacity, volume, and location freshness">
+              <span class="chip">{{ entry.capacity_label }}</span>
+              <span class="chip">{{ entry.volume_label }}</span>
+              <span class="chip" data-fog-chip>{{ entry.fog_label }} · {{ entry.location_confidence_label }}</span>
+            </div>
+          </div>
+
+          {% if entry.manage_url %}
+          <div class="bin-catalog-actions">
+            <a class="button" href="{{ entry.manage_url }}">Manage bin</a>
+          </div>
+          {% endif %}
         </div>
-        {% endif %}
 
-        <div class="bin-catalog-attributes" role="group" aria-label="Capacity, volume, and location freshness">
-          <span class="chip">{{ entry.capacity_label }}</span>
-          <span class="chip">{{ entry.volume_label }}</span>
-          <span class="chip" data-fog-chip>{{ entry.fog_label }} · {{ entry.location_confidence_label }}</span>
-        </div>
-
-        <details class="details-block">
+        <details class="details-block bin-catalog-details">
           <summary>Bin details</summary>
           <div class="details-body stack">
             <dl class="kv-list kv-list-wide bin-catalog-profile-list">

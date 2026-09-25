@@ -29,7 +29,7 @@ LOCAL_ONLY_HELP_COPY: str = (
 
 PHASE4_FUTURE_COPY: str = "Phase 4 work is not yet built. Tracked in RFC 0021 / D044 / D069 / D079."
 
-AUDIT_EGRESS_STATUS: str = "configured vision may use cloud"
+AUDIT_EGRESS_STATUS: str = "photo analysis may use the configured vision provider"
 
 SHARED_STATIC_MOUNT_PATH: str = "/shared-static"
 SHARED_STATIC_MOUNT_NAME: str = "shared-static"
@@ -37,7 +37,7 @@ SHARED_STATIC_MOUNT_NAME: str = "shared-static"
 
 def audit_footer_copy(bind_address: str, *, egress_status: str = AUDIT_EGRESS_STATUS) -> str:
     """Render the local inventory and configured vision status sentence."""
-    return f"local inventory · loopback bind: {bind_address} · {egress_status}."
+    return f"Inventory stays on this machine. {egress_status.capitalize()}."
 
 
 def asset_version() -> str:
