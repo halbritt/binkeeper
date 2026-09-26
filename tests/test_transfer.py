@@ -3,7 +3,9 @@ from __future__ import annotations
 import base64
 import copy
 import hashlib
+import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -15,9 +17,12 @@ from binkeeper.transfer import (
     TABLE_ORDER,
     TransferMismatchError,
     build_manifest,
+    changed_snapshot,
+    read_snapshot,
     stage_reencrypted_blobs,
     verify_blob_migration,
     verify_snapshot,
+    write_snapshot,
 )
 
 
@@ -223,3 +228,31 @@ def test_blob_staging_refuses_same_key_and_logical_drift() -> None:
     staged["manifest"] = build_manifest(staged)
     with pytest.raises(TransferMismatchError, match="protected table"):
         verify_blob_migration(snapshot, staged)
+
+
+def test_snapshot_file_round_trip_is_verified_and_exclusive(tmp_path: Path) -> None:
+    snapshot = empty_snapshot()
+    path = tmp_path / "snapshot.json"
+    write_snapshot(path, snapshot)
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert read_snapshot(path) == snapshot
+    with pytest.raises(FileExistsError):
+        write_snapshot(path, snapshot)
+
+    tampered = changed_snapshot(snapshot, "overall_sha256")
+    tampered_path = tmp_path / "tampered.json"
+    tampered_path.write_text(json.dumps(tampered), encoding="utf-8")
+    with pytest.raises(TransferMismatchError, match="manifest mismatch"):
+        read_snapshot(tampered_path)
+
+    list_path = tmp_path / "list.json"
+    list_path.write_text("[]", encoding="utf-8")
+    with pytest.raises(TransferMismatchError, match="root is not an object"):
+        read_snapshot(list_path)
+
+    refused_path = tmp_path / "refused.json"
+    with pytest.raises(TransferMismatchError, match="manifest mismatch"):
+        write_snapshot(refused_path, tampered)
+    assert not refused_path.exists()
+    with pytest.raises(KeyError):
+        changed_snapshot(snapshot, "not-a-dimension")
