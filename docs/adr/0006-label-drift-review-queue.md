@@ -91,3 +91,20 @@ routing changes that break the ~$0.02/photo assumption.
 Implementation slices (completed in Plane): (1) `label_drift_proposal`
 evidence kind + the 04:00 timer ordered after the 03:30 OCR pass, (2) queue fold
 + read-only catalog surface, (3) accept/dismiss actions with idempotency keys.
+
+## Owner correction: contents-only review (2026-09-25)
+
+The owner clarified that the bin theme is set by the human or the registration
+vision model when the label is printed. The nightly pass reviews **contents
+additions only**. It does not suggest removals based on items absent from a
+photo. It no longer asks the model for a theme, compares themes for
+materiality, presents a proposed theme, or changes the saved theme on review
+acceptance. A content review uses the current theme and home site from the
+passport at save time, even if a stale or altered form submits other values.
+
+Two newly detected items still qualify a proposal for review. Existing
+theme-only proposal evidence remains immutable, but the rebuildable queue
+ignores its former theme materiality. Dismissals demote item suggestions only.
+The proposal input key is versioned so the next nightly pass records a fresh
+contents-focused analysis. This correction supersedes the theme portions of
+the materiality, dismissal, and review-surface bullets above (`BINK-47`).

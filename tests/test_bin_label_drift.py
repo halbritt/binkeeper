@@ -57,7 +57,7 @@ def _proposal(*, theme: str, items: tuple[tuple[str, float], ...]) -> BinLabelPr
     )
 
 
-def test_materiality_requires_a_theme_change_or_two_new_items() -> None:
+def test_materiality_requires_two_new_items_even_when_the_model_changes_theme() -> None:
     one_new = diff_label_proposal(
         _passport(),
         _proposal(theme="hand tools", items=(("hex keys", 0.9), ("torque wrench", 0.8))),
@@ -74,7 +74,8 @@ def test_materiality_requires_a_theme_change_or_two_new_items() -> None:
     assert not one_new.material
     assert one_new.new_item_labels == ("torque wrench",)
     assert two_new.material
-    assert changed_theme.material
+    assert not changed_theme.material
+    assert "theme" not in changed_theme.to_json()
 
 
 class _EnsembleClient:
@@ -83,9 +84,11 @@ class _EnsembleClient:
 
     def __init__(self) -> None:
         self.calls = 0
+        self.last_prompt = ""
 
     def analyze(self, prompt: str, image: bytes) -> str:
         self.calls += 1
+        self.last_prompt = prompt
         return (
             '{"items": [{"label": "torque wrench", "confidence": 0.9}, '
             '{"label": "socket set", "confidence": 0.8}], '
@@ -134,6 +137,7 @@ def test_writer_records_changed_inputs_once_and_preserves_the_decision_evidence(
     }
     assert replay.skipped_unchanged == 1
     assert client.calls == 1
+    assert "Do not propose a theme" in client.last_prompt
     payload = conn.execute(
         """
         SELECT payload
@@ -146,7 +150,8 @@ def test_writer_records_changed_inputs_once_and_preserves_the_decision_evidence(
     assert metadata["model_versions"] == list(client.model_versions)
     assert metadata["passport_snapshot"]["theme"] == "hand tools"
     assert metadata["diff"]["material"] is True
-    assert metadata["proposal"]["theme"] == "mechanic tools"
+    assert metadata["proposal"]["theme"] == "hand tools"
+    assert "theme" not in metadata["diff"]
     assert metadata["idempotency_key"].startswith("label-drift:TST-001:")
 
 
@@ -251,7 +256,7 @@ def test_queue_uses_only_the_newest_proposal_for_a_bin() -> None:
 
     assert len(queue) == 1
     assert queue[0].proposal_external_id == "proposal-new"
-    assert queue[0].proposed_theme == "precision tools"
+    assert queue[0].current_theme == "hand tools"
     assert queue[0].new_item_labels == ("calipers", "micrometer")
 
 
@@ -262,6 +267,18 @@ def test_queue_excludes_a_recorded_non_material_proposal() -> None:
         theme="hand tools",
         new_items=("torque wrench",),
         material=False,
+    )
+
+    assert fold_label_drift_queue([proposal]) == []
+
+
+def test_queue_ignores_legacy_theme_only_material_proposal() -> None:
+    proposal = _proposal_evidence(
+        "proposal-legacy-theme-only",
+        datetime(2026, 8, 11, 3, 30, tzinfo=UTC),
+        theme="mechanic tools",
+        new_items=(),
+        material=True,
     )
 
     assert fold_label_drift_queue([proposal]) == []

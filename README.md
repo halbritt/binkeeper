@@ -127,10 +127,10 @@ means photos were read but no code was legible anywhere. See
 The follow-on label-drift pass runs at 04:00 through an exact-model gpu-fleet
 lease. It fans each changed bin photo out concurrently to OpenRouter Anthropic
 Opus 5 and local peecee `qwen3-vl:8b`, stores the union as append-only advisory
-evidence, and queues only material diffs. The catalog shows the rebuildable
-pending count; the manage page lets the owner edit and save a normal profile
-snapshot or append a proposal-linked dismissal. It never changes a label by
-itself. See [ADR 0006](docs/adr/0006-label-drift-review-queue.md) and
+evidence, and queues possible contents additions for review. The catalog shows
+the rebuildable pending count; the manage page lets the owner save reviewed
+contents or append a proposal-linked dismissal. The bin theme stays as set at
+registration or through an explicit profile edit. See [ADR 0006](docs/adr/0006-label-drift-review-queue.md) and
 [docs/deployment.md](docs/deployment.md).
 
 `make check` runs the full verification sequence; the editable install is a

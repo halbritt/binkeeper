@@ -145,6 +145,7 @@ class ProfileAction:
     home_site: str
     action_id: str
     received_at: datetime
+    reviewed_proposal_external_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -320,11 +321,12 @@ async def _profile_response(
         home_site=_form_text(form.get("home_site")),
         action_id=_form_text(form.get("action_id")),
         received_at=datetime.now(UTC),
+        reviewed_proposal_external_id=_form_text(form.get("reviewed_proposal_external_id")) or None,
     )
     notice = "profile-saved"
     try:
         await run_in_threadpool(save_bin_profile, action, config.scope, config.sites)
-    except (BinManageError, PersonalMemoryError, psycopg.Error):
+    except (BinManageError, LabelDriftError, PersonalMemoryError, psycopg.Error):
         _LOGGER.warning("BinKeeper profile update failed")
         notice = "save-failed"
     return _redirect(config.base_path, bin_code, notice)
@@ -690,20 +692,73 @@ def save_bin_profile(
     valid_sites: tuple[str, ...],
 ) -> None:
     """Append one reviewed profile snapshot on the owner connection."""
+    from binkeeper.bin_label_drift import load_label_drift_queue
     from binkeeper.bin_manage import update_bin_profile
+    from binkeeper.bin_passport import bin_passport
     from binkeeper.db import connect
+    from binkeeper.personal_memory import capture_external_id
 
-    if action.home_site and action.home_site not in valid_sites:
-        raise BinManageError("home_site is not in the BinKeeper site list")
-    update = BinProfileUpdate(
-        bin_code=action.bin_code,
-        theme=action.theme,
-        contents=action.contents,
-        home_site=action.home_site,
-        action_id=action.action_id,
-        observed_at=action.received_at,
-    )
     with connect() as conn:
+        theme = action.theme
+        home_site = action.home_site
+        if action.reviewed_proposal_external_id:
+            idempotency_key = f"binprofile:{action.bin_code}:{action.action_id}"
+            external_id = capture_external_id(
+                idempotency_key=idempotency_key,
+                tenant_id=scope.tenant_id,
+                corpus_id=scope.corpus_id,
+            )
+            existing = conn.execute(
+                "SELECT payload->'metadata' FROM capture_evidence WHERE external_id = %s",
+                (external_id,),
+            ).fetchone()
+            if existing is not None:
+                metadata = existing[0]
+                if (
+                    not isinstance(metadata, dict)
+                    or metadata.get("reviewed_proposal_external_id")
+                    != action.reviewed_proposal_external_id
+                    or metadata.get("contents_text") != action.contents.strip()
+                ):
+                    raise BinManageError("contents review action was reused with different data")
+                return
+            pending = next(
+                (
+                    entry
+                    for entry in load_label_drift_queue(
+                        conn,
+                        now=action.received_at,
+                        tenant_id=scope.tenant_id,
+                        corpus_id=scope.corpus_id,
+                    )
+                    if entry.bin_code == action.bin_code
+                ),
+                None,
+            )
+            if (
+                pending is None
+                or pending.proposal_external_id != action.reviewed_proposal_external_id
+            ):
+                raise BinManageError("contents review is no longer pending")
+            passport = bin_passport(
+                conn,
+                action.bin_code,
+                tenant_id=scope.tenant_id,
+                corpus_id=scope.corpus_id,
+            )
+            theme = passport.theme or ""
+            home_site = passport.home_site or ""
+        if home_site and home_site not in valid_sites:
+            raise BinManageError("home_site is not in the BinKeeper site list")
+        update = BinProfileUpdate(
+            bin_code=action.bin_code,
+            theme=theme,
+            contents=action.contents,
+            home_site=home_site,
+            action_id=action.action_id,
+            observed_at=action.received_at,
+            reviewed_proposal_external_id=action.reviewed_proposal_external_id,
+        )
         update_bin_profile(conn, update, scope=scope)
 
 

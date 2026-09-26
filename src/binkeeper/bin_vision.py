@@ -418,11 +418,13 @@ def propose_bin_label(
     notes: str | None = None,
     confidence_floor: float = DEFAULT_ITEM_CONFIDENCE_FLOOR,
     fail_on_error: bool = False,
+    contents_only: bool = False,
+    existing_theme: str | None = None,
 ) -> BinLabelProposal:
-    """Analyze each photo, merge the results, and propose a provisional label."""
+    """Analyze photos for a new label or additions to an existing bin's contents."""
     if not images:
         raise BinVisionError("at least one photo is required")
-    prompt = _build_prompt(notes)
+    prompt = _build_contents_prompt(notes) if contents_only else _build_prompt(notes)
     merged: dict[str, DetectedItem] = {}
     themes: list[str] = []
     summaries: list[str] = []
@@ -459,7 +461,11 @@ def propose_bin_label(
         )
     )
     return BinLabelProposal(
-        theme=_pick_theme(themes, notes, kept),
+        theme=(
+            (existing_theme or "unlabeled bin")
+            if contents_only
+            else _pick_theme(themes, notes, kept)
+        ),
         accepts=tuple(item.label for item in kept),
         owner_phrase=_clean(notes),
         summary=summaries[0] if summaries else "",
@@ -604,6 +610,25 @@ def _build_prompt(notes: str | None) -> str:
         "Respond with ONLY a JSON object and nothing else, in this exact shape:\n"
         '{"items": [{"label": "short name", "traits": ["..."], "confidence": 0.0}], '
         '"theme": "2-5 word bin theme", "summary": "one sentence of what this bin holds"}\n'
+        "Use a confidence in [0,1]; lower it when the photo is unclear."
+    )
+
+
+def _build_contents_prompt(notes: str | None) -> str:
+    note_line = (
+        f"The owner's notes about this bin: {notes.strip()}\n"
+        if notes and notes.strip()
+        else "The owner gave no notes.\n"
+    )
+    return (
+        "Review a physical storage bin's contents from a photo.\n"
+        f"{note_line}"
+        "Identify distinct items, tools, or parts you can see. Prefer specific names. "
+        "Do not propose a theme or a new main label for the bin. "
+        "Do not infer that an item was removed because it is not visible.\n"
+        "Respond with ONLY a JSON object in this shape:\n"
+        '{"items": [{"label": "short name", "traits": ["..."], "confidence": 0.0}], '
+        '"summary": "one sentence about visible contents"}\n'
         "Use a confidence in [0,1]; lower it when the photo is unclear."
     )
 

@@ -131,6 +131,7 @@ def test_manage_bin_page_prefills_current_state_and_exposes_clear_actions(
     from binkeeper import bin_b1
 
     monkeypatch.setattr(bin_b1, "B1_ADDRESS", "synthetic-address")
+
     def load_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> bin_manage_web.ManageView:
         assert (bin_code, tenant_id, corpus_id) == ("AGR-014", "personal", "personal")
         return {
@@ -175,12 +176,11 @@ def test_manage_bin_page_prefills_current_state_and_exposes_clear_actions(
     _assert_isolated_binkeeper_navigation(body, current="catalog")
 
 
-def test_manage_page_prefills_a_pending_label_change_for_owner_review() -> None:
+def test_manage_page_prefills_pending_contents_without_a_theme_suggestion() -> None:
     pending = LabelDriftQueueEntry(
         proposal_external_id="proposal-1",
         bin_code="AGR-014",
         proposed_at=datetime(2026, 8, 11, 4, tzinfo=UTC),
-        proposed_theme="Mechanic tools",
         current_theme="Power tools",
         current_contents="cordless drills",
         new_item_labels=("torque wrench", "socket set"),
@@ -208,9 +208,11 @@ def test_manage_page_prefills_a_pending_label_change_for_owner_review() -> None:
 
     assert response.status_code == 200
     assert 'id="label-drift-review"' in response.text
-    assert "Mechanic tools" in response.text
+    review_card = response.text.split('id="label-drift-review"', 1)[1].split('id="profile"', 1)[0]
+    assert "Mechanic tools" not in review_card
+    assert "Review detected contents" in review_card
     assert "torque wrench" in response.text
-    assert 'value="Mechanic tools"' in response.text
+    assert 'name="theme"' not in review_card
     assert "cordless drills, torque wrench, socket set" in response.text
     assert 'name="proposal_external_id" value="proposal-1"' in response.text
     assert "aaaaaaaa" not in response.text
@@ -328,17 +330,27 @@ def test_accepting_a_drift_suggestion_uses_profile_snapshot_and_clears_the_queue
     assert len(load_label_drift_queue(conn, now=observed.replace(hour=2, minute=30))) == 1
     monkeypatch.setattr(db, "connect", lambda **_kwargs: nullcontext(conn))
     app = bin_photo_web.create_app(host="127.0.0.1", port=8765)
+    review_form = {
+        "theme": "Forged theme",
+        "contents": "hex keys, torque wrench, socket set",
+        "home_site": "forged-site",
+        "action_id": "b7ec5acb-b964-4719-8a21-a42f71db42dd",
+        "reviewed_proposal_external_id": load_label_drift_queue(
+            conn, now=observed.replace(hour=2, minute=30)
+        )[0].proposal_external_id,
+    }
 
     with TestClient(app, base_url="http://testserver:8765") as client:
         before = client.get("/manage/AGR-014")
         accepted = client.post(
             "/manage/AGR-014/profile",
-            data={
-                "theme": "Mechanic tools",
-                "contents": "hex keys, torque wrench, socket set",
-                "home_site": "alameda-garage",
-                "action_id": "b7ec5acb-b964-4719-8a21-a42f71db42dd",
-            },
+            data=review_form,
+            headers=_LOOPBACK_ORIGIN,
+            follow_redirects=False,
+        )
+        replay = client.post(
+            "/manage/AGR-014/profile",
+            data=review_form,
             headers=_LOOPBACK_ORIGIN,
             follow_redirects=False,
         )
@@ -346,8 +358,24 @@ def test_accepting_a_drift_suggestion_uses_profile_snapshot_and_clears_the_queue
 
     assert 'id="label-drift-review"' in before.text
     assert accepted.headers["location"].endswith("notice=profile-saved")
+    assert replay.headers["location"].endswith("notice=profile-saved")
     assert 'id="label-drift-review"' not in after.text
     assert load_label_drift_queue(conn, now=datetime.now(UTC)) == []
+    from binkeeper.bin_passport import bin_passport
+
+    passport = bin_passport(conn, "AGR-014")
+    assert passport.theme == "Hand tools"
+    assert passport.home_site == "alameda-garage"
+    assert passport.sibling_contents == ("hex keys, torque wrench, socket set",)
+    metadata = conn.execute(
+        """
+        SELECT raw_payload->'metadata'
+        FROM captures
+        WHERE raw_payload->'metadata'->>'reviewed_proposal_external_id' = %s
+        """,
+        (review_form["reviewed_proposal_external_id"],),
+    ).fetchall()
+    assert len(metadata) == 1
 
 
 def test_manage_profile_write_stays_in_the_selected_corpus(
@@ -786,11 +814,15 @@ def test_manage_reprint_uses_explicit_b1_and_replay_never_reprints(
     action = {"action_id": "3a581aa2-589e-4626-a31b-62124a193917", "printer": "niimbot-b1"}
     with _client() as client:
         first = client.post(
-            "/manage/AGR-014/print", data=action, headers=_LOOPBACK_ORIGIN,
+            "/manage/AGR-014/print",
+            data=action,
+            headers=_LOOPBACK_ORIGIN,
             follow_redirects=False,
         )
         replay = client.post(
-            "/manage/AGR-014/print", data=action, headers=_LOOPBACK_ORIGIN,
+            "/manage/AGR-014/print",
+            data=action,
+            headers=_LOOPBACK_ORIGIN,
             follow_redirects=False,
         )
 

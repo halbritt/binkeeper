@@ -71,34 +71,28 @@
   {% if label_drift %}
   <section id="label-drift-review" class="panel panel-padded stack bin-photo-card bin-manage-wide bin-label-drift-review" aria-labelledby="label-drift-heading">
     <div class="bin-photo-card-header">
-      <h2 id="label-drift-heading">Review detected label changes</h2>
-      <p class="bin-photo-card-copy">The nightly vision pass found possible changes in stored photos. This is a suggestion only; nothing changes until you save it.</p>
+      <h2 id="label-drift-heading">Review detected contents</h2>
+      <p class="bin-photo-card-copy">The nightly vision pass found possible additions in stored photos. Review the contents before saving. The bin theme stays as it is.</p>
     </div>
     <div class="bin-label-drift-comparison">
       <div class="stack">
-        <h3>Current label</h3>
-        <p><strong>{{ label_drift.current_theme or "No theme recorded" }}</strong></p>
+        <h3>Saved contents</h3>
         <p>{{ label_drift.current_contents or "No contents recorded" }}</p>
       </div>
       <div class="stack">
-        <h3>Suggested label</h3>
-        <p><strong>{{ label_drift.proposed_theme }}</strong></p>
+        <h3>Possible additions</h3>
         {% if label_drift.new_item_labels %}<p>Newly detected: {{ label_drift.new_item_labels|join(', ') }}</p>{% endif %}
       </div>
     </div>
     <form method="post" action="{{ profile_action }}" class="form-grid bin-photo-form" data-submit-form>
       <input type="hidden" name="action_id" value="{{ label_drift_accept_action_id }}">
       <input type="hidden" name="reviewed_proposal_external_id" value="{{ label_drift.proposal_external_id }}">
-      <input type="hidden" name="home_site" value="{{ home_site }}">
-      <label for="label-drift-theme">Theme to save
-        <input id="label-drift-theme" name="theme" value="{{ label_drift.proposed_theme }}" maxlength="120" autocomplete="off">
-      </label>
       <label for="label-drift-contents">Contents to save
         <textarea id="label-drift-contents" name="contents" rows="4" maxlength="1200">{{ label_drift.proposed_contents }}</textarea>
-        <span class="field-help">Edit either field before saving if the suggestion is partly right.</span>
+        <span class="field-help">Edit the contents if a suggested item is wrong. Saved items stay unless you remove them here.</span>
       </label>
       <div class="action-bar">
-        <button type="submit" class="bin-photo-primary" data-submit-button data-busy-label="Saving reviewed label…"><span data-button-label>Save reviewed label</span></button>
+        <button type="submit" class="bin-photo-primary" data-submit-button data-busy-label="Saving reviewed contents…"><span data-button-label>Save reviewed contents</span></button>
       </div>
     </form>
     <form method="post" action="{{ label_drift_dismiss_action }}" class="bin-photo-form" data-submit-form>

@@ -139,7 +139,6 @@ def test_catalog_shows_a_pending_label_review_count_and_manage_link() -> None:
         proposal_external_id="proposal-1",
         bin_code="AGR-014",
         proposed_at=datetime(2026, 8, 11, 4, tzinfo=UTC),
-        proposed_theme="Mechanic tools",
         current_theme="Precision tools",
         current_contents="hex keys and digital calipers",
         new_item_labels=("torque wrench", "socket set"),
@@ -159,8 +158,8 @@ def test_catalog_shows_a_pending_label_review_count_and_manage_link() -> None:
 
     assert response.status_code == 200
     assert "<strong>1</strong>" in response.text
-    assert "<span>pending label review</span>" in response.text
-    assert "Mechanic tools" in response.text
+    assert "<span>pending contents review</span>" in response.text
+    assert "Precision tools" in response.text
     assert "torque wrench" in response.text
     assert 'href="/bin-photo/manage/AGR-014#label-drift-review"' in response.text
     assert "aaaaaaaa" not in response.text

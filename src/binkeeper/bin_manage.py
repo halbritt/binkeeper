@@ -64,6 +64,7 @@ class BinProfileUpdate:
     home_site: str
     action_id: str
     observed_at: datetime
+    reviewed_proposal_external_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -237,6 +238,8 @@ def _profile_capture_request(
         "contents_text": contents,
         "bin_profile": {"theme": theme, "home_site": home_site},
     }
+    if update.reviewed_proposal_external_id:
+        metadata["reviewed_proposal_external_id"] = update.reviewed_proposal_external_id
     text = f"bin {code} profile · {contents}" if contents else f"bin {code} profile updated"
     return _capture_request(text, metadata, observed_at, idempotency_key)
 

@@ -132,7 +132,6 @@ class LabelDriftQueueEntry:
     proposal_external_id: str
     bin_code: str
     proposed_at: datetime
-    proposed_theme: str
     current_theme: str | None
     current_contents: str | None
     new_item_labels: tuple[str, ...]
@@ -149,9 +148,6 @@ class LabelDriftQueueEntry:
 class LabelDriftDiff:
     """The candidate changes that determine whether owner review is warranted."""
 
-    theme_before: str | None
-    theme_after: str
-    theme_changed: bool
     new_items: tuple[DetectedItem, ...]
 
     @property
@@ -160,23 +156,13 @@ class LabelDriftDiff:
 
     @property
     def material(self) -> bool:
-        return self.theme_changed or len(self.new_items) >= 2
+        return len(self.new_items) >= 2
 
     def to_json(self) -> dict[str, object]:
-        reasons: list[str] = []
-        if self.theme_changed:
-            reasons.append("theme_changed")
-        if len(self.new_items) >= 2:
-            reasons.append("two_or_more_new_items")
         return {
-            "theme": {
-                "before": self.theme_before,
-                "after": self.theme_after,
-                "changed": self.theme_changed,
-            },
             "new_items": [item.to_json() for item in self.new_items],
             "material": self.material,
-            "material_reasons": reasons,
+            "material_reasons": ["two_or_more_new_items"] if self.material else [],
         }
 
 
@@ -212,8 +198,7 @@ def default_label_drift_client(
 
 
 def diff_label_proposal(passport: BinPassport, proposal: BinLabelProposal) -> LabelDriftDiff:
-    """Compare one proposal with the current passport using ADR 0006 materiality."""
-    theme_changed = _normalize(proposal.theme) != _normalize(passport.theme or "")
+    """Find newly visible contents absent from the current passport."""
     current_contents = _normalize(
         " ".join(
             (*passport.accepts, passport.sibling_contents[-1] if passport.sibling_contents else "")
@@ -222,12 +207,7 @@ def diff_label_proposal(passport: BinPassport, proposal: BinLabelProposal) -> La
     new_items = tuple(
         item for item in proposal.items if _normalize(item.label) not in current_contents
     )
-    return LabelDriftDiff(
-        theme_before=passport.theme,
-        theme_after=proposal.theme,
-        theme_changed=theme_changed,
-        new_items=new_items,
-    )
+    return LabelDriftDiff(new_items=new_items)
 
 
 def fold_label_drift_queue(
@@ -255,14 +235,10 @@ def fold_label_drift_queue(
         diff = _mapping(proposal.metadata.get("diff"))
         proposed = _mapping(proposal.metadata.get("proposal"))
         snapshot = _mapping(proposal.metadata.get("passport_snapshot"))
-        if not diff or not proposed or not snapshot or diff.get("material") is not True:
-            continue
-        proposed_theme = _text(proposed.get("theme"))
-        if not proposed_theme:
+        if not diff or not proposed or not snapshot:
             continue
         new_items = _mappings(diff.get("new_items"))
         photo_hashes = _strings(proposal.metadata.get("photo_hashes"))
-        dismissed_themes: set[str] = set()
         dismissed_items: set[str] = set()
         for dismissal in dismissals[bin_code]:
             age = effective_now - dismissal.observed_at
@@ -270,22 +246,16 @@ def fold_label_drift_queue(
                 continue
             if _strings(dismissal.metadata.get("photo_hashes")) != photo_hashes:
                 continue
-            if dismissed_theme := _text(dismissal.metadata.get("dismissed_theme")):
-                dismissed_themes.add(_normalize(dismissed_theme))
             dismissed_items.update(
                 _normalize(label) for label in _strings(dismissal.metadata.get("dismissed_items"))
             )
-        theme = _mapping(diff.get("theme")) or {}
-        theme_changed = (
-            theme.get("changed") is True and _normalize(proposed_theme) not in dismissed_themes
-        )
         effective_new_items = tuple(
             item
             for item in new_items
             if (label := _text(item.get("label"))) is not None
             and _normalize(label) not in dismissed_items
         )
-        if not theme_changed and len(effective_new_items) < 2:
+        if len(effective_new_items) < 2:
             continue
         current_theme = _text(snapshot.get("theme"))
         entries.append(
@@ -293,7 +263,6 @@ def fold_label_drift_queue(
                 proposal_external_id=proposal.external_id,
                 bin_code=bin_code,
                 proposed_at=proposal.observed_at,
-                proposed_theme=proposed_theme if theme_changed else current_theme or proposed_theme,
                 current_theme=current_theme,
                 current_contents=_text(snapshot.get("contents")),
                 new_item_labels=tuple(
@@ -432,17 +401,11 @@ def dismiss_label_drift_proposal(
     )
     if current is None or current.proposal_external_id != proposal_id:
         raise LabelDriftError("proposal is not the current pending proposal for this bin")
-    dismissed_theme = (
-        current.proposed_theme
-        if _normalize(current.proposed_theme) != _normalize(current.current_theme or "")
-        else None
-    )
     metadata: dict[str, object] = {
         "kind": LABEL_DRIFT_DISMISSAL_KIND,
-        "schema_version": "label_drift_dismissal.v1",
+        "schema_version": "label_drift_dismissal.v2",
         "bin_code": code,
         "proposal_external_id": proposal_id,
-        "dismissed_theme": dismissed_theme,
         "dismissed_items": list(current.new_item_labels),
         "photo_hashes": list(current.photo_hashes),
         "dismissed_at": when.isoformat(),
@@ -519,6 +482,8 @@ def harvest_label_drift(
                 [image for image in images if image is not None],
                 notes=passport.owner_phrase,
                 fail_on_error=True,
+                contents_only=True,
+                existing_theme=passport.theme,
             )
         except BinVisionError:
             summary.model_errors += 1
@@ -527,7 +492,7 @@ def harvest_label_drift(
         diff = diff_label_proposal(passport, proposal)
         metadata: dict[str, object] = {
             "kind": LABEL_DRIFT_PROPOSAL_KIND,
-            "schema_version": "label_drift_proposal.v1",
+            "schema_version": "label_drift_proposal.v2",
             "bin_code": passport.bin_code,
             "proposal": proposal.to_json(),
             "passport_snapshot": snapshot.to_json(),
@@ -582,7 +547,7 @@ def _proposal_idempotency_key(
     model_versions: Sequence[str],
 ) -> str:
     inputs = {
-        "schema_version": "label_drift_inputs.v1",
+        "schema_version": "label_drift_inputs.v2",
         "bin_code": bin_code,
         "photo_hashes": sorted(photo_hashes),
         "passport": passport.to_json(),

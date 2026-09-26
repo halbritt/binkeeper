@@ -50,10 +50,9 @@ PROPOSAL = LabelDriftQueueEntry(
     proposal_external_id="synthetic-proposal",
     bin_code="AGR-014",
     proposed_at=datetime(2026, 8, 11, 4, tzinfo=UTC),
-    proposed_theme="Measuring tools",
     current_theme="Precision tools",
     current_contents="hex keys and digital calipers",
-    new_item_labels=("tape measure",),
+    new_item_labels=("tape measure", "steel ruler"),
     photo_hashes=(),
     model_versions=("synthetic-model",),
 )

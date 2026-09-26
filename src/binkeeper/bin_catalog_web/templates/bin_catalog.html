@@ -294,7 +294,7 @@
       {% if label_drift_count %}
       <div class="bin-catalog-stat">
         <strong>{{ label_drift_count }}</strong>
-        <span>pending label review{% if label_drift_count != 1 %}s{% endif %}</span>
+        <span>pending contents review{% if label_drift_count != 1 %}s{% endif %}</span>
       </div>
       {% endif %}
     </div>
@@ -338,17 +338,17 @@
 
   {% if label_drift_count %}
   <details class="panel panel-padded bin-label-review-panel">
-    <summary><h2 id="label-review-heading">Label reviews</h2><span>{{ label_drift_count }} pending</span></summary>
+    <summary><h2 id="label-review-heading">Contents reviews</h2><span>{{ label_drift_count }} pending</span></summary>
     <div class="bin-label-review-body">
-      <p class="muted">The nightly vision pass found possible label changes. Nothing changes until you review it.</p>
+      <p class="muted">The nightly vision pass found possible additions to bin contents. Nothing changes until you review them.</p>
       <div class="bin-label-review-list">
         {% for review in label_drift_entries %}
         <div class="bin-label-review-row">
           <div>
-            <strong><code>{{ review.bin_code }}</code> · {{ review.proposed_theme }}</strong>
+            <strong><code>{{ review.bin_code }}</code>{% if review.current_theme %} · {{ review.current_theme }}{% endif %}</strong>
             {% if review.new_item_labels %}<p class="muted">Newly detected: {{ review.new_item_labels|join(', ') }}</p>{% endif %}
           </div>
-          {% if review.manage_url %}<a class="button" href="{{ review.manage_url }}">Review change</a>{% endif %}
+          {% if review.manage_url %}<a class="button" href="{{ review.manage_url }}">Review contents</a>{% endif %}
         </div>
         {% endfor %}
       </div>

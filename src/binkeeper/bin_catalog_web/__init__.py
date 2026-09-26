@@ -406,7 +406,7 @@ def create_app(
         label_drift_entries = [
             {
                 "bin_code": entry.bin_code,
-                "proposed_theme": entry.proposed_theme,
+                "current_theme": entry.current_theme,
                 "new_item_labels": entry.new_item_labels,
                 "manage_url": (
                     authoring_path(f"/manage/{quote(entry.bin_code, safe='')}#label-drift-review")
@@ -661,7 +661,7 @@ def _load_passports(*, tenant_id: str, corpus_id: str) -> Sequence[BinPassport]:
 
 
 def _load_label_drift_queue(*, tenant_id: str, corpus_id: str) -> Sequence[LabelDriftQueueEntry]:
-    """Rebuild pending label reviews through the least-privilege serving role."""
+    """Rebuild pending contents reviews through the least-privilege serving role."""
     from binkeeper.bin_label_drift import load_label_drift_queue
 
     try:
