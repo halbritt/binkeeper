@@ -29,6 +29,9 @@ surfaces:
         ready: h1
         actions:
           - {type: click, selector: ".bin-photo-options > summary"}
+  quick_label:
+    states:
+      form: {route: /quick-label, ready: h1}
   register:
     states:
       form: {route: /register, ready: h1}

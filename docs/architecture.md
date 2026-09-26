@@ -218,22 +218,34 @@ and requires exact equality. `binkeeper-transfer` is the pinned
 export/stage-blobs/import contract that executed the cutover and remains the
 tool for rehearsals.
 
-### Owner surfaces (`service`, `bin_photo_web`, `bin_catalog_web`, `web`, `cli`, `mcp`, `bin_manage`, `bin_nesting`)
+### Owner surfaces (`service`, `bin_photo_web`, `bin_quick_label`, `bin_catalog_web`, `web`, `cli`, `mcp`, `bin_manage`, `bin_nesting`)
 
 One FastAPI service, frozen to `127.0.0.1:8766` (the parser errors on any
 other bind) and fronted by tailnet HTTPS at
 `https://proximal.tail0ecc2e.ts.net:8766`, composes the authoring surface at
-`/` (photo drop with advisory label proposal, zero-typing registration,
-existing-bin management, stash deck) with the read-only catalog at `/bins/`
+`/` (photo drop with advisory label proposal, quick label creation at
+`/quick-label`, zero-typing registration, existing-bin management, stash deck)
+with the read-only catalog at `/bins/`
 (fog-of-war confidence buckets, witnessed shelves, virtual bins, vault
 thumbnails). Reviewed POST actions sit behind a strict origin guard with a
-paired-origin allowlist and a legible refusal contract; every owner action
-carries a server-rendered `action_id` folded into its idempotency key, so
-replays are no-ops and divergent reuse errors out. The photo drop stores the
+paired-origin allowlist and a legible refusal contract. Reviewed actions
+carry server-rendered request IDs, so replays are no-ops and divergent reuse
+errors out. The photo drop stores the
 original bytes first, as the guaranteed action; vision proposal failure is a
-calm, retryable label error, never a lost photo. The CLI (15 subcommands)
-and MCP (13 tools) are one surface: MCP reconstructs CLI arguments and calls
-the same `execute`, so semantics and the writer gate cannot drift.
+calm, retryable label error, never a lost photo.
+
+The quick label path never calls vision or requires a photo. It requires the
+human's theme and site, assigns the next site-prefixed code under a database
+advisory lock, appends the registration and initial placement, and then makes
+one local print attempt. A request UUID in registration provenance identifies
+replays across days; a replay shows the saved bin without printing again. A
+printer failure leaves the bin registered and offers its reprint action. The
+catalog projects missing-photo reminders from capture links, with a direct
+route to that bin's photo upload section.
+
+The CLI (15 subcommands) and MCP (13 tools) are one surface: MCP reconstructs
+CLI arguments and calls the same `execute`, so semantics and the writer gate
+cannot drift.
 `bin-anchor-label`, `bin-ocr-harvest`, and `bin-label-drift-harvest` are
 deliberately CLI-only.
 

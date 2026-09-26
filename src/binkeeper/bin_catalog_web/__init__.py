@@ -309,6 +309,7 @@ def create_app(
         "catalog_url": path("/"),
         "photo_url": authoring_path("/"),
         "register_url": authoring_path("/register"),
+        "quick_label_url": authoring_path("/quick-label"),
         "stash_url": authoring_path("/stash"),
         "binkeeper_section": "catalog",
         "authoring_enabled": authoring_enabled,
@@ -383,6 +384,7 @@ def create_app(
                     sites=(),
                     total_count=0,
                     contents_count=0,
+                    missing_photo_count=0,
                     visibility_pct=0,
                     label_drift_entries=(),
                     label_drift_count=0,
@@ -403,6 +405,7 @@ def create_app(
             and (not selected_site or selected_site == entry["current_site_key"])
         ]
         contents_count = sum(1 for entry in all_entries if entry["current_contents"])
+        missing_photo_count = sum(1 for entry in all_entries if entry["photo_state"] == "missing")
         label_drift_entries = [
             {
                 "bin_code": entry.bin_code,
@@ -424,6 +427,7 @@ def create_app(
                 sites=sites,
                 total_count=len(all_entries),
                 contents_count=contents_count,
+                missing_photo_count=missing_photo_count,
                 visibility_pct=_visibility_pct(all_entries, site_key=selected_site or None),
                 label_drift_entries=label_drift_entries,
                 label_drift_count=len(label_drift_entries),

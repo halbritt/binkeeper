@@ -50,6 +50,13 @@ class RegisterResult:
     already_existed: bool
 
 
+@dataclass(frozen=True)
+class QuickLabelIntent:
+    action_id: str
+    printer: str
+    copies: int
+
+
 def register_bin(
     conn: psycopg.Connection,
     *,
@@ -61,6 +68,7 @@ def register_bin(
     theme: str | None = None,
     observed_at: datetime | None = None,
     source_label: str = REGISTRATION_SOURCE_LABEL,
+    quick_label_intent: QuickLabelIntent | None = None,
     tenant_id: str = DEFAULT_BIN_TENANT_ID,
     corpus_id: str = DEFAULT_BIN_CORPUS_ID,
 ) -> RegisterResult:
@@ -91,6 +99,12 @@ def register_bin(
     clean_theme = (theme or "").strip()
     if clean_theme:
         metadata["bin_profile"] = {"theme": clean_theme}
+    if quick_label_intent is not None:
+        metadata["quick_label"] = {
+            "action_id": quick_label_intent.action_id,
+            "printer": quick_label_intent.printer,
+            "copies": quick_label_intent.copies,
+        }
 
     text = f"bin {code} @ {clean_site}" + (f" · {clean_contents}" if clean_contents else "")
     # Idempotent within a day: a double-submit dedupes, a genuine re-place on a

@@ -148,7 +148,7 @@
   <section id="photos" class="panel panel-padded stack bin-photo-card" aria-labelledby="photo-heading">
     <div class="bin-photo-card-header">
       <h2 id="photo-heading">Photos</h2>
-      <p class="bin-photo-card-copy">Add another contents photo. The newest becomes the catalog cover; older photos remain stored.</p>
+      <p class="bin-photo-card-copy">{% if catalog_photo_url %}Add another contents photo.{% else %}No contents photo is recorded yet. Add one when you can.{% endif %} The newest becomes the catalog cover; older photos remain stored.</p>
     </div>
     {% if catalog_photo_url %}<img class="bin-manage-preview" src="{{ catalog_photo_url }}" alt="Newest stored photo for {{ bin_code }}">{% endif %}
     <form method="post" action="{{ photo_action }}" enctype="multipart/form-data"

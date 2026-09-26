@@ -16,12 +16,18 @@
 </header>
 
 {% if print_requested %}
-  {% if printed %}
+  {% if already_existed and quick_label %}
+  <p class="banner banner-warn" role="status"><strong>This request already created {{ bin_code }}.</strong>
+    No second label was sent. <a href="{{ reprint_url }}">Print another from the bin page</a> if needed.</p>
+  {% elif print_unknown %}
+  <p class="banner banner-warn" role="status"><strong>The bin was registered, but print status is unknown.</strong>
+    {{ print_error }} Check the printer before requesting another label.</p>
+  {% elif printed %}
   <p class="banner banner-ok" role="status"><strong>{{ label_count }} label{% if label_count != 1 %}s{% endif %} sent to {{ print_target }}.</strong>
     The bin record was saved before the local print job was submitted.</p>
   {% else %}
   <p class="banner banner-warn" role="status"><strong>The bin was registered, but the label was not printed.</strong>
-    {{ print_error }} The saved bin record is unchanged.</p>
+    {{ print_error }} The saved bin record is unchanged.{% if reprint_url %} <a href="{{ reprint_url }}">Print from the bin page</a>.{% endif %}</p>
   {% endif %}
 {% endif %}
 
@@ -33,7 +39,7 @@
   {% set pairs = [
     ('bin_code', bin_code ~ (' (from %s)'|format(code_source) if code_source and code_source != 'entered' else '')),
     ('site', site),
-    ('location', ('%s, %s'|format(lat, lon)) if has_gps else '(no GPS in photo)'),
+    ('location', ('%s, %s'|format(lat, lon)) if has_gps else '(site selected manually)'),
     ('accuracy (m)', accuracy_m if has_gps and accuracy_m != '' else 'unknown'),
     ('photo stored', 'yes' if photo_stored else 'no')
   ] %}
@@ -44,7 +50,12 @@
     the move ledger.</p>
 </section>
 
+{% if not photo_stored and add_photo_url %}
+<p class="callout bin-photo-secondary"><strong>Contents photo still needed.</strong>
+  <a href="{{ add_photo_url }}">Add a contents photo for {{ bin_code }}</a> when you have a moment.</p>
+{% endif %}
+
 <div class="action-bar">
-  <a class="button" href="{{ new_href }}">Register another</a>
+  <a class="button" href="{{ new_href }}">{% if quick_label %}Make another label{% else %}Register another{% endif %}</a>
 </div>
 {% endblock %}

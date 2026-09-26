@@ -13,10 +13,11 @@
 
 {% block head_extra %}
 <style>
-  .bin-catalog-page { display: grid; gap: var(--space-5); }
+  .bin-catalog-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
   .bin-catalog-hero {
     display: grid;
     gap: var(--space-3);
+    min-width: 0;
   }
   .bin-catalog-kicker {
     margin: 0;
@@ -276,6 +277,7 @@
       <p class="bin-catalog-intro muted">
         Find a labeled bin, see what is recorded inside, and check its latest recorded site.
       </p>
+      {% if authoring_enabled %}<div class="action-bar"><a class="button" href="{{ quick_label_url }}">Create &amp; print a label</a></div>{% endif %}
     </div>
     {% if not catalog_unavailable %}
     <div class="bin-catalog-stats" role="group" aria-label="Catalog summary">
@@ -287,6 +289,12 @@
         <strong>{{ contents_count }}</strong>
         <span>bin{% if contents_count != 1 %}s{% endif %} with contents</span>
       </div>
+      {% if missing_photo_count %}
+      <div class="bin-catalog-stat">
+        <strong>{{ missing_photo_count }}</strong>
+        <span>contents photo{% if missing_photo_count != 1 %}s{% endif %} needed</span>
+      </div>
+      {% endif %}
       <div class="bin-catalog-stat" data-map-visibility>
         <strong>{{ visibility_pct }}%</strong>
         <span>map visibility</span>
@@ -408,7 +416,7 @@
             {% endif %}
 
             {% if entry.photo_state == "missing" %}
-            <p class="bin-catalog-photo-note" data-photo-state="missing">No photo recorded</p>
+            <p class="bin-catalog-photo-note" data-photo-state="missing">No photo recorded.{% if entry.manage_url %} <a href="{{ entry.manage_url }}#photos">Add a contents photo</a>{% endif %}</p>
             {% elif entry.photo_state == "unavailable" %}
             <p class="bin-catalog-photo-note" data-photo-state="unavailable">Photo unavailable</p>
             {% endif %}
@@ -483,8 +491,9 @@
   <section class="panel panel-padded stack" aria-labelledby="empty-heading">
     <h2 id="empty-heading">No bins yet</h2>
     {% if authoring_enabled %}
-    <p>Photograph a bin to propose a label, or register one that already has a label.</p>
+    <p>Create and print a label without a photo, photograph contents for a vision proposal, or register a bin that already has a label.</p>
     <div class="action-bar">
+      <a class="button" href="{{ quick_label_url }}">Create &amp; print a label</a>
       <a class="button" href="{{ photo_url }}">Photograph &amp; label</a>
       <a class="button" href="{{ register_url }}">Register a labeled bin</a>
     </div>

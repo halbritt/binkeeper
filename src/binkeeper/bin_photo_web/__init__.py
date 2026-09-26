@@ -16,12 +16,16 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Final
+from urllib.parse import quote
+from uuid import uuid4
 
+import psycopg
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import FormData, UploadFile
 
+from binkeeper.bin_label import BinLabelError
 from binkeeper.bin_photo_web.manage import (
     LabelDriftDismissalRecorder,
     ManageLoader,
@@ -43,6 +47,7 @@ from binkeeper.bin_photo_web.stash import (
     WaveStopCompleter,
     install_stash_routes,
 )
+from binkeeper.bin_quick_label import QuickLabelError, QuickLabelRequest, create_quick_label
 from binkeeper.sites import SITE_PREFIXES
 from binkeeper.web.chrome import build_surface_chrome, mount_shared_static, page_response
 from binkeeper.web.origin import install_origin_refusal_handler, require_origin
@@ -122,6 +127,7 @@ def create_app(
                 "bin_photo_form.html",
                 form_action=surface_path(normalized_base_path, "/"),
                 register_href=surface_path(normalized_base_path, "/register"),
+                quick_label_url=surface_path(normalized_base_path, "/quick-label"),
                 catalog_url="/bins/",
                 photo_url=surface_path(normalized_base_path, "/"),
                 register_url=surface_path(normalized_base_path, "/register"),
@@ -130,6 +136,97 @@ def create_app(
                 sites=list(_SITE_PREFIXES),
                 surface_label="Bin photo drop",
             )
+        )
+
+    def _render_quick_label(view: dict[str, object]) -> object:
+        done = view.get("mode") == "done"
+        code = str(view.get("bin_code") or "")
+        manage_url = surface_path(normalized_base_path, f"/manage/{quote(code, safe='')}")
+        return page_response(
+            chrome.render(
+                "bin_register_done.html" if done else "bin_quick_label.html",
+                form_action=surface_path(normalized_base_path, "/quick-label"),
+                new_href=surface_path(normalized_base_path, "/quick-label"),
+                add_photo_url=f"{manage_url}#photos",
+                reprint_url=f"{manage_url}#label",
+                catalog_url="/bins/",
+                photo_url=surface_path(normalized_base_path, "/"),
+                register_url=surface_path(normalized_base_path, "/register"),
+                stash_url=surface_path(normalized_base_path, "/stash"),
+                binkeeper_section="photo",
+                surface_label="Quick label",
+                sites=list(_SITE_PREFIXES),
+                b1_available=_b1_available(),
+                quick_label=True,
+                **{"action_id": str(uuid4()), **view},
+            )
+        )
+
+    @app.get("/quick-label")
+    def quick_label_form() -> object:
+        return _render_quick_label({"mode": "form"})
+
+    @app.post("/quick-label")
+    async def quick_label_submit(
+        request: Request,
+        _origin: None = Depends(strict_origin_check),
+    ) -> object:
+        form_data = await request.form()
+        action_id = _clean(form_data.get("action_id")) or ""
+        site = _clean(form_data.get("site")) or ""
+        theme = _clean(form_data.get("theme")) or ""
+        contents = _clean(form_data.get("contents")) or ""
+        printer = _clean(form_data.get("printer")) or "cups"
+        copies = 2 if _clean(form_data.get("label_count")) == "2" else 1
+        try:
+            result = await run_in_threadpool(
+                create_quick_label,
+                QuickLabelRequest(site, theme, contents, printer, copies, action_id),
+                tenant_id=tenant_id,
+                corpus_id=corpus_id,
+            )
+        except (QuickLabelError, BinLabelError) as exc:
+            return _render_quick_label(
+                {
+                    "mode": "form",
+                    "error": str(exc),
+                    "site": site,
+                    "theme": theme,
+                    "contents": contents,
+                    "printer": printer,
+                    "label_count": copies,
+                    "action_id": action_id or str(uuid4()),
+                }
+            )
+        except psycopg.Error:
+            return _render_quick_label(
+                {
+                    "mode": "form",
+                    "error": "Could not save the bin. Try again.",
+                    "site": site,
+                    "theme": theme,
+                    "contents": contents,
+                    "printer": printer,
+                    "label_count": copies,
+                    "action_id": action_id,
+                }
+            )
+        return _render_quick_label(
+            {
+                "mode": "done",
+                "bin_code": result.bin_code,
+                "site": result.site,
+                "already_existed": result.already_existed,
+                "has_gps": False,
+                "photo_stored": False,
+                "print_requested": True,
+                "label_count": copies,
+                "printed": result.printed,
+                "print_target": result.print_target,
+                "print_error": result.print_error,
+                "print_unknown": result.print_unknown,
+                "code_source": "assigned automatically",
+            }
         )
 
     @app.post("/")
@@ -175,12 +272,16 @@ def create_app(
             "done": "bin_register_done.html",
             "pick": "bin_register_pick.html",
         }.get(str(view.get("mode")), "bin_register_form.html")
+        code = str(view.get("bin_code") or "")
         return page_response(
             chrome.render(
                 template,
                 form_action=surface_path(normalized_base_path, "/register"),
                 confirm_action=surface_path(normalized_base_path, "/register/confirm"),
                 new_href=surface_path(normalized_base_path, "/register"),
+                add_photo_url=surface_path(
+                    normalized_base_path, f"/manage/{quote(code, safe='')}#photos"
+                ),
                 catalog_url="/bins/",
                 photo_url=surface_path(normalized_base_path, "/"),
                 register_url=surface_path(normalized_base_path, "/register"),
@@ -686,3 +787,9 @@ def _clean(value: object) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _b1_available() -> bool:
+    from binkeeper.bin_b1 import B1_ADDRESS
+
+    return bool(B1_ADDRESS)

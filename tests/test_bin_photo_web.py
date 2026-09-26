@@ -211,6 +211,7 @@ def test_manage_page_prefills_pending_contents_without_a_theme_suggestion() -> N
     review_card = response.text.split('id="label-drift-review"', 1)[1].split('id="profile"', 1)[0]
     assert "Mechanic tools" not in review_card
     assert "Review detected contents" in review_card
+    assert "No contents photo is recorded yet" in response.text
     assert "torque wrench" in response.text
     assert 'name="theme"' not in review_card
     assert "cordless drills, torque wrench, socket set" in response.text

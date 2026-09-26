@@ -126,6 +126,7 @@ def test_catalog_shows_bin_codes_contents_and_locations() -> None:
     assert "88%" in response.text
     assert 'data-search-text="' in response.text
     assert 'href="/bin-photo/"' in response.text
+    assert 'href="/bin-photo/quick-label"' in response.text
     assert 'href="/bin-photo/register"' in response.text
     assert 'href="/bin-photo/manage/AGR-014"' in response.text
     assert "Manage bin" in response.text
@@ -265,6 +266,7 @@ def test_catalog_renders_a_safe_lazy_preview_for_a_capture_linked_bin() -> None:
 def test_catalog_marks_a_bin_without_a_capture_link_as_missing() -> None:
     app = create_app(
         base_path="/bins",
+        authoring_enabled=True,
         passport_loader=lambda: [_passport()],
         photo_source=_PhotoSource({}),
     )
@@ -276,6 +278,8 @@ def test_catalog_marks_a_bin_without_a_capture_link_as_missing() -> None:
     assert response.status_code == 200
     assert 'data-photo-state="missing"' in response.text
     assert "No photo recorded" in response.text
+    assert "contents photo needed" in response.text
+    assert 'href="/bin-photo/manage/AGR-014#photos"' in response.text
     assert "/bins/photo/AGR-014" not in response.text
     assert photo.status_code == 404
     assert photo.json() == {"detail": "catalog photo is unavailable"}

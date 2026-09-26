@@ -133,6 +133,13 @@ contents or append a proposal-linked dismissal. The bin theme stays as set at
 registration or through an explicit profile edit. See [ADR 0006](docs/adr/0006-label-drift-review-queue.md) and
 [docs/deployment.md](docs/deployment.md).
 
+For a label without the vision wait, open **New label → Create and print
+without photo analysis** (or **Create & print a label** in the catalog). Enter
+the main label and site; BinKeeper assigns the next site code, creates the bin
+and its initial placement, and submits one local print job. CUPS remains the
+default, with the Niimbot B1 offered per print. A repeated submission does not
+print twice. The catalog and bin page remind you to add a contents photo later.
+
 `make check` runs the full verification sequence; the editable install is a
 prerequisite of each target. PostgreSQL acceptance tests require a disposable
 database supplied as `BINKEEPER_TEST_DATABASE_URL`; for example:

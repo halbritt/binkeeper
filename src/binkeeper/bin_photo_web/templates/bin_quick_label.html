@@ -1,0 +1,65 @@
+{% extends "bin_photo_base.html" %}
+{% import "_components.html" as components %}
+
+{% block title %}Quick label · BinKeeper{% endblock %}
+
+{% block bin_photo_main %}
+<header class="bin-photo-hero">
+  <span class="bin-photo-kicker">New bin</span>
+  <h1>Print a label now</h1>
+  <p class="bin-photo-intro">Enter the main label and site. BinKeeper assigns a code, creates the bin, and sends your labels to the printer. No photo or vision wait.</p>
+</header>
+
+<section class="panel panel-padded bin-photo-card" aria-labelledby="quick-label-heading">
+  <div class="bin-photo-card-header">
+    <h2 id="quick-label-heading">Label details</h2>
+    <p class="bin-photo-card-copy">The site is saved as the bin's starting location. Add a contents photo later from the bin page.</p>
+  </div>
+
+  {% if error %}{{ components.banner("error", error) }}{% endif %}
+
+  <form method="post" action="{{ form_action }}" class="form-grid bin-photo-form" data-submit-form>
+    <input type="hidden" name="action_id" value="{{ action_id }}">
+
+    {% call components.field("quick-theme", "Main label", "The large heading printed on the label") %}
+      <input id="quick-theme" name="theme" value="{{ theme or '' }}" maxlength="120" autocomplete="off" placeholder="HAND TOOLS" required>
+    {% endcall %}
+
+    {% call components.field("quick-site", "Site", "Where the bin starts and where it belongs") %}
+      <select id="quick-site" name="site" required>
+        <option value="" disabled {% if not site %}selected{% endif %}>Choose a site</option>
+        {% for option in sites %}<option value="{{ option }}"{% if option == site %} selected{% endif %}>{{ option|replace('-', ' ')|title }}</option>{% endfor %}
+      </select>
+    {% endcall %}
+
+    {% call components.field("quick-contents", "Contents", "Optional; you can fill this in later") %}
+      <textarea id="quick-contents" name="contents" maxlength="1200" rows="3">{{ contents or '' }}</textarea>
+    {% endcall %}
+
+    <fieldset class="field-stack">
+      <legend>Labels to print</legend>
+      <div class="grid-fit-180">
+        <label><input type="radio" name="label_count" value="1"{% if label_count != 2 %} checked{% endif %}> 1 label</label>
+        <label><input type="radio" name="label_count" value="2"{% if label_count == 2 %} checked{% endif %}> 2 labels</label>
+      </div>
+    </fieldset>
+
+    <label for="quick-printer">Print on
+      <select id="quick-printer" name="printer">
+        <option value="cups"{% if printer != 'niimbot-b1' %} selected{% endif %}>Large label printer (CUPS)</option>
+        {% if b1_available %}<option value="niimbot-b1"{% if printer == 'niimbot-b1' %} selected{% endif %}>Niimbot B1 (50 × 30 mm)</option>{% endif %}
+      </select>
+    </label>
+
+    <div class="action-bar bin-photo-action-row">
+      <button type="submit" class="bin-photo-primary" data-submit-button data-busy-label="Creating and printing…"><span data-button-label>Create bin and print label</span></button>
+    </div>
+    <p class="bin-photo-progress" data-submit-progress hidden role="status" aria-live="polite">
+      <span class="bin-photo-progress-marker" aria-hidden="true"></span>
+      <span>Saving the bin and sending one print job. Keep this page open.</span>
+    </p>
+  </form>
+</section>
+
+<p class="callout bin-photo-secondary">Have a contents photo ready? <a href="{{ photo_url }}">Use photo analysis</a> to propose the label text.</p>
+{% endblock %}
