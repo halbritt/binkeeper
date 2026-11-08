@@ -1,0 +1,47 @@
+{
+  "review": "BINK-53",
+  "source_sha": "ed8ae090aa021c9b61a0752eabbe8dc321ab8595",
+  "items": {
+    "W1": {
+      "identifier": "BINK-54",
+      "id": "b45fb8f7-dfde-49b2-97e1-2b521f2fbbcc",
+      "depends": [],
+      "name": "Fail closed before exporting advisory vision images"
+    },
+    "W2": {
+      "identifier": "BINK-55",
+      "id": "ae836495-a7a8-4842-99d3-63d8fa6fce58",
+      "depends": [],
+      "name": "Give photo-based bin creation stable intent identity and conflict handling"
+    },
+    "W3": {
+      "identifier": "BINK-56",
+      "id": "c673d1a9-1234-484d-8363-79837a12b4fb",
+      "depends": [
+        "BINK-55"
+      ],
+      "name": "Unify durable print intent and observable handoff outcomes"
+    },
+    "W4": {
+      "identifier": "BINK-57",
+      "id": "dbce25d2-046c-42ab-a5d6-601849998456",
+      "depends": [],
+      "name": "Restore an authorized nightly contents-review route and expose freshness"
+    },
+    "W5": {
+      "identifier": "BINK-58",
+      "id": "769084c7-8ad7-413f-8fb0-3137179ef918",
+      "depends": [
+        "BINK-54",
+        "BINK-55"
+      ],
+      "name": "Bound interactive photo admission and measure request recovery"
+    },
+    "W6": {
+      "identifier": "BINK-59",
+      "id": "a7434d0d-7d86-493d-b693-e607968a6d37",
+      "depends": [],
+      "name": "Verify vault crash recovery and define durable save semantics"
+    }
+  }
+}

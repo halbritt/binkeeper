@@ -8,6 +8,10 @@ cutover on 2026-07-18. This document describes the system as deployed; the
 decisions that shaped it are in [`docs/adr/`](adr/) and the invariants it must
 keep are in [README.md](../README.md#invariants).
 
+The [2026-11-08 system review](architecture/BINK-ARCH-20261108/README.md)
+records verified exceptions to the intended creation/export contracts and the
+ordered repair plan. Its recommendations have not been deployed.
+
 ## The design rule everything follows
 
 Raw evidence is append-only; everything the owner reads is a fold.
@@ -19,7 +23,9 @@ Raw evidence is append-only; everything the owner reads is a fold.
   a canonical content hash (the plaintext hash for blobs, the phrase/source
   natural key for liveness) — enforced either by `ON CONFLICT DO NOTHING` or
   by an advisory-locked check-then-insert (containment, blob vault,
-  captures), so replays are no-ops that report `already_existed`.
+  captures). This is intended to make replays no-ops. Photo creation still uses
+  a code/site/day registration key: the review reproduced distinct-intent
+  collisions and next-day replay effects (BINK-55).
 - **Derived state** — a bin's location, its passport, the review queues, the
   catalog — is computed at read time by pure folds over that evidence. No
   mutable "current state" row exists anywhere. A bin's location is the fold
@@ -65,20 +71,25 @@ configured cloud vision provider under ADR 0004's scope (see
 
 ## Write authority
 
-There is exactly one writer, and it is fail-closed at three independent
-layers:
+BinKeeper is the sole inventory data authority. Its web, CLI and scheduled
+processes share that authority; there can be multiple database writer processes.
+Three protections constrain writes:
 
 1. **Process gate.** `BINKEEPER_WRITES_ENABLED=1` is required by
    `write_authority.require_writer_authority()`. It is enforced at every
    mutation boundary: an HTTP middleware returns 503 for non-safe methods
-   before any handler runs, `cli.execute` checks the seven mutating
-   subcommands before touching the database, and MCP inherits the CLI check
-   because `mcp.call_tool` delegates into `cli.execute`. The gate has been
+   before any handler runs, `cli.execute` checks mutating subcommands before
+   dispatching their writers, and MCP inherits the CLI check
+   because `mcp.call_tool` delegates into `cli.execute`. HTTP captures the gate
+   when the app is constructed; changing it requires service restart. CLI checks
+   during execution. The gate has been
    open in production since the `BINK-11` cutover; it stays `0` in every
    rehearsal install.
-2. **Database roles.** Read paths use `connect(role="serving")`, which does
+2. **Database roles.** Web and CLI read paths use `connect(role="serving")`, which does
    `SET ROLE binkeeper_serving` — a `SELECT`-only role — and fails closed if
-   the role is missing. Writers use the owner role.
+   the role is missing. Writers use the owner role. The stdio MCP transport
+   currently opens the owner role for all tool calls, including reads; sharing
+   CLI dispatch does not give it the CLI connection-role selection.
 3. **Append-only triggers.** Even the owner role cannot `UPDATE` or `DELETE`
    evidence; the triggers raise regardless of who asks.
 
@@ -178,6 +189,11 @@ runs ~4.6 s per photo in the November 2026 sample (ADR 0007), and the
 | Nightly peripheral-OCR true-up | local `qwen3-vl:32b` on peecee | `binkeeper-ocr-harvest.timer`, 03:30 | nothing (pinned `--local-only`) |
 | Label-drift review queue (ADR 0006) | `claude-opus-5` + local `qwen3-vl:8b` union ensemble | `binkeeper-label-drift.timer`, 04:00, input-keyed | downscaled JPEG + prompt via OpenRouter to Anthropic |
 
+This table describes the installed configuration. The current owner instruction
+requires subscription-covered models to use their subscription route, so the
+nightly Opus/OpenRouter pin needs reconciliation (BINK-57). The latest observed
+run on 2026-11-08 failed before inference because no local 8B slot was routable.
+
 Geofencing resolves a photo's EXIF GPS against owner-local site anchors and
 abstains on ambiguity or a fix looser than 100 m. The site *vocabulary*
 (slugs, bin-code prefixes, radii) is code (`sites.py`); the *coordinates*
@@ -203,8 +219,9 @@ anecdote-chosen default scored worst of the live candidates.
 
 ADR 0007 replaces the retired Qwen3-VL hosted model. The interactive OpenRouter
 client disables reasoning through OpenRouter's API and requests latency-sorted
-provider routing. Cloud photo drops run at most three analyses concurrently;
-local and nightly callers remain serial. Results merge in upload order.
+provider routing. Each cloud photo-drop request runs at most three analyses
+concurrently; overlapping requests do not share an application-wide budget.
+Local and nightly photo iteration remains serial. Results merge in upload order.
 
 ### Media and durability (`blob_vault`, `bin_photo_media`, `backup`, `restore_drill`, `transfer`)
 
@@ -235,8 +252,9 @@ with the read-only catalog at `/bins/`
 (fog-of-war confidence buckets, witnessed shelves, virtual bins, vault
 thumbnails). Reviewed POST actions sit behind a strict origin guard with a
 paired-origin allowlist and a legible refusal contract. Reviewed actions
-carry server-rendered request IDs, so replays are no-ops and divergent reuse
-errors out. The photo drop stores the
+such as quick-label and manage actions carry server-rendered request IDs, so
+replays are no-ops and divergent reuse errors out. Photo-based creation still
+uses the day-scoped registration identity described above. The photo drop stores the
 original bytes first, as the guaranteed action. Vision failure keeps the
 stored-photo reference and offers manual label entry. The advisory QR
 co-location harvest runs after the response, in the same service process;
@@ -306,15 +324,19 @@ conditions.
 
 ## What leaves the machine
 
-Nothing, except the one standing owner-approved export (ADR 0004): the
-advisory vision lane sends the downscaled inference JPEG (bounded long edge,
-re-encoded) and the lane's prompt text to the configured cloud vision
-provider. Original photo bytes, bin codes, coordinates, and every ledger stay
-local. Per lane: the interactive pass exports to OpenRouter (ADR 0005); the
+The one standing owner-approved export (ADR 0004) permits only the advisory
+vision lane's downscaled inference JPEG (bounded long edge, re-encoded) and
+prompt text. Original photo bytes, bin codes, coordinates and ledgers must stay
+local. The system review reproduced a violation: image-preparation failure
+returns original bytes to both cloud transports. BINK-54 tracks removal of that
+fallback; the policy is not evidence that every current path enforces it.
+
+Per lane: the interactive pass is configured for OpenRouter (ADR 0005/0007); the
 nightly OCR true-up exports nothing and is doubly pinned local (env layering
 plus a `--local-only` refusal that aborts before any photo is read); the nightly
-drift queue exports the same bounded inference input through OpenRouter to
-Anthropic (ADR 0006). Its rollback is
+drift queue is configured to send the same inference input through OpenRouter to
+Anthropic (ADR 0006), subject to the newer subscription-route restriction above.
+Its documented no-cloud rollback is
 `BINKEEPER_BIN_LABEL_DRIFT_MODE=local` or disabling its timer. The interactive
 lane separately rolls back with `BINKEEPER_BIN_VISION_PROVIDER=local`.
 
@@ -338,10 +360,10 @@ lane separately rolls back with `BINKEEPER_BIN_VISION_PROVIDER=local`.
   exists in neither a checkout nor a wheel install — deployments must set
   `BINKEEPER_BIN_SITES_FILE` (the OCR harvest pin file does).
 - Most tunables are module constants read at import time; changing them needs
-  a process restart. Gates and credentials are the exception, re-read per
-  use: the writer gate (`BINKEEPER_WRITES_ENABLED`), the placement-feedback
-  kill switch (`BINKEEPER_BIN_PLACEMENT_FEEDBACK_ENABLED`), the database
-  URL, and the cloud vision API keys.
+  a process restart. The HTTP writer gate is also captured at construction.
+  CLI writer checks read the gate during execution; database connection and
+  cloud-client construction read their configuration when invoked. Do not assume
+  changing an environment file updates an already running process.
 - The nightly OCR pass re-reads every eligible photo (dedupe is per
   observation, not per photo), so its wall clock grows with the vault;
   revisit before it nears the unit's 4 h `TimeoutStartSec`.

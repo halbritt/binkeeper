@@ -1,0 +1,30 @@
+{
+  "source_sha": "ed8ae090aa021c9b61a0752eabbe8dc321ab8595",
+  "artifact_root": "/home/halbritt/.local/state/binkeeper/architecture-review-20261108",
+  "artifacts": {
+    "a5/probe.py": {
+      "bytes": 8120,
+      "sha256": "15e5a6cb74949b4cbf2a637b8f6ee8da4d9e937f691135461d4c9aa3fe84b57b"
+    },
+    "a5/run.sh": {
+      "bytes": 366,
+      "sha256": "04611e3794898ec8d4324ec1c02776ccf3e15605286712e064e99559e3015db8"
+    },
+    "a5/results.json": {
+      "bytes": 37088,
+      "sha256": "49db0c14830e53e8419ad3255fef28916c461ec493eecccb448aae1e8e351557"
+    },
+    "a6/verify.py": {
+      "bytes": 7936,
+      "sha256": "43e86606d17485696700f5e8d807ff1062d544451ec834064c8dda40cbf804f2"
+    },
+    "a6/results.json": {
+      "bytes": 5283,
+      "sha256": "e97d18993d1c40217ec4252979cf96710d508304471ae749b73407ae321e7c74"
+    },
+    "runtime-observation.json": {
+      "bytes": 705,
+      "sha256": "6999f56e7a494013d9d2b2118b04e3f3aac485117b273d9bf8fd5a756e1e4510"
+    }
+  }
+}
