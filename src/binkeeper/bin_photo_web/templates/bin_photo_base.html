@@ -112,6 +112,14 @@
     .bin-photo-secondary {
       margin: 0;
     }
+    .bin-saved-photo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+    .bin-saved-photo { min-width: 0; gap: var(--space-2); padding: var(--space-3); }
+    .bin-saved-photo label { display: grid; gap: var(--space-2); cursor: pointer; }
+    .bin-saved-photo label > span { display: flex; align-items: center; gap: var(--space-2); }
+    .bin-saved-photo input[type="checkbox"] { width: auto; margin: 0; }
+    .bin-saved-photo img { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; }
+    .bin-saved-photo time { font-size: var(--type-meta); color: var(--color-fg-muted); }
+    .bin-saved-photo:has(input:checked) { border-color: var(--color-accent); background: var(--color-accent-soft); }
     @keyframes bin-photo-pulse {
       from { opacity: 0.35; transform: scale(0.75); }
       to { opacity: 1; transform: scale(1); }
@@ -120,6 +128,7 @@
       .bin-photo-progress-marker { animation: none; }
     }
     @media (max-width: 520px) {
+      .bin-saved-photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .bin-photo-page { gap: var(--space-3); }
       .bin-photo-card { padding: var(--space-3); }
       .bin-photo-action-row { align-items: stretch; }

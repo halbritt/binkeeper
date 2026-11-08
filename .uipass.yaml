@@ -42,6 +42,16 @@ surfaces:
   register:
     states:
       form: {route: /register, ready: h1}
+  saved_photos:
+    states:
+      populated: {route: /saved-photos, ready: h1}
+      selected:
+        route: /saved-photos
+        ready: h1
+        actions:
+          - {type: click, selector: ".bin-saved-photo:first-child input"}
+      empty: {route: "/saved-photos?offset=24", ready: h1}
+      unavailable: {route: "/saved-photos?offset=48", ready: h1}
   manage:
     states:
       pending_review: {route: /manage/AGR-014, ready: h1}

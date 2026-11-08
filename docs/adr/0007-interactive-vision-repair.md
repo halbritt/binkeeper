@@ -2,7 +2,7 @@
 
 - Status: accepted under the owner's repair request
 - Date: 2026-11-08
-- Work item: BINK-49
+- Work items: BINK-49, BINK-50
 - Supersedes: ADR 0005's served-model pin
 
 ## Evidence
@@ -36,6 +36,15 @@ database connection. Original photos are still stored before vision runs.
 If vision fails, keep the saved-photo reference and show the reviewed manual
 create/print form. Report storage failure separately. Print intent, replay
 suppression, and explicit owner confirmation retain their existing contracts.
+
+The owner's follow-up exposed a missing recovery path after leaving a failed
+result page: originals remained in the vault, but the UI could not reopen
+unattached uploads. `/saved-photos` now selects existing images through scoped,
+serving-role reads and reuses the proposal and confirmation flow. Listing and
+previewing photos do not invoke vision. Retrying requires an explicit POST
+and does not store new blobs or harvest fresh location evidence from old photos.
+Linked photos offer the existing bin's reprint controls. This adds no schema or
+change to original evidence.
 
 ## Scope and rollback
 

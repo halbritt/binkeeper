@@ -242,6 +242,15 @@ stored-photo reference and offers manual label entry. The advisory QR
 co-location harvest runs after the response, in the same service process;
 it owns its database connection and remains best effort across service stops.
 
+`/saved-photos` lists recent original images from the scoped blob ledger,
+including uploads whose label creation failed. The page and metadata-free
+thumbnails require the same loopback or paired-front access as the catalog.
+An explicit, origin-checked POST resolves selected blob UUIDs in the serving
+scope, decrypts the originals, and reruns the advisory proposal. It neither
+stores them again nor harvests location evidence from an old observation.
+The existing reviewed confirmation owns registration and printing. No new
+upload-session table or derived state is needed.
+
 The quick label path never calls vision or requires a photo. It requires the
 human's theme and site, assigns the next site-prefixed code under a database
 advisory lock, appends the registration and initial placement, and then makes

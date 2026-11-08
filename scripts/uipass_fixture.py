@@ -9,6 +9,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
+from uuid import UUID
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -22,6 +23,12 @@ from binkeeper.bin_label_drift import LabelDriftQueueEntry
 from binkeeper.bin_passport import BinPassport
 from binkeeper.bin_photo_web import create_app as create_authoring_app
 from binkeeper.bin_photo_web.manage import ManageView
+from binkeeper.bin_saved_photos import (
+    SavedPhoto,
+    SavedPhotoContent,
+    SavedPhotoSelectionError,
+    SavedPhotosUnavailableError,
+)
 from binkeeper.web.chrome import build_surface_chrome, page_response
 
 
@@ -95,6 +102,25 @@ def _synthetic_photo() -> bytes:
 _SYNTHETIC_PHOTO = _synthetic_photo()
 
 
+class _SyntheticSavedPhotos:
+    def list_photos(self, *, offset: int, limit: int) -> Sequence[SavedPhoto]:
+        if offset == 48:
+            raise SavedPhotosUnavailableError("Synthetic outage")
+        return [
+            SavedPhoto(
+                str(UUID(int=i + 1)),
+                datetime(2026, 11, 8, 16, 39, tzinfo=UTC),
+                "AGR-014" if i == 3 else None,
+            )
+            for i in range(4)
+        ][offset : offset + limit]
+
+    def load_photos(self, photo_ids: Sequence[str]) -> Sequence[SavedPhotoContent]:
+        if any(UUID(photo_id).int not in range(1, 5) for photo_id in photo_ids):
+            raise SavedPhotoSelectionError("Synthetic photo unavailable")
+        return [SavedPhotoContent("a" * 64, _SYNTHETIC_PHOTO) for photo_id in photo_ids]
+
+
 def _manage_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> ManageView:
     return {
         "bin_code": bin_code,
@@ -131,6 +157,7 @@ def create_app(port: int) -> FastAPI:
             chrome.render(
                 "bin_photo_result.html",
                 new_href="/",
+                saved_photos_url="/saved-photos",
                 confirm_action="/register/confirm",
                 align_action="/printer/align",
                 can_align_label=True,
@@ -176,7 +203,14 @@ def create_app(port: int) -> FastAPI:
             photo_source=_SyntheticPhotos(),
         ),
     )
-    app.mount("/", create_authoring_app(port=port, manage_loader=_manage_view))
+    app.mount(
+        "/",
+        create_authoring_app(
+            port=port,
+            manage_loader=_manage_view,
+            saved_photo_source=_SyntheticSavedPhotos(),
+        ),
+    )
     return app
 
 

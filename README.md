@@ -147,6 +147,12 @@ stays serial. The page returns before the advisory QR co-location scan finishes;
 if vision fails, it keeps the stored-photo reference and offers manual label
 entry through the same reviewed create/print action.
 
+To return to an earlier upload, choose **New label → Use saved photos**
+(`/saved-photos`). Select photos of one bin, choose its site, and select
+**Propose label**. Review the result, then choose **Create and print label**.
+Photos already attached to a bin offer a **Reprint** link. Retrying analysis
+reuses the saved originals without another upload or location observation.
+
 `make check` runs the full verification sequence; the editable install is a
 prerequisite of each target. PostgreSQL acceptance tests require a disposable
 database supplied as `BINKEEPER_TEST_DATABASE_URL`; for example:

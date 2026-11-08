@@ -1,0 +1,82 @@
+{% extends "bin_photo_base.html" %}
+{% import "_components.html" as components %}
+
+{% block title %}Saved photos · BinKeeper{% endblock %}
+
+{% block bin_photo_main %}
+<header class="bin-photo-hero">
+  <span class="bin-photo-kicker">Try again</span>
+  <h1>Use saved photos</h1>
+  <p class="bin-photo-intro">Select photos of one bin to prepare a label. Your newest uploads are first. Nothing is registered or printed until you review and confirm.</p>
+</header>
+
+{% if error %}<p class="banner banner-error" role="alert">{{ error }}</p>{% endif %}
+
+{% if photos %}
+<form method="post" action="{{ saved_photos_url }}?offset={{ offset }}"
+      class="form-grid bin-photo-form" data-submit-form>
+  <fieldset class="field-stack">
+    <legend>Choose up to {{ max_photos }} photos of the same bin</legend>
+    <p class="field-help">After selecting photos, <a href="#label-details-heading">continue to label details</a>.</p>
+    <div class="bin-saved-photo-grid">
+    {% for photo in photos %}
+      <div class="panel panel-padded bin-saved-photo">
+        <label for="photo-{{ photo.photo_id }}">
+          <img src="{{ saved_photos_url }}/{{ photo.photo_id }}/thumbnail" alt="Saved photo {{ loop.index }}"
+               width="240" height="180" loading="lazy">
+          <span><input type="checkbox" name="photo_ids" id="photo-{{ photo.photo_id }}"
+                       value="{{ photo.photo_id }}" {% if photo.photo_id in selected %}checked{% endif %}>
+            Photo {{ loop.index + offset }}</span>
+          <time datetime="{{ photo.saved_at.isoformat() }}" data-local-time>{{ photo.saved_at.strftime('%b %d, %Y, %H:%M %Z') }}</time>
+        </label>
+        {% if photo.bin_code %}
+        <a href="{{ manage_base_url }}/{{ photo.bin_code|urlencode }}#label">Reprint {{ photo.bin_code }}</a>
+        {% else %}<span class="field-help">Not attached to a bin</span>{% endif %}
+      </div>
+    {% endfor %}
+    </div>
+  </fieldset>
+
+  <section class="panel panel-padded bin-photo-card" aria-labelledby="label-details-heading">
+    <h2 id="label-details-heading">Label details</h2>
+    {% call components.field("site", "Site", "Choose where this bin lives") %}
+      <select id="site" name="site" required>
+        <option value="" disabled {% if not site %}selected{% endif %}>(pick a site)</option>
+        {% for s in sites %}<option value="{{ s }}" {% if s == site %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+    {% endcall %}
+    {% call components.field("notes", "Notes (optional)") %}
+      <textarea id="notes" name="notes" placeholder="Anything you want on the label">{{ notes }}</textarea>
+    {% endcall %}
+    {% call components.field("bin_code", "Bin code (optional)", "Leave blank to suggest the next code") %}
+      <input type="text" id="bin_code" name="bin_code" value="{{ bin_code }}" placeholder="AGR-014">
+    {% endcall %}
+    <div class="action-bar bin-photo-action-row">
+      <button type="submit" class="bin-photo-primary" data-submit-button data-busy-label="Analyzing photos…">
+        <span data-button-label>Propose label</span>
+      </button>
+    </div>
+    <p class="field-help bin-photo-privacy">Originals stay local. A downscaled image and prompt may be sent to the configured cloud vision provider.</p>
+    <p class="bin-photo-progress" data-submit-progress hidden role="status" aria-live="polite" aria-atomic="true">
+      <span class="bin-photo-progress-marker" aria-hidden="true"></span>
+      <span>Preparing a label from your saved photos. Keep this page open.</span>
+    </p>
+  </section>
+</form>
+{% elif not error %}
+<p class="callout">No saved photos on this page. <a href="{{ photo_url }}">Upload photos</a> to get started.</p>
+{% endif %}
+
+<nav class="action-bar" aria-label="Saved photo pages">
+  {% if previous_url %}<a class="button" href="{{ previous_url }}">Newer photos</a>{% endif %}
+  {% if next_url %}<a class="button" href="{{ next_url }}">Older photos</a>{% endif %}
+  <a class="button" href="{{ photo_url }}">Upload new photos</a>
+</nav>
+
+<script>
+document.querySelectorAll("[data-local-time]").forEach(function (element) {
+  var date = new Date(element.dateTime);
+  if (!isNaN(date.getTime())) { element.textContent = date.toLocaleString(); }
+});
+</script>
+{% endblock %}

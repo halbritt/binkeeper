@@ -21,13 +21,16 @@ from urllib.parse import quote
 from uuid import uuid4
 
 import psycopg
-from fastapi import Depends, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, Response
+from PIL import Image
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import FormData, UploadFile
 
+from binkeeper.bin_catalog_web import require_bin_catalog_request
 from binkeeper.bin_label import BinLabelError
+from binkeeper.bin_photo_media import thumbnail_jpeg
 from binkeeper.bin_photo_web.manage import (
     LabelDriftDismissalRecorder,
     ManageLoader,
@@ -50,6 +53,15 @@ from binkeeper.bin_photo_web.stash import (
     install_stash_routes,
 )
 from binkeeper.bin_quick_label import QuickLabelError, QuickLabelRequest, create_quick_label
+from binkeeper.bin_saved_photos import (
+    MAX_LABEL_PHOTOS,
+    PAGE_SIZE,
+    ConfiguredSavedPhotos,
+    SavedPhotoSelectionError,
+    SavedPhotoSource,
+    SavedPhotosUnavailableError,
+    selected_photo_ids,
+)
 from binkeeper.sites import SITE_PREFIXES
 from binkeeper.web.chrome import build_surface_chrome, mount_shared_static, page_response
 from binkeeper.web.origin import install_origin_refusal_handler, require_origin
@@ -85,6 +97,7 @@ def create_app(
     wave_stop_completer: WaveStopCompleter | None = None,
     quorum_loader: QuorumLoader | None = None,
     quorum_founder: QuorumFounder | None = None,
+    saved_photo_source: SavedPhotoSource | None = None,
 ) -> FastAPI:
     """Build the loopback-bound bin-photo-drop app."""
     if host.strip() not in _LOOPBACK_HOSTS:
@@ -103,6 +116,9 @@ def create_app(
         "bin_photo", base_path=normalized_base_path, extra_template_dir=_TEMPLATE_DIR
     )
     load_manage = manage_loader or load_manage_view
+    saved_photos = saved_photo_source or ConfiguredSavedPhotos(
+        tenant_id=tenant_id, corpus_id=corpus_id
+    )
 
     def _enforce_origin(request: Request) -> None:
         require_origin(
@@ -130,6 +146,7 @@ def create_app(
                 form_action=surface_path(normalized_base_path, "/"),
                 register_href=surface_path(normalized_base_path, "/register"),
                 quick_label_url=surface_path(normalized_base_path, "/quick-label"),
+                saved_photos_url=surface_path(normalized_base_path, "/saved-photos"),
                 catalog_url="/bins/",
                 photo_url=surface_path(normalized_base_path, "/"),
                 register_url=surface_path(normalized_base_path, "/register"),
@@ -233,9 +250,6 @@ def create_app(
 
     @app.post("/")
     async def submit(request: Request, _origin: None = Depends(origin_check)) -> object:
-        from binkeeper.bin_b1 import B1_ADDRESS
-        from binkeeper.bin_label import BIN_LABEL_CUPS_QUEUE
-
         form_data = await request.form()
         notes = _clean(form_data.get("notes"))
         site = _clean(form_data.get("site"))
@@ -249,10 +263,20 @@ def create_app(
         view = await run_in_threadpool(
             _analyze, images=images, notes=notes, site=site, requested_code=requested_code
         )
-        response = page_response(
+        response = _render_photo_result(view)
+        if images:
+            response.background = BackgroundTask(_harvest_colocations, images)
+        return response
+
+    def _render_photo_result(view: dict[str, object]) -> Response:
+        from binkeeper.bin_b1 import B1_ADDRESS
+        from binkeeper.bin_label import BIN_LABEL_CUPS_QUEUE
+
+        return page_response(
             chrome.render(
                 "bin_photo_result.html",
                 new_href=surface_path(normalized_base_path, "/"),
+                saved_photos_url=surface_path(normalized_base_path, "/saved-photos"),
                 confirm_action=surface_path(normalized_base_path, "/register/confirm"),
                 align_action=surface_path(normalized_base_path, "/printer/align"),
                 can_align_label=bool(BIN_LABEL_CUPS_QUEUE.strip()),
@@ -266,9 +290,117 @@ def create_app(
                 **view,
             )
         )
-        if images:
-            response.background = BackgroundTask(_harvest_colocations, images)
+
+    def saved_photo_access(request: Request) -> None:
+        require_bin_catalog_request(
+            request, allowed_paired_origins=allowed_paired_origins, bound_port=port
+        )
+
+    def _render_saved_photos(
+        *,
+        offset: int = 0,
+        error: str | None = None,
+        status_code: int = 200,
+        selected: list[str] | None = None,
+        notes: str = "",
+        site: str = "",
+        bin_code: str = "",
+    ) -> Response:
+        try:
+            photos = saved_photos.list_photos(offset=offset, limit=PAGE_SIZE + 1)
+        except SavedPhotosUnavailableError:
+            photos = []
+            error = "Could not load saved photos. Try again."
+            status_code = 503
+        saved_url = surface_path(normalized_base_path, "/saved-photos")
+        response = page_response(
+            chrome.render(
+                "bin_saved_photos.html",
+                photos=photos[:PAGE_SIZE],
+                selected=selected or [],
+                error=error,
+                notes=notes,
+                site=site,
+                bin_code=bin_code,
+                sites=list(_SITE_PREFIXES),
+                max_photos=MAX_LABEL_PHOTOS,
+                offset=offset,
+                previous_url=f"{saved_url}?offset={max(0, offset - PAGE_SIZE)}" if offset else None,
+                next_url=f"{saved_url}?offset={offset + PAGE_SIZE}"
+                if len(photos) > PAGE_SIZE
+                else None,
+                saved_photos_url=saved_url,
+                manage_base_url=surface_path(normalized_base_path, "/manage"),
+                catalog_url="/bins/",
+                photo_url=surface_path(normalized_base_path, "/"),
+                register_url=surface_path(normalized_base_path, "/register"),
+                stash_url=surface_path(normalized_base_path, "/stash"),
+                binkeeper_section="photo",
+                surface_label="Saved photos",
+            )
+        )
+        response.status_code = status_code
+        response.headers["Cache-Control"] = "private, no-store"
         return response
+
+    @app.get("/saved-photos", dependencies=[Depends(saved_photo_access)])
+    def saved_photo_list(offset: int = Query(default=0, ge=0)) -> Response:
+        return _render_saved_photos(offset=offset)
+
+    @app.get("/saved-photos/{photo_id}/thumbnail", dependencies=[Depends(saved_photo_access)])
+    def saved_photo_thumbnail(photo_id: str) -> Response:
+        headers = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
+        try:
+            photo = saved_photos.load_photos(selected_photo_ids([photo_id]))[0]
+            thumbnail = thumbnail_jpeg(photo.image)
+        except (
+            SavedPhotoSelectionError,
+            SavedPhotosUnavailableError,
+            Image.DecompressionBombError,
+            OSError,
+            SyntaxError,
+            ValueError,
+        ):
+            raise HTTPException(404, "Saved photo is unavailable", headers=headers) from None
+        return Response(thumbnail, media_type="image/jpeg", headers=headers)
+
+    @app.post(
+        "/saved-photos", dependencies=[Depends(saved_photo_access), Depends(strict_origin_check)]
+    )
+    async def saved_photo_retry(request: Request, offset: int = Query(default=0, ge=0)) -> Response:
+        form_data = await request.form()
+        selection = [str(value) for value in form_data.getlist("photo_ids")]
+        notes = _clean(form_data.get("notes")) or ""
+        site = _clean(form_data.get("site")) or ""
+        bin_code = _clean(form_data.get("bin_code")) or ""
+        try:
+            selection = selected_photo_ids(selection)
+            photos = await run_in_threadpool(saved_photos.load_photos, selection)
+        except (SavedPhotoSelectionError, SavedPhotosUnavailableError) as exc:
+            return await run_in_threadpool(
+                _render_saved_photos,
+                offset=offset,
+                error=(
+                    "Could not read the selected photos. Try again."
+                    if isinstance(exc, SavedPhotosUnavailableError)
+                    else str(exc)
+                ),
+                status_code=503 if isinstance(exc, SavedPhotosUnavailableError) else 400,
+                selected=selection,
+                notes=notes,
+                site=site,
+                bin_code=bin_code,
+            )
+        view = await run_in_threadpool(
+            _analyze,
+            images=[photo.image for photo in photos],
+            stored_blob_refs=[photo.sha256 for photo in photos],
+            notes=notes or None,
+            site=site or None,
+            requested_code=bin_code or None,
+        )
+        # Reusing an old photo is not a new location observation; do not harvest it again.
+        return _render_photo_result(view)
 
     def _render_register(view: dict[str, object]) -> object:
         template = {
@@ -450,7 +582,12 @@ async def _first_photo(form_data: FormData) -> bytes | None:
 
 
 def _analyze(
-    *, images: list[bytes], notes: str | None, site: str | None, requested_code: str | None
+    *,
+    images: list[bytes],
+    notes: str | None,
+    site: str | None,
+    requested_code: str | None,
+    stored_blob_refs: list[str] | None = None,
 ) -> dict[str, object]:
     """Store the photos, then best-effort propose a label; build a view model.
 
@@ -472,7 +609,9 @@ def _analyze(
             "all_sites": list(_SITE_PREFIXES),
             "proposed_contents": "",
         }
-    blob_refs, store_error = _store_photos(images)
+    blob_refs, store_error = (
+        _store_photos(images) if stored_blob_refs is None else (stored_blob_refs, None)
+    )
 
     proposal: dict[str, object] | None = None
     label_error: str | None = None
