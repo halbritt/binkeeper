@@ -251,6 +251,21 @@ stores them again nor harvests location evidence from an old observation.
 The existing reviewed confirmation owns registration and printing. No new
 upload-session table or derived state is needed.
 
+The saved-photo page also accepts upload-only batches and explicit attachment
+to an existing bin. Upload-only saves originals without model or harvest calls.
+Attachment validates the scoped vault references and appends capture links
+through `append_saved_bin_photos`; a transaction lock and stable bin/photo
+identities make repeated attachments no-ops. It preserves the bin profile and
+move ledger. Multi-photo creation registers and links all selected photos in
+one transaction before the existing print path runs.
+
+Photo proposals preserve owner-entered label and contents fields, inferring
+only blanks. A provided label uses the existing contents-only model prompt;
+provided contents use a label-only prompt and discard unsolicited item output.
+Supplying both skips model setup and inference. The reviewed form retains
+entered text after model failure; saved-photo load failures retain the selection
+and prefills. Nightly contents-only review keeps its existing contract.
+
 The quick label path never calls vision or requires a photo. It requires the
 human's theme and site, assigns the next site-prefixed code under a database
 advisory lock, appends the registration and initial placement, and then makes

@@ -5,19 +5,36 @@
 
 {% block bin_photo_main %}
 <header class="bin-photo-hero">
-  <span class="bin-photo-kicker">Try again</span>
-  <h1>Use saved photos</h1>
-  <p class="bin-photo-intro">Select photos of one bin to prepare a label. Your newest uploads are first. Nothing is registered or printed until you review and confirm.</p>
+  <span class="bin-photo-kicker">Save now, organize later</span>
+  <h1>Saved photos</h1>
+  <p class="bin-photo-intro">Upload photos, then select them to create a bin or add them to an existing bin. Your newest uploads are first.</p>
 </header>
 
 {% if error %}<p class="banner banner-error" role="alert">{{ error }}</p>{% endif %}
+{% if notice %}<p class="banner banner-ok" role="status">{{ notice }}
+  <a href="{{ manage_base_url }}/{{ target_bin_code|urlencode }}#photos">View bin</a></p>{% endif %}
+
+<section class="panel panel-padded bin-photo-card" aria-labelledby="save-photos-heading">
+  <h2 id="save-photos-heading">Upload photos</h2>
+  <p class="bin-photo-card-copy">Save originals now. No analysis or bin creation starts when you upload.</p>
+  <form method="post" action="{{ saved_photos_url }}/upload" enctype="multipart/form-data"
+        class="form-grid bin-photo-form" data-submit-form>
+    {% call components.field("saved-uploads", "Photos to save", "Up to " ~ max_photos ~ " photos per upload") %}
+      <input type="file" id="saved-uploads" name="photos" accept="image/*" multiple required>
+    {% endcall %}
+    <button type="submit" class="bin-photo-primary" data-submit-button data-busy-label="Saving photos…">
+      <span data-button-label>Save photos</span>
+    </button>
+    <p class="bin-photo-progress" data-submit-progress hidden role="status" aria-live="polite">Saving your photos. Keep this page open.</p>
+  </form>
+</section>
 
 {% if photos %}
 <form method="post" action="{{ saved_photos_url }}?offset={{ offset }}"
       class="form-grid bin-photo-form" data-submit-form>
   <fieldset class="field-stack">
     <legend>Choose up to {{ max_photos }} photos of the same bin</legend>
-    <p class="field-help">After selecting photos, <a href="#label-details-heading">continue to label details</a>.</p>
+    <p class="field-help">After selecting photos, <a href="#attach-photos-heading">add to a bin</a> or <a href="#label-details-heading">create a bin</a>.</p>
     <div class="bin-saved-photo-grid">
     {% for photo in photos %}
       <div class="panel panel-padded bin-saved-photo">
@@ -37,8 +54,29 @@
     </div>
   </fieldset>
 
+  <section class="panel panel-padded bin-photo-card" aria-labelledby="attach-photos-heading">
+    <h2 id="attach-photos-heading">Attach to existing bin</h2>
+    <p class="field-help" data-photo-selection-count aria-live="polite">0 photos selected</p>
+    {% if bins %}
+    {% call components.field("target-bin", "Bin", "Its label, contents and location stay as they are") %}
+      <select id="target-bin" name="target_bin_code">
+        <option value="">Choose a bin</option>
+        {% for code, label in bins %}
+        <option value="{{ code }}" {% if code == target_bin_code %}selected{% endif %}>{{ code }} — {{ label }}</option>
+        {% endfor %}
+      </select>
+    {% endcall %}
+    <button type="submit" formaction="{{ saved_photos_url }}/attach?offset={{ offset }}" formnovalidate
+            data-submit-button data-busy-label="Attaching photos…">
+      <span data-button-label>Attach photos</span>
+    </button>
+    {% else %}<p class="field-help">No bins yet. Create one below.</p>{% endif %}
+  </section>
+
   <section class="panel panel-padded bin-photo-card" aria-labelledby="label-details-heading">
-    <h2 id="label-details-heading">Label details</h2>
+    <h2 id="label-details-heading">Create a bin from these photos</h2>
+    <p class="field-help" data-photo-selection-count>0 photos selected</p>
+    {% include "_bin_label_prefill.html" %}
     {% call components.field("site", "Site", "Choose where this bin lives") %}
       <select id="site" name="site" required>
         <option value="" disabled {% if not site %}selected{% endif %}>(pick a site)</option>
@@ -52,19 +90,19 @@
       <input type="text" id="bin_code" name="bin_code" value="{{ bin_code }}" placeholder="AGR-014">
     {% endcall %}
     <div class="action-bar bin-photo-action-row">
-      <button type="submit" class="bin-photo-primary" data-submit-button data-busy-label="Analyzing photos…">
+      <button type="submit" class="bin-photo-primary" data-submit-button data-propose-button data-busy-label="Analyzing photos…">
         <span data-button-label>Propose label</span>
       </button>
     </div>
     <p class="field-help bin-photo-privacy">Originals stay local. A downscaled image and prompt may be sent to the configured cloud vision provider.</p>
     <p class="bin-photo-progress" data-submit-progress hidden role="status" aria-live="polite" aria-atomic="true">
       <span class="bin-photo-progress-marker" aria-hidden="true"></span>
-      <span>Preparing a label from your saved photos. Keep this page open.</span>
+      <span>Working with the selected photos. Keep this page open.</span>
     </p>
   </section>
 </form>
 {% elif not error %}
-<p class="callout">No saved photos on this page. <a href="{{ photo_url }}">Upload photos</a> to get started.</p>
+<p class="callout">No saved photos on this page. Upload photos above to get started.</p>
 {% endif %}
 
 <nav class="action-bar" aria-label="Saved photo pages">

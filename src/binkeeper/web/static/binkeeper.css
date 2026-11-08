@@ -567,7 +567,12 @@ textarea {
 }
 @media (max-width: 480px) {
   .app-header-row { min-height: 58px; }
-  .surface-tabs[aria-label="BinKeeper"] { gap: var(--space-3); }
+  .surface-tabs[aria-label="BinKeeper"] {
+    flex-wrap: wrap;
+    column-gap: var(--space-3);
+    row-gap: 0;
+    overflow-x: visible;
+  }
   .surface-tabs[aria-label="BinKeeper"] .surface-tab { font-size: 13px; }
   .surface-main { padding-top: var(--space-5); }
   .panel-padded { padding: var(--space-4); }

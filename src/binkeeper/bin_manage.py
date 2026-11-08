@@ -7,11 +7,13 @@ intent before the physical CUPS handoff in the web layer.
 
 from __future__ import annotations
 
+import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Final
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 import psycopg
 
@@ -132,6 +134,68 @@ def append_bin_photo(
         scope,
     )
     return PersonalMemoryService(conn).capture(request)
+
+
+def append_saved_bin_photos(
+    conn: psycopg.Connection,
+    bin_code: str,
+    photo_refs: Sequence[str],
+    *,
+    scope: BinActionScope = DEFAULT_BIN_ACTION_SCOPE,
+) -> int:
+    """Link saved originals atomically; a bin/photo pair is attached only once."""
+    code = bin_code.strip()
+    refs = list(dict.fromkeys(_sha256(ref, "photo_sha256") for ref in photo_refs))
+    if not refs:
+        raise BinManageError("Select at least one saved photo.")
+    with conn.transaction():
+        conn.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            ("saved-bin-photos:" + json.dumps([scope.tenant_id, scope.corpus_id, code]),),
+        )
+        if code not in load_known_bin_codes(
+            conn, tenant_id=scope.tenant_id, corpus_id=scope.corpus_id
+        ):
+            raise BinManageNotFoundError("Choose an existing bin.")
+        available = conn.execute(
+            """SELECT plaintext_sha256 FROM evidence_blobs
+               WHERE tenant_id = %s AND corpus_id = %s AND plaintext_sha256 = ANY(%s)
+                 AND (content_type = 'image' OR content_type LIKE 'image/%%')""",
+            (scope.tenant_id, scope.corpus_id, refs),
+        ).fetchall()
+        if {row[0] for row in available} != set(refs):
+            raise BinManageError("A selected photo is not available in this collection.")
+        linked = {
+            row[0]
+            for row in conn.execute(
+                """SELECT COALESCE(raw_payload->'metadata'->'photo'->>'blob_ref',
+                               raw_payload->'metadata'->'photo'->>'sha256') FROM captures
+               WHERE tenant_id = %s AND corpus_id = %s
+                 AND raw_payload->'metadata'->>'kind' = 'bin_capture'
+                 AND raw_payload->'metadata'->>'bin_code' = %s""",
+                (scope.tenant_id, scope.corpus_id, code),
+            ).fetchall()
+        }
+        added = 0
+        for ref in refs:
+            if ref in linked:
+                continue
+            action_id = str(
+                uuid5(
+                    NAMESPACE_URL,
+                    "binkeeper:saved-photo:"
+                    + json.dumps(
+                        [scope.tenant_id, scope.corpus_id, code, ref],
+                    ),
+                )
+            )
+            result = append_bin_photo(
+                conn,
+                BinPhotoAddition(code, ref, action_id, datetime.now(UTC)),
+                scope=scope,
+            )
+            added += int(not result.already_existed)
+        return added
 
 
 def place_existing_bin(

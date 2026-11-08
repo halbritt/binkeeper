@@ -26,6 +26,8 @@
       <input type="file" id="photos" name="photos" accept="image/*" multiple required>
     {% endcall %}
 
+    {% include "_bin_label_prefill.html" %}
+
     <details class="bin-photo-options">
       <summary>Optional details: notes, site, bin code</summary>
       <div class="bin-photo-options-body">
@@ -51,7 +53,7 @@
     </details>
 
     <div class="action-bar bin-photo-action-row">
-      <button type="submit" class="bin-photo-primary" data-submit-button
+      <button type="submit" class="bin-photo-primary" data-submit-button data-propose-button
               data-busy-label="Analyzing photos…">
         <span data-button-label>Propose label</span>
       </button>

@@ -10,6 +10,7 @@ import hashlib
 from contextlib import nullcontext
 from datetime import UTC, datetime
 from io import BytesIO
+from types import SimpleNamespace
 
 import psycopg
 import pytest
@@ -113,6 +114,73 @@ def test_get_renders_upload_form() -> None:
     assert "Photo analysis may use the configured vision provider" in body
     assert "No cloud service" not in body
     assert "no network egress" not in body
+
+
+def test_reviewed_creation_attaches_every_selected_saved_photo(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import db
+    from binkeeper.blob_vault import put_blob
+
+    store = InMemoryBlobStore()
+    refs = [
+        put_blob(
+            conn,
+            store,
+            f"photo {i}".encode(),
+            key=b"s" * 32,
+            key_ref="synthetic",
+            content_type="image",
+        ).plaintext_sha256
+        for i in range(3)
+    ]
+    monkeypatch.setattr(db, "connect", lambda **_: nullcontext(conn))
+    response = _client().post(
+        "/register/confirm",
+        headers=_LOOPBACK_ORIGIN,
+        data={
+            "bin_code": "AGR-123",
+            "site": "alameda-garage",
+            "theme": "MY WORKBENCH",
+            "contents": "My calipers",
+            "photo_sha256": refs[0],
+            "additional_photo_sha256": refs[1:],
+            "print_label": "0",
+        },
+    )
+    assert response.status_code == 200
+    linked = conn.execute("""SELECT raw_payload->'metadata'->'photo'->>'blob_ref'
+        FROM captures WHERE raw_payload->'metadata'->>'bin_code'='AGR-123'
+        AND raw_payload->'metadata' ? 'photo'""").fetchall()
+    assert {row[0] for row in linked} == set(refs)
+    assert conn.execute("SELECT count(*) FROM bin_trip_events").fetchone() == (1,)
+    assert conn.execute("SELECT count(*) FROM evidence_blobs").fetchone() == (3,)
+
+
+def test_invalid_extra_photo_rolls_back_bin_creation(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import db
+
+    monkeypatch.setattr(db, "connect", lambda **_: nullcontext(conn))
+    response = _client().post(
+        "/register/confirm",
+        headers=_LOOPBACK_ORIGIN,
+        data={
+            "bin_code": "AGR-123",
+            "site": "alameda-garage",
+            "theme": "MY WORKBENCH",
+            "contents": "My calipers",
+            "photo_sha256": "a" * 64,
+            "additional_photo_sha256": "b" * 64,
+            "print_label": "0",
+        },
+    )
+    assert "Could not register" in response.text
+    assert conn.execute("SELECT count(*) FROM captures").fetchone() == (0,)
+    assert conn.execute("SELECT count(*) FROM bin_trip_events").fetchone() == (0,)
 
 
 def test_binkeeper_photo_and_register_pages_have_only_local_navigation() -> None:
@@ -1360,7 +1428,9 @@ def test_confirm_route_carries_reviewed_theme_and_print_intent(
 ) -> None:
     from binkeeper import bin_label, bin_register, db
 
-    monkeypatch.setattr(db, "connect", lambda: nullcontext(object()))
+    monkeypatch.setattr(
+        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
+    )
     monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     submissions: list[str] = []
@@ -1395,7 +1465,9 @@ def test_confirm_route_prints_on_explicit_b1_without_changing_cups_default(
 ) -> None:
     from binkeeper import bin_b1, bin_label, bin_register, db
 
-    monkeypatch.setattr(db, "connect", lambda: nullcontext(object()))
+    monkeypatch.setattr(
+        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
+    )
     monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     monkeypatch.setattr(bin_b1, "B1_ADDRESS", "synthetic-address")
@@ -1434,7 +1506,9 @@ def test_confirm_route_prints_two_reviewed_labels_in_one_submission(
 ) -> None:
     from binkeeper import bin_label, bin_register, db
 
-    monkeypatch.setattr(db, "connect", lambda: nullcontext(object()))
+    monkeypatch.setattr(
+        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
+    )
     monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     submissions: list[str] = []
@@ -1499,7 +1573,9 @@ def test_explicit_print_renders_reviewed_label_and_submits_once(
 ) -> None:
     from binkeeper import bin_label, bin_register, db
 
-    monkeypatch.setattr(db, "connect", lambda: nullcontext(object()))
+    monkeypatch.setattr(
+        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
+    )
     monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     submissions: list[tuple[str, str | None]] = []
@@ -1541,7 +1617,9 @@ def test_print_failure_does_not_hide_successful_registration(
 ) -> None:
     from binkeeper import bin_label, bin_register, db
 
-    monkeypatch.setattr(db, "connect", lambda: nullcontext(object()))
+    monkeypatch.setattr(
+        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
+    )
     monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
 
@@ -1570,7 +1648,9 @@ def test_replayed_registration_does_not_submit_a_second_label(
 ) -> None:
     from binkeeper import bin_label, bin_register, db
 
-    monkeypatch.setattr(db, "connect", lambda: nullcontext(object()))
+    monkeypatch.setattr(
+        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
+    )
     already_existed = iter((False, True))
     monkeypatch.setattr(
         bin_register,
@@ -1609,7 +1689,9 @@ def test_registration_without_print_intent_never_submits_a_label(
 ) -> None:
     from binkeeper import bin_label, bin_register, db
 
-    monkeypatch.setattr(db, "connect", lambda: nullcontext(object()))
+    monkeypatch.setattr(
+        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
+    )
     monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
 
     def fail_if_called(*_args: object, **_kwargs: object) -> None:

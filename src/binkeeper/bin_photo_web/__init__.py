@@ -22,7 +22,7 @@ from uuid import uuid4
 
 import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from PIL import Image
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
@@ -30,7 +30,8 @@ from starlette.datastructures import FormData, UploadFile
 
 from binkeeper.bin_catalog_web import require_bin_catalog_request
 from binkeeper.bin_label import BinLabelError
-from binkeeper.bin_photo_media import thumbnail_jpeg
+from binkeeper.bin_manage import BinManageError
+from binkeeper.bin_photo_media import BinPhotoMediaError, thumbnail_jpeg, validate_bin_photo
 from binkeeper.bin_photo_web.manage import (
     LabelDriftDismissalRecorder,
     ManageLoader,
@@ -60,6 +61,7 @@ from binkeeper.bin_saved_photos import (
     SavedPhotoSelectionError,
     SavedPhotoSource,
     SavedPhotosUnavailableError,
+    attach_photos_to_bin,
     selected_photo_ids,
 )
 from binkeeper.sites import SITE_PREFIXES
@@ -254,14 +256,15 @@ def create_app(
         notes = _clean(form_data.get("notes"))
         site = _clean(form_data.get("site"))
         requested_code = _clean(form_data.get("bin_code"))
-        images: list[bytes] = []
-        for upload in form_data.getlist("photos"):
-            if isinstance(upload, UploadFile):
-                data = await upload.read()
-                if data:
-                    images.append(data)
+        images = await _uploaded_photos(form_data)
         view = await run_in_threadpool(
-            _analyze, images=images, notes=notes, site=site, requested_code=requested_code
+            _analyze,
+            images=images,
+            notes=notes,
+            site=site,
+            requested_code=requested_code,
+            theme=_clean(form_data.get("theme")),
+            contents=_clean(form_data.get("contents")),
         )
         response = _render_photo_result(view)
         if images:
@@ -305,11 +308,17 @@ def create_app(
         notes: str = "",
         site: str = "",
         bin_code: str = "",
+        theme: str = "",
+        contents: str = "",
+        target_bin_code: str = "",
+        notice: str | None = None,
     ) -> Response:
         try:
             photos = saved_photos.list_photos(offset=offset, limit=PAGE_SIZE + 1)
+            bins = saved_photos.list_bins()
         except SavedPhotosUnavailableError:
             photos = []
+            bins = []
             error = "Could not load saved photos. Try again."
             status_code = 503
         saved_url = surface_path(normalized_base_path, "/saved-photos")
@@ -322,6 +331,11 @@ def create_app(
                 notes=notes,
                 site=site,
                 bin_code=bin_code,
+                theme=theme,
+                contents=contents,
+                bins=bins,
+                target_bin_code=target_bin_code,
+                notice=notice,
                 sites=list(_SITE_PREFIXES),
                 max_photos=MAX_LABEL_PHOTOS,
                 offset=offset,
@@ -335,7 +349,7 @@ def create_app(
                 photo_url=surface_path(normalized_base_path, "/"),
                 register_url=surface_path(normalized_base_path, "/register"),
                 stash_url=surface_path(normalized_base_path, "/stash"),
-                binkeeper_section="photo",
+                binkeeper_section="saved-photos",
                 surface_label="Saved photos",
             )
         )
@@ -346,6 +360,39 @@ def create_app(
     @app.get("/saved-photos", dependencies=[Depends(saved_photo_access)])
     def saved_photo_list(offset: int = Query(default=0, ge=0)) -> Response:
         return _render_saved_photos(offset=offset)
+
+    @app.post(
+        "/saved-photos/upload",
+        dependencies=[Depends(saved_photo_access), Depends(strict_origin_check)],
+    )
+    async def saved_photo_upload(request: Request) -> Response:
+        images = await _uploaded_photos(await request.form())
+        error: str | None = None
+        if not 1 <= len(images) <= MAX_LABEL_PHOTOS:
+            error = f"Choose between 1 and {MAX_LABEL_PHOTOS} photos to upload."
+        else:
+            try:
+                for original in images:
+                    await run_in_threadpool(validate_bin_photo, original)
+            except BinPhotoMediaError as exc:
+                error = str(exc)
+        if error:
+            return await run_in_threadpool(_render_saved_photos, error=error, status_code=400)
+        _, store_error = await run_in_threadpool(
+            _store_photos,
+            images,
+            tenant_id=tenant_id,
+            corpus_id=corpus_id,
+        )
+        if store_error:
+            return await run_in_threadpool(
+                _render_saved_photos,
+                error="Could not save the photos. Please retry.",
+                status_code=503,
+            )
+        return RedirectResponse(
+            surface_path(normalized_base_path, "/saved-photos"), status_code=303
+        )
 
     @app.get("/saved-photos/{photo_id}/thumbnail", dependencies=[Depends(saved_photo_access)])
     def saved_photo_thumbnail(photo_id: str) -> Response:
@@ -363,6 +410,50 @@ def create_app(
         ):
             raise HTTPException(404, "Saved photo is unavailable", headers=headers) from None
         return Response(thumbnail, media_type="image/jpeg", headers=headers)
+
+    @app.post(
+        "/saved-photos/attach",
+        dependencies=[Depends(saved_photo_access), Depends(strict_origin_check)],
+    )
+    async def saved_photo_attach(
+        request: Request, offset: int = Query(default=0, ge=0)
+    ) -> Response:
+        form_data = await request.form()
+        selection = [str(value) for value in form_data.getlist("photo_ids")]
+        code = _clean(form_data.get("target_bin_code")) or ""
+        error: str | None = None
+        status_code = 200
+        try:
+            if not code:
+                raise SavedPhotoSelectionError("Choose an existing bin.")
+            photos = await run_in_threadpool(
+                saved_photos.load_photos, selected_photo_ids(selection)
+            )
+            await run_in_threadpool(
+                attach_photos_to_bin,
+                photos,
+                code,
+                tenant_id=tenant_id,
+                corpus_id=corpus_id,
+            )
+        except (SavedPhotoSelectionError, BinManageError, BinPhotoMediaError) as exc:
+            error, status_code = str(exc), 400
+        except (SavedPhotosUnavailableError, psycopg.Error):
+            error, status_code = "Could not attach the photos. Please retry.", 503
+        return await run_in_threadpool(
+            _render_saved_photos,
+            offset=offset,
+            error=error,
+            status_code=status_code,
+            selected=selection if error else [],
+            target_bin_code=code,
+            theme=_clean(form_data.get("theme")) or "",
+            contents=_clean(form_data.get("contents")) or "",
+            notes=_clean(form_data.get("notes")) or "",
+            site=_clean(form_data.get("site")) or "",
+            bin_code=_clean(form_data.get("bin_code")) or "",
+            notice=None if error else f"Selected photos are attached to {code}.",
+        )
 
     @app.post(
         "/saved-photos", dependencies=[Depends(saved_photo_access), Depends(strict_origin_check)]
@@ -390,11 +481,15 @@ def create_app(
                 notes=notes,
                 site=site,
                 bin_code=bin_code,
+                theme=_clean(form_data.get("theme")) or "",
+                contents=_clean(form_data.get("contents")) or "",
             )
         view = await run_in_threadpool(
             _analyze,
             images=[photo.image for photo in photos],
             stored_blob_refs=[photo.sha256 for photo in photos],
+            theme=_clean(form_data.get("theme")),
+            contents=_clean(form_data.get("contents")),
             notes=notes or None,
             site=site or None,
             requested_code=bin_code or None,
@@ -468,6 +563,9 @@ def create_app(
             lon=_float(form_data.get("lon")),
             accuracy_m=_float(form_data.get("accuracy_m")),
             photo_sha256=_clean(form_data.get("photo_sha256")),
+            additional_photo_sha256s=tuple(
+                str(ref) for ref in form_data.getlist("additional_photo_sha256")
+            ),
             code_source=_clean(form_data.get("code_source")),
             label_count=label_count,
             printer=_clean(form_data.get("printer")) or "cups",
@@ -581,6 +679,16 @@ async def _first_photo(form_data: FormData) -> bytes | None:
     return None
 
 
+async def _uploaded_photos(form_data: FormData) -> list[bytes]:
+    images = []
+    for upload in form_data.getlist("photos"):
+        if isinstance(upload, UploadFile):
+            data = await upload.read()
+            if data:
+                images.append(data)
+    return images
+
+
 def _analyze(
     *,
     images: list[bytes],
@@ -588,6 +696,8 @@ def _analyze(
     site: str | None,
     requested_code: str | None,
     stored_blob_refs: list[str] | None = None,
+    theme: str | None = None,
+    contents: str | None = None,
 ) -> dict[str, object]:
     """Store the photos, then best-effort propose a label; build a view model.
 
@@ -623,16 +733,25 @@ def _analyze(
         propose_bin_label,
     )
 
-    try:
-        client = default_vision_client()
-        workers = 3 if isinstance(client, OpenRouterVisionClient | GeminiVisionClient) else 1
-        proposal = propose_bin_label(client, images, notes=notes, max_workers=workers).to_json()
-    except BinVisionError as exc:
-        label_error = str(exc)
-        logging.getLogger(__name__).warning("BinKeeper label analysis failed: %s", exc)
+    if not (theme and contents):
+        try:
+            client = default_vision_client()
+            workers = 3 if isinstance(client, OpenRouterVisionClient | GeminiVisionClient) else 1
+            proposal = propose_bin_label(
+                client,
+                images,
+                notes=notes,
+                max_workers=workers,
+                contents_only=bool(theme),
+                existing_theme=theme,
+                theme_only=bool(contents),
+            ).to_json()
+        except BinVisionError as exc:
+            label_error = str(exc)
+            logging.getLogger(__name__).warning("BinKeeper label analysis failed: %s", exc)
 
     accepts = proposal.get("accepts") if isinstance(proposal, dict) else None
-    proposed_contents = (
+    proposed_contents = contents or (
         ", ".join(str(item) for item in accepts) if isinstance(accepts, list) else ""
     )
     return {
@@ -645,10 +764,19 @@ def _analyze(
         "suggested_bin_code": requested_code or _suggest_bin_code(site),
         "all_sites": list(_SITE_PREFIXES),
         "proposed_contents": proposed_contents,
+        "proposed_theme": theme or (proposal.get("theme", "") if proposal else ""),
+        "theme_provided": bool(theme),
+        "contents_provided": bool(contents),
+        "analysis_skipped": bool(theme and contents),
     }
 
 
-def _store_photos(images: list[bytes]) -> tuple[list[str], str | None]:
+def _store_photos(
+    images: list[bytes],
+    *,
+    tenant_id: str = "personal",
+    corpus_id: str = "personal",
+) -> tuple[list[str], str | None]:
     """Store each ORIGINAL photo in the vault; return ``(refs, error)``.
 
     Storage failure is surfaced honestly (not swallowed) so the owner knows
@@ -661,10 +789,17 @@ def _store_photos(images: list[bytes]) -> tuple[list[str], str | None]:
         store = blob_store_from_config()
         key, key_ref = vault_key_from_config()
         refs: list[str] = []
-        with connect() as conn:
+        with connect() as conn, conn.transaction():
             for image in images:
                 record = put_blob(
-                    conn, store, image, key=key, key_ref=key_ref, content_type="image"
+                    conn,
+                    store,
+                    image,
+                    key=key,
+                    key_ref=key_ref,
+                    content_type="image",
+                    tenant_id=tenant_id,
+                    corpus_id=corpus_id,
                 )
                 refs.append(record.plaintext_sha256)
         return refs, None
@@ -795,6 +930,7 @@ def _register_confirmed(
     code_source: str | None = None,
     label_count: int = 0,
     printer: str = "cups",
+    additional_photo_sha256s: tuple[str, ...] = (),
 ) -> dict[str, object]:
     """Finish a registration after the owner picked the site; establish its anchor."""
     if not bin_code or not site:
@@ -826,6 +962,7 @@ def _register_confirmed(
         theme=theme,
         label_count=label_count,
         printer=printer,
+        additional_photo_refs=additional_photo_sha256s,
     )
 
 
@@ -840,12 +977,16 @@ def _register_and_view(
     theme: str | None = None,
     label_count: int = 0,
     printer: str = "cups",
+    additional_photo_refs: tuple[str, ...] = (),
 ) -> dict[str, object]:
     try:
+        from binkeeper.bin_manage import BinManageError, append_saved_bin_photos
         from binkeeper.bin_register import register_bin
         from binkeeper.db import connect
 
-        with connect() as conn:
+        if len(additional_photo_refs) >= MAX_LABEL_PHOTOS:
+            raise BinManageError(f"Choose at most {MAX_LABEL_PHOTOS} photos.")
+        with connect() as conn, conn.transaction():
             result = register_bin(
                 conn,
                 bin_code=bin_code,
@@ -855,6 +996,12 @@ def _register_and_view(
                 contents_text=contents,
                 theme=theme,
             )
+            if additional_photo_refs:
+                append_saved_bin_photos(
+                    conn,
+                    bin_code,
+                    ((photo_sha,) if photo_sha else ()) + additional_photo_refs,
+                )
     except Exception as exc:  # surface the failure; nothing partial is claimed
         return {
             "mode": "form",

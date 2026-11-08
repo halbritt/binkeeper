@@ -187,6 +187,28 @@
 
       document.querySelectorAll("[data-submit-form]").forEach(function (form) {
         form.addEventListener("submit", markSubmitPending);
+        var prefill = form.querySelector("[data-label-prefill]");
+        var proposeButton = form.querySelector("[data-propose-button]");
+        if (prefill && proposeButton) {
+          function updateProposalAction() {
+            var hasLabel = prefill.querySelector('[name="theme"]').value.trim() !== "";
+            var hasContents = prefill.querySelector('[name="contents"]').value.trim() !== "";
+            var text = hasLabel && hasContents ? "Review label" :
+              hasLabel ? "Suggest contents" : hasContents ? "Suggest label" : "Propose label";
+            proposeButton.querySelector("[data-button-label]").textContent = text;
+            proposeButton.setAttribute("data-busy-label", hasLabel && hasContents ? "Preparing review…" : "Analyzing photos…");
+          }
+          prefill.addEventListener("input", updateProposalAction);
+          updateProposalAction();
+        }
+        function updatePhotoCount() {
+          var count = form.querySelectorAll('[name="photo_ids"]:checked').length;
+          form.querySelectorAll("[data-photo-selection-count]").forEach(function (element) {
+            element.textContent = count + (count === 1 ? " photo selected" : " photos selected");
+          });
+        }
+        form.addEventListener("change", updatePhotoCount);
+        updatePhotoCount();
       });
     })();
   </script>

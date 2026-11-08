@@ -103,6 +103,9 @@ _SYNTHETIC_PHOTO = _synthetic_photo()
 
 
 class _SyntheticSavedPhotos:
+    def list_bins(self) -> Sequence[tuple[str, str]]:
+        return [("AGR-014", "Precision tools"), ("AGR-022", "Painting supplies")]
+
     def list_photos(self, *, offset: int, limit: int) -> Sequence[SavedPhoto]:
         if offset == 48:
             raise SavedPhotosUnavailableError("Synthetic outage")
@@ -149,7 +152,7 @@ def create_app(port: int) -> FastAPI:
         return await call_next(request)
 
     @app.get("/fixture/photo-result")
-    def photo_result(failure: bool = False, stored: bool = True) -> Response:
+    def photo_result(failure: bool = False, stored: bool = True, prefill: str = "") -> Response:
         chrome = build_surface_chrome(
             "bin_photo", extra_template_dir=Path(bin_photo_web.__file__).parent / "templates"
         )
@@ -172,9 +175,9 @@ def create_app(port: int) -> FastAPI:
                 blob_refs=["synthetic-photo"] if stored else [],
                 store_error=None if stored else "Vault unavailable",
                 proposal=None
-                if failure
+                if failure or prefill == "both"
                 else {
-                    "theme": "Precision tools",
+                    "theme": "MY WORKBENCH" if prefill == "label" else "Precision tools",
                     "owner_phrase": "Keep these together",
                     "photo_count": 1,
                     "model_version": "synthetic-model",
@@ -186,6 +189,10 @@ def create_app(port: int) -> FastAPI:
                 suggested_bin_code="AGR-023",
                 all_sites=["alameda-garage", "oakland-fab-east"],
                 proposed_contents="" if failure else "hex keys, calipers",
+                proposed_theme="MY WORKBENCH" if prefill in {"label", "both"} else "",
+                theme_provided=prefill in {"label", "both"},
+                contents_provided=prefill == "both",
+                analysis_skipped=prefill == "both",
             )
         )
 

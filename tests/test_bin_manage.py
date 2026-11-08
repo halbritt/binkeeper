@@ -15,15 +15,87 @@ from binkeeper.bin_manage import (
     BinPlacement,
     BinProfileUpdate,
     append_bin_photo,
+    append_saved_bin_photos,
     place_existing_bin,
     reserve_label_print_intent,
     update_bin_profile,
 )
 from binkeeper.bin_passport import bin_passport
 from binkeeper.bin_register import register_bin
+from binkeeper.blob_vault import InMemoryBlobStore, put_blob
 from binkeeper.personal_memory import PersonalCaptureConflict
 
 PACIFIC_DAYLIGHT = timezone(timedelta(hours=-7))
+
+
+def test_saved_photo_attachment_links_all_photos_once_and_preserves_bin(
+    conn: psycopg.Connection,
+) -> None:
+    store = InMemoryBlobStore()
+    refs = [
+        put_blob(
+            conn,
+            store,
+            f"synthetic image {i}".encode(),
+            key=b"s" * 32,
+            key_ref="synthetic",
+            content_type="image",
+        ).plaintext_sha256
+        for i in range(3)
+    ]
+    register_bin(
+        conn,
+        bin_code="AGR-014",
+        site="alameda-garage",
+        theme="My label",
+        contents_text="My contents",
+        photo_sha256=refs[0],
+    )
+    before = bin_passport(conn, "AGR-014")
+    location_before = bin_where(conn, "AGR-014")
+    with conn.transaction():
+        assert append_saved_bin_photos(conn, "AGR-014", refs) == 2
+    with conn.transaction():
+        assert append_saved_bin_photos(conn, "AGR-014", refs + refs) == 0
+    after = bin_passport(conn, "AGR-014")
+    assert (after.theme, after.sibling_contents, after.home_site) == (
+        before.theme,
+        before.sibling_contents,
+        before.home_site,
+    )
+    assert bin_where(conn, "AGR-014") == location_before
+    assert conn.execute("SELECT count(*) FROM evidence_blobs").fetchone() == (3,)
+    assert conn.execute(
+        "SELECT count(*) FROM captures WHERE raw_payload->'metadata'->>'bin_code'='AGR-014' "
+        "AND raw_payload->'metadata' ? 'photo'"
+    ).fetchone() == (3,)
+
+
+@pytest.mark.parametrize("bad_ref", ["missing", "foreign", "non-image"])
+def test_saved_photo_attachment_refuses_the_whole_invalid_selection(
+    conn: psycopg.Connection,
+    bad_ref: str,
+) -> None:
+    store = InMemoryBlobStore()
+    valid = put_blob(conn, store, b"photo", key=b"s" * 32, key_ref="test", content_type="image")
+    invalid = put_blob(
+        conn,
+        store,
+        b"other",
+        key=b"s" * 32,
+        key_ref="test",
+        tenant_id="other" if bad_ref == "foreign" else "personal",
+        content_type="text/plain" if bad_ref == "non-image" else "image",
+    )
+    register_bin(conn, bin_code="AGR-014", site="alameda-garage")
+    ref = "a" * 64 if bad_ref == "missing" else invalid.plaintext_sha256
+    with pytest.raises(BinManageError, match="not available"):
+        append_saved_bin_photos(conn, "AGR-014", [valid.plaintext_sha256, ref])
+    assert conn.execute(
+        "SELECT count(*) FROM captures WHERE raw_payload->'metadata' ? 'photo'"
+    ).fetchone() == (0,)
+    with pytest.raises(BinManageError, match="existing bin"):
+        append_saved_bin_photos(conn, "AGR-999", [valid.plaintext_sha256])
 
 
 def test_profile_update_appends_a_snapshot_and_projects_it_as_current(

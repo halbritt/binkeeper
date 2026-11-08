@@ -1,0 +1,10 @@
+{% import "_components.html" as components %}
+<div class="form-grid" data-label-prefill>
+  {% call components.field("prefill-theme", "Label (optional)", "Keep your wording, or leave blank for a suggestion") %}
+    <input type="text" id="prefill-theme" name="theme" value="{{ theme or '' }}" placeholder="HAND TOOLS">
+  {% endcall %}
+  {% call components.field("prefill-contents", "Contents (optional)", "Fill this in yourself, or leave blank to identify contents from the photos") %}
+    <textarea id="prefill-contents" name="contents" rows="3">{{ contents or '' }}</textarea>
+  {% endcall %}
+  <p class="field-help">Only blank fields are suggested. Fill both to skip photo analysis.</p>
+</div>

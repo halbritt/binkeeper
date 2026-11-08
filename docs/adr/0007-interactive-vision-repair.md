@@ -2,7 +2,7 @@
 
 - Status: accepted under the owner's repair request
 - Date: 2026-11-08
-- Work items: BINK-49, BINK-50
+- Work items: BINK-49, BINK-50, BINK-51, BINK-52
 - Supersedes: ADR 0005's served-model pin
 
 ## Evidence
@@ -45,6 +45,13 @@ previewing photos do not invoke vision. Retrying requires an explicit POST
 and does not store new blobs or harvest fresh location evidence from old photos.
 Linked photos offer the existing bin's reprint controls. This adds no schema or
 change to original evidence.
+
+In the subsequent owner-directed workflow, Saved photos becomes an upload inbox:
+save originals now, then explicitly create a bin or attach selected photos to
+an existing bin. Attachments append scoped, idempotent capture links without
+changing label, contents or location. Creation links every selected photo in
+the registration transaction. Label and contents may be entered before analysis;
+only blank fields are inferred, and supplying both avoids a model call.
 
 ## Scope and rollback
 

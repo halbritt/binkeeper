@@ -24,6 +24,11 @@ surfaces:
   photo_drop:
     states:
       form: {route: /, ready: h1}
+      label_prefilled:
+        route: /
+        ready: h1
+        actions:
+          - {type: fill, selector: "#prefill-theme", value: "MY WORKBENCH"}
       options_open:
         route: /
         ready: h1
@@ -35,6 +40,8 @@ surfaces:
   photo_result:
     states:
       proposed: {route: /fixture/photo-result, ready: h1}
+      label_prefilled: {route: "/fixture/photo-result?prefill=label", ready: h1}
+      both_prefilled: {route: "/fixture/photo-result?prefill=both", ready: h1}
       vision_failure: {route: "/fixture/photo-result?failure=true", ready: h1}
       storage_and_vision_failure:
         route: "/fixture/photo-result?failure=true&stored=false"
@@ -50,6 +57,13 @@ surfaces:
         ready: h1
         actions:
           - {type: click, selector: ".bin-saved-photo:first-child input"}
+      both_prefilled:
+        route: /saved-photos
+        ready: h1
+        actions:
+          - {type: click, selector: ".bin-saved-photo:first-child input"}
+          - {type: fill, selector: "#prefill-theme", value: "MY WORKBENCH"}
+          - {type: fill, selector: "#prefill-contents", value: "Hex keys and calipers"}
       empty: {route: "/saved-photos?offset=24", ready: h1}
       unavailable: {route: "/saved-photos?offset=48", ready: h1}
   manage:

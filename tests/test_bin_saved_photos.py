@@ -63,6 +63,9 @@ class _SavedPhotos:
             for photo_id in photo_ids
         ]
 
+    def list_bins(self) -> Sequence[tuple[str, str]]:
+        return [("AGR-014", "My tools")]
+
 
 class _Vision:
     model = "synthetic-recovery-model"
@@ -102,14 +105,14 @@ def test_saved_gallery_pages_without_loading_originals_or_calling_model(
     client = TestClient(bin_photo_web.create_app(saved_photo_source=photos))
     page = client.get("/saved-photos")
     assert page.status_code == 200
-    assert page.text.count('name="photo_ids"') == 12
+    assert page.text.count('type="checkbox" name="photo_ids"') == 12
     assert 'href="/saved-photos?offset=12"' in page.text
     assert 'href="/manage/AGR-014#label"' in page.text
     assert page.headers["cache-control"] == "private, no-store"
     assert "private original metadata" not in page.text
     assert not photos.load_calls and not vision.calls
     next_page = client.get("/saved-photos?offset=24")
-    assert next_page.text.count('name="photo_ids"') == 7
+    assert next_page.text.count('type="checkbox" name="photo_ids"') == 7
     assert 'href="/saved-photos?offset=12"' in next_page.text
     assert "Older photos" not in next_page.text
     assert "No saved photos on this page" in client.get("/saved-photos?offset=48").text
@@ -157,6 +160,36 @@ def test_saved_photo_routes_require_owner_front_and_retry_origin() -> None:
     assert photos.load_calls == [[PHOTO_IDS[0]]]
 
 
+@pytest.mark.parametrize("path", ["/saved-photos/upload", "/saved-photos/attach"])
+def test_saved_photo_writes_refuse_missing_or_foreign_origins(path: str) -> None:
+    client = TestClient(bin_photo_web.create_app(saved_photo_source=_SavedPhotos()))
+    for headers in ({}, {"Origin": "http://evil.example"}):
+        assert client.post(path, headers=headers).status_code == 403
+
+
+def test_saved_photo_upload_rejects_bad_batch_before_storing(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import blob_vault, db
+
+    monkeypatch.setattr(db, "connect", lambda **_: nullcontext(conn))
+    monkeypatch.setattr(blob_vault, "blob_store_from_config", InMemoryBlobStore)
+    monkeypatch.setattr(blob_vault, "vault_key_from_config", lambda: (b"s" * 32, "test"))
+    client = TestClient(bin_photo_web.create_app(saved_photo_source=_SavedPhotos()))
+    response = client.post(
+        "/saved-photos/upload",
+        headers=ORIGIN,
+        files=[
+            ("photos", ("ok.jpg", _jpeg(), "image/jpeg")),
+            ("photos", ("bad.jpg", b"not an image", "image/jpeg")),
+        ],
+    )
+    assert response.status_code == 400
+    assert "photo is corrupt" in response.text
+    assert conn.execute("SELECT count(*) FROM evidence_blobs").fetchone() == (0,)
+
+
 @pytest.mark.parametrize("fail", [False, True])
 def test_saved_retry_reuses_original_and_retains_review_on_model_failure(
     monkeypatch: pytest.MonkeyPatch,
@@ -190,6 +223,143 @@ def test_saved_retry_reuses_original_and_retains_review_on_model_failure(
     assert "Create and print label" in response.text
     assert ("Synthetic model outage" in response.text) == fail
     assert ("hex keys" in response.text) != fail
+
+
+def test_saved_photo_prefilled_label_is_kept_while_contents_are_inferred(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    photos = _SavedPhotos()
+    vision = _Vision()
+    monkeypatch.setattr(bin_vision, "default_vision_client", lambda: vision)
+    response = TestClient(bin_photo_web.create_app(saved_photo_source=photos)).post(
+        "/saved-photos",
+        headers=ORIGIN,
+        data={
+            "photo_ids": PHOTO_IDS[0],
+            "site": "alameda-garage",
+            "bin_code": "AGR-123",
+            "theme": "MY WORKBENCH",
+        },
+    )
+    assert response.status_code == 200
+    assert 'value="MY WORKBENCH"' in response.text
+    assert "hex keys" in response.text
+    assert "Hand tools" not in response.text
+    assert "Do not propose a theme" in vision.calls[0][0]
+
+
+def test_saved_photo_prefilled_contents_are_kept_while_label_is_inferred(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    photos = _SavedPhotos()
+    vision = _Vision()
+    monkeypatch.setattr(bin_vision, "default_vision_client", lambda: vision)
+    response = TestClient(bin_photo_web.create_app(saved_photo_source=photos)).post(
+        "/saved-photos",
+        headers=ORIGIN,
+        data={
+            "photo_ids": PHOTO_IDS[0],
+            "site": "alameda-garage",
+            "bin_code": "AGR-123",
+            "contents": "2 calipers\nM3 screws & washers",
+        },
+    )
+    assert response.status_code == 200
+    assert 'value="Hand tools"' in response.text
+    assert "2 calipers\nM3 screws &amp; washers</textarea>" in response.text
+    assert "hex keys" not in response.text
+    assert "Do not list or revise the contents" in vision.calls[0][0]
+
+
+def test_saved_photo_with_both_fields_prefilled_skips_vision_and_goes_to_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    photos = _SavedPhotos()
+
+    def no_model() -> _Vision:
+        pytest.fail("Both fields were supplied; no model should be configured or called")
+
+    monkeypatch.setattr(bin_vision, "default_vision_client", no_model)
+    response = TestClient(bin_photo_web.create_app(saved_photo_source=photos)).post(
+        "/saved-photos",
+        headers=ORIGIN,
+        data={
+            "photo_ids": PHOTO_IDS[0],
+            "site": "alameda-garage",
+            "bin_code": "AGR-123",
+            "theme": "MY WORKBENCH",
+            "contents": "calipers; M3 washers",
+        },
+    )
+    assert response.status_code == 200
+    assert 'value="MY WORKBENCH"' in response.text
+    assert "calipers; M3 washers</textarea>" in response.text
+    assert "Both fields were supplied" in response.text
+    assert 'action="/register/confirm"' in response.text
+
+
+@pytest.mark.parametrize("field,value", [("theme", "MY WORKBENCH"), ("contents", "My calipers")])
+def test_prefilled_field_survives_model_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: str,
+) -> None:
+    monkeypatch.setattr(bin_vision, "default_vision_client", lambda: _Vision(fail=True))
+    response = TestClient(bin_photo_web.create_app(saved_photo_source=_SavedPhotos())).post(
+        "/saved-photos",
+        headers=ORIGIN,
+        data={"photo_ids": PHOTO_IDS[0], "bin_code": "AGR-123", field: value},
+    )
+    assert response.status_code == 200
+    assert value in response.text
+    assert "Synthetic model outage" in response.text
+
+
+def test_prefilled_fields_survive_vault_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    photos = _SavedPhotos()
+
+    def unavailable(photo_ids: Sequence[str]) -> Sequence[SavedPhotoContent]:
+        raise SavedPhotosUnavailableError("synthetic vault outage")
+
+    monkeypatch.setattr(photos, "load_photos", unavailable)
+    response = TestClient(bin_photo_web.create_app(saved_photo_source=photos)).post(
+        "/saved-photos",
+        headers=ORIGIN,
+        data={"photo_ids": PHOTO_IDS[0], "theme": "MY WORKBENCH", "contents": "My calipers"},
+    )
+    assert response.status_code == 503
+    assert 'value="MY WORKBENCH"' in response.text
+    assert "My calipers</textarea>" in response.text
+
+
+@pytest.mark.parametrize(
+    "theme,contents",
+    [
+        ("", ""),
+        ("MY WORKBENCH", ""),
+        ("", "My calipers"),
+        ("MY WORKBENCH", "My calipers"),
+    ],
+)
+def test_new_uploads_use_the_same_prefill_rules(
+    monkeypatch: pytest.MonkeyPatch,
+    theme: str,
+    contents: str,
+) -> None:
+    vision = _Vision()
+    monkeypatch.setattr(bin_vision, "default_vision_client", lambda: vision)
+    monkeypatch.setattr(bin_photo_web, "_store_photos", lambda images: (["a" * 64], None))
+    monkeypatch.setattr(bin_photo_web, "_harvest_colocations", lambda images: None)
+    response = TestClient(bin_photo_web.create_app()).post(
+        "/",
+        headers=ORIGIN,
+        files={"photos": ("test.jpg", _jpeg(), "image/jpeg")},
+        data={"theme": theme, "contents": contents, "bin_code": "AGR-123"},
+    )
+    assert response.status_code == 200
+    assert f'value="{theme or "Hand tools"}"' in response.text
+    assert f">{contents or 'hex keys'}</textarea>" in response.text
+    assert bool(vision.calls) == (not (theme and contents))
 
 
 @pytest.mark.parametrize("selection", [[], ["invalid"], PHOTO_IDS[:13]])
@@ -260,6 +430,77 @@ def test_saved_retry_retains_selection_and_details_when_vault_is_unavailable(
 
 def test_selection_deduplicates_and_keeps_owner_order() -> None:
     assert selected_photo_ids([PHOTO_IDS[1], PHOTO_IDS[0], PHOTO_IDS[1]]) == PHOTO_IDS[1::-1]
+
+
+def test_saved_photo_upload_stores_original_without_analysis_or_inventory_changes(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from binkeeper import blob_vault, db
+
+    store = InMemoryBlobStore()
+    monkeypatch.setattr(db, "connect", lambda **_: nullcontext(conn))
+    monkeypatch.setattr(blob_vault, "blob_store_from_config", lambda: store)
+    monkeypatch.setattr(blob_vault, "vault_key_from_config", lambda: (b"s" * 32, "synthetic"))
+
+    def forbidden() -> _Vision:
+        pytest.fail("Saving photos must not call vision")
+
+    monkeypatch.setattr(bin_vision, "default_vision_client", forbidden)
+    client = TestClient(bin_photo_web.create_app(saved_photo_source=_SavedPhotos()))
+    response = client.post(
+        "/saved-photos/upload",
+        headers=ORIGIN,
+        files={"photos": ("test.jpg", _jpeg(), "image/jpeg")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/saved-photos"
+    assert conn.execute("SELECT plaintext_sha256 FROM evidence_blobs").fetchall() == [
+        (hashlib.sha256(_jpeg()).hexdigest(),)
+    ]
+    assert conn.execute("SELECT count(*) FROM captures").fetchone() == (0,)
+    assert conn.execute("SELECT count(*) FROM bin_trip_events").fetchone() == (0,)
+    assert conn.execute("SELECT count(*) FROM colocation_observations").fetchone() == (0,)
+
+
+def test_saved_photos_can_be_attached_to_existing_bin_without_analysis(
+    conn: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    photos = _SavedPhotos()
+    store = InMemoryBlobStore()
+    put_blob(conn, store, photos.image, key=b"s" * 32, key_ref="synthetic", content_type="image")
+    register_bin(
+        conn,
+        bin_code="AGR-014",
+        site="alameda-garage",
+        theme="My tools",
+        contents_text="My contents",
+    )
+    monkeypatch.setattr(bin_saved_photos, "connect", lambda **_: nullcontext(conn))
+
+    def forbidden() -> _Vision:
+        pytest.fail("Attaching saved photos must not call vision")
+
+    monkeypatch.setattr(bin_vision, "default_vision_client", forbidden)
+    client = TestClient(bin_photo_web.create_app(saved_photo_source=photos))
+    for _ in range(2):
+        response = client.post(
+            "/saved-photos/attach",
+            headers=ORIGIN,
+            data={
+                "photo_ids": PHOTO_IDS[0],
+                "target_bin_code": "AGR-014",
+            },
+        )
+        assert response.status_code == 200
+        assert "Selected photos are attached to AGR-014" in response.text
+    assert conn.execute(
+        "SELECT count(*) FROM captures WHERE raw_payload->'metadata' ? 'photo'"
+    ).fetchone() == (1,)
+    assert conn.execute("SELECT count(*) FROM bin_trip_events").fetchone() == (1,)
+    assert conn.execute("SELECT count(*) FROM colocation_observations").fetchone() == (0,)
 
 
 def test_configured_source_scopes_originals_and_retry_does_not_write_evidence(

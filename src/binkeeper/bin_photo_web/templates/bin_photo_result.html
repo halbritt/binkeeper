@@ -27,9 +27,10 @@
 
 <section class="panel panel-padded bin-photo-card" aria-labelledby="proposal-heading">
   <div class="bin-photo-card-header">
-    <h2 id="proposal-heading">Proposed label</h2>
-    <p class="bin-photo-card-copy">The model's proposal is advisory. Check the details against the bin.</p>
+    <h2 id="proposal-heading">{% if analysis_skipped %}Ready to review{% else %}Proposed label{% endif %}</h2>
+    <p class="bin-photo-card-copy">Your entries are kept. Check any suggestions against the bin.</p>
   </div>
+  {% if theme_provided %}<p class="field-help">Label kept as entered.</p>{% endif %}
   {% if proposal %}
   {% set pairs = [
     ('theme', proposal.theme),
@@ -43,8 +44,10 @@
 
   {% if proposal.summary %}<p>{{ proposal.summary }}</p>{% endif %}
 
-  <h3>Accepts</h3>
-  {% if proposal['items'] %}
+  <h3>Contents</h3>
+  {% if contents_provided %}
+  <p class="field-help">Contents kept as entered. Review them below.</p>
+  {% elif proposal['items'] %}
   <ul class="stack">
     {% for item in proposal['items'] %}
     <li>{{ item.label }} <span class="field-help">({{ item.confidence }})</span></li>
@@ -57,6 +60,8 @@
   <p class="field-help">This proposal is advisory — review the code, site, and contents,
     then create the bin.</p>
 
+  {% elif analysis_skipped %}
+  <p>Both fields were supplied, so photo analysis was skipped. Review your label and contents below.</p>
   {% elif label_error %}
   <p class="banner banner-warn" role="status">No label proposed this time: {{ label_error }}</p>
   {% if blob_refs and not store_error %}<p class="field-help">Your photos are safe in the vault.</p>{% endif %}
@@ -73,7 +78,10 @@
   <form method="post" action="{{ confirm_action }}" class="form-grid bin-photo-form"
         data-submit-form>
     <input type="hidden" name="photo_sha256" value="{{ blob_refs[0] if blob_refs else '' }}">
-    <input type="hidden" name="code_source" value="{{ 'the proposal' if proposal else 'owner entry after vision failure' }}">
+    {% for ref in blob_refs[1:] %}
+    <input type="hidden" name="additional_photo_sha256" value="{{ ref }}">
+    {% endfor %}
+    <input type="hidden" name="code_source" value="{{ 'the proposal' if proposal else 'owner entry' }}">
 
     <div class="grid-fit-180">
       {% call components.field("create_bin_code", "Bin code", "Check the suggested code or enter your own") %}
@@ -91,8 +99,8 @@
       {% endcall %}
     </div>
 
-    {% call components.field("create_theme", "Bin theme", "Saved in the catalog and used as the large label grab-word") %}
-      <input type="text" id="create_theme" name="theme" value="{{ proposal.theme if proposal else '' }}"
+    {% call components.field("create_theme", "Label", "The large heading printed on the label") %}
+      <input type="text" id="create_theme" name="theme" value="{{ proposed_theme or (proposal.theme if proposal else '') }}"
              placeholder="HAND TOOLS" required>
     {% endcall %}
 

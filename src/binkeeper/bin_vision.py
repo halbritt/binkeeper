@@ -427,6 +427,7 @@ def propose_bin_label(
     fail_on_error: bool = False,
     contents_only: bool = False,
     existing_theme: str | None = None,
+    theme_only: bool = False,
     max_workers: int = 1,
 ) -> BinLabelProposal:
     """Analyze photos for a label or contents additions, merging in upload order.
@@ -437,7 +438,15 @@ def propose_bin_label(
         raise BinVisionError("at least one photo is required")
     if max_workers < 1:
         raise ValueError("max_workers must be positive")
-    prompt = _build_contents_prompt(notes) if contents_only else _build_prompt(notes)
+    if contents_only and theme_only:
+        raise ValueError("select either contents_only or theme_only")
+    prompt = (
+        _build_contents_prompt(notes)
+        if contents_only
+        else _build_theme_prompt(notes)
+        if theme_only
+        else _build_prompt(notes)
+    )
     merged: dict[str, DetectedItem] = {}
     themes: list[str] = []
     summaries: list[str] = []
@@ -451,13 +460,15 @@ def propose_bin_label(
                 if isinstance(result, BinVisionError):
                     raise result
                 parsed = _parse_vision_json(result)
+                if theme_only and not _clean(parsed.get("theme")):
+                    raise BinVisionError("vision output did not include a label")
             except BinVisionError as exc:
                 if fail_on_error:
                     raise
                 failures.append(str(exc))
                 continue
             parsed_any = True
-            for item in _items_from(parsed):
+            for item in () if theme_only else _items_from(parsed):
                 key = _normalize(item.label)
                 if key and (key not in merged or item.confidence > merged[key].confidence):
                     merged[key] = item
@@ -465,7 +476,7 @@ def propose_bin_label(
             if theme:
                 themes.append(theme)
             summary = _clean(parsed.get("summary"))
-            if summary:
+            if summary and not theme_only:
                 summaries.append(summary)
     if not parsed_any:
         reason = "; ".join(dict.fromkeys(failures)) or "no usable vision output"
@@ -664,6 +675,16 @@ def _build_contents_prompt(notes: str | None) -> str:
         '{"items": [{"label": "short name", "traits": ["..."], "confidence": 0.0}], '
         '"summary": "one sentence about visible contents"}\n'
         "Use a confidence in [0,1]; lower it when the photo is unclear."
+    )
+
+
+def _build_theme_prompt(notes: str | None) -> str:
+    note_line = f"The owner's notes: {notes.strip()}\n" if notes and notes.strip() else ""
+    return (
+        "Propose a short main label for a physical storage bin from a photo.\n"
+        f"{note_line}"
+        "The owner has already supplied the contents. Do not list or revise the contents.\n"
+        'Respond with ONLY a JSON object in this shape: {"theme": "2-5 word bin label"}'
     )
 
 

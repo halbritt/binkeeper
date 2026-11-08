@@ -50,6 +50,8 @@ class SavedPhotoSource(Protocol):
 
     def load_photos(self, photo_ids: Sequence[str]) -> Sequence[SavedPhotoContent]: ...
 
+    def list_bins(self) -> Sequence[tuple[str, str]]: ...
+
 
 def selected_photo_ids(values: Sequence[str]) -> list[str]:
     try:
@@ -67,6 +69,22 @@ class ConfiguredSavedPhotos:
     def __init__(self, *, tenant_id: str, corpus_id: str) -> None:
         self.tenant_id = tenant_id
         self.corpus_id = corpus_id
+
+    def list_bins(self) -> list[tuple[str, str]]:
+        from binkeeper.bin_passport import load_bin_passports
+
+        try:
+            with connect(role="serving") as conn:
+                return [
+                    (bin.bin_code, bin.theme or "No label")
+                    for bin in load_bin_passports(
+                        conn,
+                        tenant_id=self.tenant_id,
+                        corpus_id=self.corpus_id,
+                    )
+                ]
+        except (ServingRoleUnavailableError, psycopg.Error) as exc:
+            raise SavedPhotosUnavailableError("Could not load the existing bins.") from exc
 
     def list_photos(self, *, offset: int, limit: int) -> list[SavedPhoto]:
         try:
@@ -140,3 +158,24 @@ class ConfiguredSavedPhotos:
             raise SavedPhotosUnavailableError(
                 "Could not read the saved photos from the vault. Try again."
             ) from exc
+
+
+def attach_photos_to_bin(
+    photos: Sequence[SavedPhotoContent],
+    bin_code: str,
+    *,
+    tenant_id: str,
+    corpus_id: str,
+) -> None:
+    from binkeeper.bin_manage import BinActionScope, append_saved_bin_photos
+    from binkeeper.bin_photo_media import validate_bin_photo
+
+    for photo in photos:
+        validate_bin_photo(photo.image)
+    with connect() as conn:
+        append_saved_bin_photos(
+            conn,
+            bin_code,
+            [photo.sha256 for photo in photos],
+            scope=BinActionScope(tenant_id, corpus_id),
+        )

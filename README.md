@@ -147,11 +147,18 @@ stays serial. The page returns before the advisory QR co-location scan finishes;
 if vision fails, it keeps the stored-photo reference and offers manual label
 entry through the same reviewed create/print action.
 
-To return to an earlier upload, choose **New label → Use saved photos**
-(`/saved-photos`). Select photos of one bin, choose its site, and select
-**Propose label**. Review the result, then choose **Create and print label**.
-Photos already attached to a bin offer a **Reprint** link. Retrying analysis
-reuses the saved originals without another upload or location observation.
+Open **Saved photos** (`/saved-photos`) to upload originals without starting
+analysis. Later, select photos and either **Attach photos** to an existing bin
+or create a new bin from them. Attaching photos preserves its label, contents
+and location; repeating the attachment does not add duplicate links. Creation
+attaches every selected photo, with review before registration or printing.
+
+Both new uploads and saved-photo creation offer optional **Label** and
+**Contents** fields. Enter your label and leave contents blank to select
+**Suggest contents**. Fill only contents to **Suggest label**, leave both blank
+to **Propose label**, or fill both to **Review label** without calling vision.
+Your entries survive analysis failures. Saved-photo analysis reuses the
+originals without another upload or location observation.
 
 `make check` runs the full verification sequence; the editable install is a
 prerequisite of each target. PostgreSQL acceptance tests require a disposable
