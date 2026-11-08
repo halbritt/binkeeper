@@ -32,6 +32,13 @@ surfaces:
   quick_label:
     states:
       form: {route: /quick-label, ready: h1}
+  photo_result:
+    states:
+      proposed: {route: /fixture/photo-result, ready: h1}
+      vision_failure: {route: "/fixture/photo-result?failure=true", ready: h1}
+      storage_and_vision_failure:
+        route: "/fixture/photo-result?failure=true&stored=false"
+        ready: h1
   register:
     states:
       form: {route: /register, ready: h1}

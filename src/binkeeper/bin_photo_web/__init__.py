@@ -14,6 +14,7 @@ terminated by Tailscale Serve). Served by the standalone BinKeeper service.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Final
 from urllib.parse import quote
@@ -22,6 +23,7 @@ from uuid import uuid4
 import psycopg
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import FormData, UploadFile
 
@@ -247,9 +249,7 @@ def create_app(
         view = await run_in_threadpool(
             _analyze, images=images, notes=notes, site=site, requested_code=requested_code
         )
-        if images:
-            await run_in_threadpool(_harvest_colocations, images)
-        return page_response(
+        response = page_response(
             chrome.render(
                 "bin_photo_result.html",
                 new_href=surface_path(normalized_base_path, "/"),
@@ -266,6 +266,9 @@ def create_app(
                 **view,
             )
         )
+        if images:
+            response.background = BackgroundTask(_harvest_colocations, images)
+        return response
 
     def _render_register(view: dict[str, object]) -> object:
         template = {
@@ -473,12 +476,21 @@ def _analyze(
 
     proposal: dict[str, object] | None = None
     label_error: str | None = None
-    from binkeeper.bin_vision import BinVisionError, default_vision_client, propose_bin_label
+    from binkeeper.bin_vision import (
+        BinVisionError,
+        GeminiVisionClient,
+        OpenRouterVisionClient,
+        default_vision_client,
+        propose_bin_label,
+    )
 
     try:
-        proposal = propose_bin_label(default_vision_client(), images, notes=notes).to_json()
+        client = default_vision_client()
+        workers = 3 if isinstance(client, OpenRouterVisionClient | GeminiVisionClient) else 1
+        proposal = propose_bin_label(client, images, notes=notes, max_workers=workers).to_json()
     except BinVisionError as exc:
         label_error = str(exc)
+        logging.getLogger(__name__).warning("BinKeeper label analysis failed: %s", exc)
 
     accepts = proposal.get("accepts") if isinstance(proposal, dict) else None
     proposed_contents = (

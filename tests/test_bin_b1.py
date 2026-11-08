@@ -44,8 +44,13 @@ def test_b1_command_is_bounded_and_timeout_is_unknown(monkeypatch: pytest.Monkey
         calls.append(command)
         assert kwargs["timeout"] == bin_b1.B1_TIMEOUT_S
         assert command[1:8] == [
-            "-m", "binkeeper.bin_b1_worker", "--address", "01:23:45:67:89:AB",
-            "--copies", "2", "--image"
+            "-m",
+            "binkeeper.bin_b1_worker",
+            "--address",
+            "01:23:45:67:89:AB",
+            "--copies",
+            "2",
+            "--image",
         ]
         with open(command[-1], "rb") as label_file:
             assert label_file.read() == payload

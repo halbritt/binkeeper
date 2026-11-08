@@ -7,7 +7,7 @@ captured or printed.
 
 Three backends implement the same ``VisionClient`` seam (ADR 0004 authorized
 the cloud export scope; ADR 0005 selected the default by benchmark): hosted
-``qwen/qwen3-vl-32b-instruct`` via OpenRouter (default), the Gemini API
+``qwen/qwen3.8-flash`` via OpenRouter (default), the Gemini API
 (first fallback), and the local Qwen3-VL model on peecee (Ollama,
 OpenAI-compatible), the no-cloud rollback. Cloud backends receive only the
 downscaled inference JPEG and prompt text. Each photo is analyzed in its own
@@ -23,8 +23,9 @@ import re
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from dataclasses import dataclass
 from typing import Final, Protocol
 
@@ -57,7 +58,7 @@ DEFAULT_OPENROUTER_ENDPOINT: Final[str] = os.environ.get(
     "BINKEEPER_BIN_VISION_OPENROUTER_ENDPOINT", "https://openrouter.ai/api/v1"
 )
 DEFAULT_OPENROUTER_MODEL: Final[str] = os.environ.get(
-    "BINKEEPER_BIN_VISION_OPENROUTER_MODEL", "qwen/qwen3-vl-32b-instruct"
+    "BINKEEPER_BIN_VISION_OPENROUTER_MODEL", "qwen/qwen3.8-flash"
 )
 DEFAULT_GEMINI_ENDPOINT: Final[str] = os.environ.get(
     "BINKEEPER_BIN_VISION_GEMINI_ENDPOINT",
@@ -226,11 +227,7 @@ class OllamaVisionClient:
             "temperature": 0,
             "max_tokens": max_tokens,
             "stream": False,
-            # Send both Ollama's top-level hint and the chat-template form. The
-            # current Qwen3-VL build may still expose reasoning, so the smaller
-            # model and bounded output remain the actual latency controls.
-            "think": False,
-            "chat_template_kwargs": {"enable_thinking": False},
+            **self._inference_options(),
             "response_format": {"type": "json_object"},
             "messages": [
                 {
@@ -294,6 +291,16 @@ class OllamaVisionClient:
                 continue
             return candidate
         return content or reasoning
+
+    def _inference_options(self) -> dict[str, object]:
+        return {"think": False, "chat_template_kwargs": {"enable_thinking": False}}
+
+
+class OpenRouterVisionClient(OllamaVisionClient):
+    """Interactive hosted vision with OpenRouter's own latency controls."""
+
+    def _inference_options(self) -> dict[str, object]:
+        return {"reasoning": {"enabled": False}, "provider": {"sort": "latency"}}
 
 
 class GeminiVisionClient:
@@ -397,7 +404,7 @@ def default_vision_client(provider: str | None = None) -> VisionClient:
                 "no OpenRouter API key configured; set BINKEEPER_OPENROUTER_API_KEY (or "
                 "OPENROUTER_API_KEY), or set BINKEEPER_BIN_VISION_PROVIDER=gemini|local"
             )
-        return OllamaVisionClient(
+        return OpenRouterVisionClient(
             endpoint=DEFAULT_OPENROUTER_ENDPOINT,
             model=DEFAULT_OPENROUTER_MODEL,
             api_key=key.strip(),
@@ -420,37 +427,46 @@ def propose_bin_label(
     fail_on_error: bool = False,
     contents_only: bool = False,
     existing_theme: str | None = None,
+    max_workers: int = 1,
 ) -> BinLabelProposal:
-    """Analyze photos for a new label or additions to an existing bin's contents."""
+    """Analyze photos for a label or contents additions, merging in upload order.
+
+    Set ``max_workers > 1`` only for clients safe to call concurrently.
+    """
     if not images:
         raise BinVisionError("at least one photo is required")
+    if max_workers < 1:
+        raise ValueError("max_workers must be positive")
     prompt = _build_contents_prompt(notes) if contents_only else _build_prompt(notes)
     merged: dict[str, DetectedItem] = {}
     themes: list[str] = []
     summaries: list[str] = []
     failures: list[str] = []
     parsed_any = False
-    for image in images:
-        # One bad photo (unreadable, model hiccup) must not sink the batch: skip
-        # it and keep going, raising only if NOT ONE photo yielded usable output.
-        try:
-            parsed = _parse_vision_json(client.analyze(prompt, image))
-        except BinVisionError as exc:
-            if fail_on_error:
-                raise
-            failures.append(str(exc))
-            continue
-        parsed_any = True
-        for item in _items_from(parsed):
-            key = _normalize(item.label)
-            if key and (key not in merged or item.confidence > merged[key].confidence):
-                merged[key] = item
-        theme = _clean(parsed.get("theme"))
-        if theme:
-            themes.append(theme)
-        summary = _clean(parsed.get("summary"))
-        if summary:
-            summaries.append(summary)
+    with closing(_analyze_photos(client, prompt, images, max_workers=max_workers)) as results:
+        for result in results:
+            # One bad photo (unreadable, model hiccup) must not sink the batch: skip
+            # it and keep going, raising only if NOT ONE photo yielded usable output.
+            try:
+                if isinstance(result, BinVisionError):
+                    raise result
+                parsed = _parse_vision_json(result)
+            except BinVisionError as exc:
+                if fail_on_error:
+                    raise
+                failures.append(str(exc))
+                continue
+            parsed_any = True
+            for item in _items_from(parsed):
+                key = _normalize(item.label)
+                if key and (key not in merged or item.confidence > merged[key].confidence):
+                    merged[key] = item
+            theme = _clean(parsed.get("theme"))
+            if theme:
+                themes.append(theme)
+            summary = _clean(parsed.get("summary"))
+            if summary:
+                summaries.append(summary)
     if not parsed_any:
         reason = "; ".join(dict.fromkeys(failures)) or "no usable vision output"
         raise BinVisionError(reason[:400])
@@ -473,6 +489,24 @@ def propose_bin_label(
         model_version=getattr(client, "model", DEFAULT_VISION_MODEL),
         photo_count=len(images),
     )
+
+
+def _analyze_photos(
+    client: VisionClient, prompt: str, images: Sequence[bytes], *, max_workers: int
+) -> Generator[str | BinVisionError]:
+    def analyze(image: bytes) -> str | BinVisionError:
+        try:
+            return client.analyze(prompt, image)
+        except BinVisionError as exc:
+            return exc
+
+    if max_workers == 1 or len(images) == 1:
+        yield from map(analyze, images)
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="bin-photo") as pool:
+            # Consume in upload order so summary selection and equal-confidence
+            # item merges do not depend on which provider request finishes first.
+            yield from pool.map(analyze, images)
 
 
 def _prepare_image(image: bytes, *, max_edge: int, quality: int) -> tuple[bytes, str]:
@@ -669,7 +703,7 @@ def _items_from(parsed: dict[str, object]) -> list[DetectedItem]:
 
 def _pick_theme(themes: Sequence[str], notes: str | None, items: Sequence[DetectedItem]) -> str:
     if themes:
-        return max(set(themes), key=themes.count)
+        return max(themes, key=themes.count)
     note = _clean(notes)
     if note:
         return note[:60]

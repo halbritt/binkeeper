@@ -16,8 +16,8 @@ legacy Engram calls are explicitly unavailable, not redirected (see
 writer, start a second writer, or copy live owner data into this Git
 repository.
 
-Since 2026-08-06 the interactive advisory-vision default is the hosted
-OpenRouter `qwen/qwen3-vl-32b-instruct` backend (ADR 0005), selected by
+The interactive advisory-vision default is the hosted
+OpenRouter `qwen/qwen3.8-flash` backend (ADR 0007, 2026-11-08), selected by
 `BINKEEPER_BIN_VISION_PROVIDER` (`openrouter` default; `gemini` and `local`
 remain the fallback and the no-cloud rollback). A nightly local-only
 peripheral-OCR location true-up is deployed as

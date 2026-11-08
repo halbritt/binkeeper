@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from threading import Event
+from threading import Event, Lock
 from urllib.request import Request
 
 import pytest
@@ -14,6 +14,7 @@ from binkeeper.bin_vision import (
     EnsembleVisionClient,
     GeminiVisionClient,
     OllamaVisionClient,
+    OpenRouterVisionClient,
     default_vision_client,
     propose_bin_label,
 )
@@ -100,6 +101,53 @@ def test_strict_proposal_rejects_one_unparseable_photo() -> None:
 
     with pytest.raises(BinVisionError, match="no JSON object"):
         propose_bin_label(client, [b"bad", b"good"], fail_on_error=True)
+
+
+def test_parallel_photos_are_bounded_and_merge_in_upload_order() -> None:
+    started = [Event() for _ in range(3)]
+    lock = Lock()
+    active = peak = 0
+
+    class Client:
+        model = "synthetic-cloud"
+
+        def analyze(self, prompt: str, image: bytes) -> str:
+            nonlocal active, peak
+            number = int(image)
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            try:
+                if number < 3:
+                    started[number].set()
+                    assert all(event.wait(2) for event in started), "photos ran serially"
+                if number == 4:
+                    raise BinVisionError("one unreadable photo")
+                return json.dumps(
+                    {
+                        "items": [{"label": "hex keys", "confidence": number / 10 + 0.5}],
+                        "theme": f"theme {number}",
+                        "summary": f"summary {number}",
+                    }
+                )
+            finally:
+                with lock:
+                    active -= 1
+
+    proposal = propose_bin_label(Client(), [str(i).encode() for i in range(5)], max_workers=3)
+
+    assert peak == 3
+    assert proposal.photo_count == 5
+    assert proposal.theme == "theme 0"
+    assert proposal.summary == "summary 0"
+    assert proposal.items[0].confidence == pytest.approx(0.8)
+
+
+@pytest.mark.parametrize("strict", [False, True])
+def test_parallel_photo_failures_are_reported(strict: bool) -> None:
+    client = _FakeVisionClient(["invalid JSON"])
+    with pytest.raises(BinVisionError, match="no JSON object"):
+        propose_bin_label(client, [b"a", b"b"], max_workers=2, fail_on_error=strict)
 
 
 def test_all_unparseable_output_raises() -> None:
@@ -256,6 +304,31 @@ def test_ollama_request_asks_for_no_thinking_and_json(
     assert payload["think"] is False
     assert payload["response_format"] == {"type": "json_object"}
     assert payload["max_tokens"] == 768
+    assert "provider" not in payload
+    assert "reasoning" not in payload
+
+
+def test_openrouter_uses_hosted_reasoning_and_routing_controls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[dict[str, object]] = []
+
+    def fake_urlopen(request: Request, *, timeout: float) -> _FakeHttpResponse:
+        captured.append(_request_payload(request))
+        return _FakeHttpResponse({"content": "invalid JSON"} if len(captured) == 1 else None)
+
+    monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setenv("BINKEEPER_OPENROUTER_API_KEY", "synthetic-key")
+
+    propose_bin_label(default_vision_client("openrouter"), [b"synthetic-image"])
+
+    assert len(captured) == 2
+    for payload in captured:
+        assert payload["reasoning"] == {"enabled": False}
+        assert payload["provider"] == {"sort": "latency"}
+        assert payload["response_format"] == {"type": "json_object"}
+        assert "think" not in payload
+        assert "chat_template_kwargs" not in payload
 
 
 def test_ollama_uses_reasoning_json_when_content_is_non_json(
@@ -467,7 +540,7 @@ def test_default_vision_client_selects_the_configured_backend(
 ) -> None:
     monkeypatch.setenv("BINKEEPER_OPENROUTER_API_KEY", "synthetic-key")
     openrouter = default_vision_client("openrouter")
-    assert isinstance(openrouter, OllamaVisionClient)
+    assert isinstance(openrouter, OpenRouterVisionClient)
     assert openrouter.endpoint == "https://openrouter.ai/api/v1"
     assert openrouter.api_key == "synthetic-key"
     assert isinstance(default_vision_client("gemini"), GeminiVisionClient)

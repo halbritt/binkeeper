@@ -15,6 +15,7 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+from starlette.types import Message, Receive, Scope, Send
 
 from binkeeper import bin_photo_web
 from binkeeper.bin_inventory import bin_where
@@ -986,6 +987,34 @@ def test_post_renders_proposal(monkeypatch) -> None:
     assert "stored" in body  # storage is reported
 
 
+def test_photo_response_is_sent_before_advisory_colocation_harvest(monkeypatch) -> None:
+    events: list[str] = []
+    monkeypatch.setattr(bin_photo_web, "_analyze", lambda **_: _canned_view())
+
+    def harvest(images: list[bytes]) -> None:
+        assert images == [_ONE_PIXEL_JPEG]
+        events.append("harvest")
+
+    monkeypatch.setattr(bin_photo_web, "_harvest_colocations", harvest)
+    app = bin_photo_web.create_app(host="127.0.0.1", port=8765)
+
+    async def observed_app(scope: Scope, receive: Receive, send: Send) -> None:
+        async def observed_send(message: Message) -> None:
+            await send(message)
+            if message["type"] == "http.response.body" and not message.get("more_body"):
+                events.append("response sent")
+
+        await app(scope, receive, observed_send)
+
+    response = TestClient(observed_app).post(
+        "/",
+        files={"photos": ("bin.jpg", _ONE_PIXEL_JPEG, "image/jpeg")},
+        headers=_LOOPBACK_ORIGIN,
+    )
+    assert response.status_code == 200
+    assert events == ["response sent", "harvest"]
+
+
 def test_proposal_offers_create_action(monkeypatch) -> None:
     # The bug: the proposal page dead-ended with no way to accept it. It must now
     # offer an "OK / create this bin" action wired to the registration confirm route,
@@ -1184,6 +1213,36 @@ def test_post_reports_stored_photos_even_when_label_fails(monkeypatch) -> None:
     assert "2 of 2 photo(s) stored" in body
     assert "context length exceeded" in body
     assert "safe in the vault" in body
+    assert 'action="/register/confirm"' in body
+    assert 'name="photo_sha256" value="aaa"' in body
+    assert 'name="theme" value=""' in body
+    assert "Create and print label" in body
+
+
+def test_photo_and_vision_failure_does_not_claim_photos_are_safe(monkeypatch) -> None:
+    view = {
+        **_canned_view(),
+        "proposal": None,
+        "blob_refs": [],
+        "store_error": "vault unavailable",
+        "label_error": "model unavailable",
+    }
+    monkeypatch.setattr(bin_photo_web, "_analyze", lambda **_: view)
+    response = _client().post(
+        "/",
+        files={"photos": ("bin.jpg", _ONE_PIXEL_JPEG, "image/jpeg")},
+        headers=_LOOPBACK_ORIGIN,
+    )
+    assert response.status_code == 200
+    assert "Photos were not stored" in response.text
+    assert "safe in the vault" not in response.text
+
+
+def test_empty_photo_drop_does_not_offer_registration() -> None:
+    response = _client().post("/", headers=_LOOPBACK_ORIGIN)
+    assert response.status_code == 200
+    assert "No photos were uploaded" in response.text
+    assert 'action="/register/confirm"' not in response.text
 
 
 def test_post_cross_origin_is_refused(monkeypatch) -> None:

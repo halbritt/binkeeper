@@ -26,7 +26,12 @@ from pathlib import Path
 
 import psycopg
 
-from binkeeper.bin_vision import GeminiVisionClient, OllamaVisionClient, VisionClient
+from binkeeper.bin_vision import (
+    GeminiVisionClient,
+    OllamaVisionClient,
+    OpenRouterVisionClient,
+    VisionClient,
+)
 from binkeeper.bin_vision_bench import (
     BenchPhoto,
     parse_owner_items,
@@ -80,7 +85,7 @@ def _build_client(spec: str, timeout_s: float) -> tuple[str, VisionClient]:
         key = os.environ.get("BINKEEPER_OPENROUTER_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
         if not key:
             raise SystemExit("openrouter spec needs OPENROUTER_API_KEY in the environment")
-        return spec, OllamaVisionClient(
+        return spec, OpenRouterVisionClient(
             endpoint="https://openrouter.ai/api/v1",
             model=rest,
             timeout_s=timeout_s,

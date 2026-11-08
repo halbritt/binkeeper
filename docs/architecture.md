@@ -162,18 +162,19 @@ owner-approved `create_new_bin` decisions.
 ### Vision, geofence, and harvests (`bin_vision`, `bin_geo`, `bin_harvest`, `bin_ocr_harvest`, `sites`, `bin_register`, `bin_label`, `bin_vision_bench`)
 
 All vision flows share one `VisionClient` seam with three backends selected
-by `BINKEEPER_BIN_VISION_PROVIDER`: `openrouter` (default, ADR 0005),
+by `BINKEEPER_BIN_VISION_PROVIDER`: `openrouter` (default, ADR 0005/0007),
 `gemini` (fallback), `local` (peecee Ollama, the no-cloud rollback). The
-OpenAI-compatible client doubles as the OpenRouter client — an API key just
-adds a bearer header. Model names are configuration, never code (two Gemini
-models retired mid-project). The architecture is two-pass by owner
+OpenRouter client shares the local client's OpenAI-compatible transport,
+adding bearer authentication and provider-specific inference controls. Model
+pins are environment configuration with package defaults (two Gemini models
+retired mid-project). The architecture is two-pass by owner
 constraint — interactive photo-drop latency is binding: the deployed default
-runs ~4.3 s and the 13–21 s ensembles are excluded from the first pass
-(ADR 0005):
+runs ~4.6 s per photo in the November 2026 sample (ADR 0007), and the
+13–21 s ensembles are excluded from the first pass (ADR 0005):
 
 | Lane | Model | Runs | Exports |
 |---|---|---|---|
-| Interactive first pass (photo drop) | hosted `qwen/qwen3-vl-32b-instruct` via OpenRouter | on photo drop, advisory label proposal | downscaled JPEG + prompt (ADR 0004/0005) |
+| Interactive first pass (photo drop) | hosted `qwen/qwen3.8-flash` via OpenRouter | on photo drop, advisory label proposal | downscaled JPEG + prompt (ADR 0004/0005/0007) |
 | Nightly peripheral-OCR true-up | local `qwen3-vl:32b` on peecee | `binkeeper-ocr-harvest.timer`, 03:30 | nothing (pinned `--local-only`) |
 | Label-drift review queue (ADR 0006) | `claude-opus-5` + local `qwen3-vl:8b` union ensemble | `binkeeper-label-drift.timer`, 04:00, input-keyed | downscaled JPEG + prompt via OpenRouter to Anthropic |
 
@@ -199,6 +200,11 @@ records, model/runtime provenance, and hashes binding them to the private raw
 evidence are append-only under [`docs/benchmarks/`](benchmarks/). ADR 0005's
 default was selected this way after the benchmark showed ADR 0004's
 anecdote-chosen default scored worst of the live candidates.
+
+ADR 0007 replaces the retired Qwen3-VL hosted model. The interactive OpenRouter
+client disables reasoning through OpenRouter's API and requests latency-sorted
+provider routing. Cloud photo drops run at most three analyses concurrently;
+local and nightly callers remain serial. Results merge in upload order.
 
 ### Media and durability (`blob_vault`, `bin_photo_media`, `backup`, `restore_drill`, `transfer`)
 
@@ -231,8 +237,10 @@ thumbnails). Reviewed POST actions sit behind a strict origin guard with a
 paired-origin allowlist and a legible refusal contract. Reviewed actions
 carry server-rendered request IDs, so replays are no-ops and divergent reuse
 errors out. The photo drop stores the
-original bytes first, as the guaranteed action; vision proposal failure is a
-calm, retryable label error, never a lost photo.
+original bytes first, as the guaranteed action. Vision failure keeps the
+stored-photo reference and offers manual label entry. The advisory QR
+co-location harvest runs after the response, in the same service process;
+it owns its database connection and remains best effort across service stops.
 
 The quick label path never calls vision or requires a photo. It requires the
 human's theme and site, assigns the next site-prefixed code under a database
@@ -296,6 +304,7 @@ lane separately rolls back with `BINKEEPER_BIN_VISION_PROVIDER=local`.
 | [0004](adr/0004-cloud-vision-backend.md) | The advisory vision lane may export downscaled JPEG + prompt to a cloud provider |
 | [0005](adr/0005-benchmarked-vision-default.md) | Benchmark-selected OpenRouter Qwen3-VL 32B interactive default |
 | [0006](adr/0006-label-drift-review-queue.md) | Async label-drift proposals with an owner review queue (accepted; slices `BINK-42`..`BINK-44`) |
+| [0007](adr/0007-interactive-vision-repair.md) | Replace retired interactive vision model; bound parallel photo analysis and retain manual recovery |
 
 ## Known seams and rough edges
 

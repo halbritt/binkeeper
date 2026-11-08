@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from io import BytesIO
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -15,11 +16,13 @@ from fastapi.responses import JSONResponse
 from PIL import Image, ImageDraw
 from starlette.responses import Response
 
+from binkeeper import bin_photo_web
 from binkeeper.bin_catalog_web import create_app as create_catalog_app
 from binkeeper.bin_label_drift import LabelDriftQueueEntry
 from binkeeper.bin_passport import BinPassport
 from binkeeper.bin_photo_web import create_app as create_authoring_app
 from binkeeper.bin_photo_web.manage import ManageView
+from binkeeper.web.chrome import build_surface_chrome, page_response
 
 
 def _passport(code: str, theme: str, contents: str, site: str) -> BinPassport:
@@ -118,6 +121,46 @@ def create_app(port: int) -> FastAPI:
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             return JSONResponse({"detail": "synthetic fixture is read-only"}, status_code=405)
         return await call_next(request)
+
+    @app.get("/fixture/photo-result")
+    def photo_result(failure: bool = False, stored: bool = True) -> Response:
+        chrome = build_surface_chrome(
+            "bin_photo", extra_template_dir=Path(bin_photo_web.__file__).parent / "templates"
+        )
+        return page_response(
+            chrome.render(
+                "bin_photo_result.html",
+                new_href="/",
+                confirm_action="/register/confirm",
+                align_action="/printer/align",
+                can_align_label=True,
+                b1_available=True,
+                catalog_url="/bins/",
+                photo_url="/",
+                register_url="/register",
+                stash_url="/stash",
+                binkeeper_section="photo",
+                surface_label="Bin photo drop",
+                photo_count=1,
+                blob_refs=["synthetic-photo"] if stored else [],
+                store_error=None if stored else "Vault unavailable",
+                proposal=None
+                if failure
+                else {
+                    "theme": "Precision tools",
+                    "owner_phrase": "Keep these together",
+                    "photo_count": 1,
+                    "model_version": "synthetic-model",
+                    "summary": "Hex keys and calipers",
+                    "items": [{"label": "hex keys", "confidence": 0.9}],
+                },
+                label_error="Vision model is unavailable" if failure else None,
+                site="alameda-garage",
+                suggested_bin_code="AGR-023",
+                all_sites=["alameda-garage", "oakland-fab-east"],
+                proposed_contents="" if failure else "hex keys, calipers",
+            )
+        )
 
     app.mount(
         "/bins",

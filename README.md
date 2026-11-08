@@ -13,7 +13,7 @@ BinKeeper is now the live physical-inventory authority. Engram retains frozen
 historical evidence and migrations, but its runtime, compatibility names, and
 direct inventory writer were retired under `BINK-13` after the accepted
 consumer and rollback-window gates. The advisory vision lane with its
-benchmark-selected cloud default (ADR 0005) and the nightly local-only
+benchmark-selected cloud default (ADR 0005, renewed in ADR 0007) and the nightly local-only
 peripheral-OCR true-up timer (`binkeeper-ocr-harvest.timer`) are also
 deployed. ADR 0006's input-keyed Opus 5 + local Qwen3-VL 8B label-drift pass,
 rebuildable owner review queue, and append-only accept/dismiss workflow are
@@ -46,7 +46,9 @@ BinKeeper-owned key while retaining both source and target manifests.
   the advisory vision lane may send the downscaled inference JPEG and its
   prompt text to the configured cloud vision provider. Nothing else leaves.
   The default provider inside that unchanged scope is benchmark-selected in
-  [ADR 0005](docs/adr/0005-benchmarked-vision-default.md). The deployed
+  [ADR 0005](docs/adr/0005-benchmarked-vision-default.md), with the current
+  `qwen/qwen3.8-flash` pin and latency controls in
+  [ADR 0007](docs/adr/0007-interactive-vision-repair.md). The deployed
   [ADR 0006](docs/adr/0006-label-drift-review-queue.md) nightly ensemble also
   sends that bounded inference input through OpenRouter to Anthropic.
 - Raw captures, moves, observations, receipts, and owner decisions are
@@ -139,6 +141,11 @@ the main label and site; BinKeeper assigns the next site code, creates the bin
 and its initial placement, and submits one local print job. CUPS remains the
 default, with the Niimbot B1 offered per print. A repeated submission does not
 print twice. The catalog and bin page remind you to add a contents photo later.
+
+The photo flow analyzes up to three cloud requests concurrently. Local vision
+stays serial. The page returns before the advisory QR co-location scan finishes;
+if vision fails, it keeps the stored-photo reference and offers manual label
+entry through the same reviewed create/print action.
 
 `make check` runs the full verification sequence; the editable install is a
 prerequisite of each target. PostgreSQL acceptance tests require a disposable

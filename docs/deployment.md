@@ -18,14 +18,21 @@ owner-local vault configuration; they never belong in the environment file or
 repository.
 
 The environment file also selects the advisory vision backend. The interactive
-default is the hosted OpenRouter backend (ADR 0005, model
-`qwen/qwen3-vl-32b-instruct`), which exports only the downscaled inference
+default is the hosted OpenRouter backend (ADR 0005/0007, model
+`qwen/qwen3.8-flash`), which exports only the downscaled inference
 JPEG and prompt text under ADR 0004's scope; its API key lives in the
 environment file. Rollback is one line plus a service restart:
 `BINKEEPER_BIN_VISION_PROVIDER=gemini` (cloud fallback) or `local` (no
 cloud). The service sandbox keeps the host filesystem read-only except for
 the dedicated `/var/lib/binkeeper/blobs` vault root; backup artifacts remain
 writable only by the separate backup unit.
+
+An existing installation must also update its explicit
+`BINKEEPER_BIN_VISION_OPENROUTER_MODEL` pin when installing the ADR 0007
+wheel; the environment overrides the package default. The previous
+`qwen/qwen3-vl-32b-instruct` pin returns HTTP 404 following its October 9,
+2026 retirement. Do not restore that pin during rollback. Only the interactive
+service needs restarting; nightly model pins are separate.
 
 Browser label printing remains unavailable until a local printer target is
 configured: `BINKEEPER_BIN_LABEL_CUPS_QUEUE` for the default raw CUPS path, or
