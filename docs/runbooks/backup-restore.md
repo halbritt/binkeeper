@@ -97,3 +97,34 @@ verified artifact. The Engram-writer rollback window closed with the `BINK-13`
 retirement (2026-07-18); the Engram writer must not be re-enabled, and any
 further authority change requires a new owner-accepted work item. Never
 rotate/destroy keys or delete Engram evidence during incident recovery.
+
+## Filesystem save and recovery contract
+
+BINK-59 keeps the existing plaintext-addressed key, AES-GCM envelope and metadata
+schema. `put_blob` holds the digest lock and metadata append in one transaction;
+when an outer transaction exists, its caller must commit before reporting success.
+The filesystem store flushes its unique temporary file, publishes with rename,
+and flushes affected directory entries before the metadata insert. Any flush
+failure aborts metadata publication. Duplicate saves authenticate the existing
+ciphertext and compare both hashes before returning success.
+
+| Observed state | Meaning and disposition |
+| --- | --- |
+| No metadata or published object | No accepted save; an explicit upload can retry. |
+| Unpublished temporary file | Interrupted write; never a readable original. Preserve for diagnosis; no automated cleanup of old files is introduced. |
+| Published ciphertext, no metadata | Orphan from interrupted publication/transaction. Do not claim it is saved or delete it automatically. An explicit retry of the same original can publish a new authenticated envelope and metadata. |
+| Metadata and authenticated object | Known-good readable original. Duplicate upload verifies it without rewriting evidence. |
+| Metadata, missing or corrupt object | Unresolved save failure. Reads and duplicate uploads fail. Keep the metadata and artifacts; recover byte-exact ciphertext from an authenticated backup using the existing recovery procedure. Do not silently replace its nonce/hash metadata. |
+
+The separate-process experiment and checksums are recorded in
+[the repair verification](../verification/architecture-repairs-2026-11-09.md#bink-59-vault-publication-and-recovery)
+and its synthetic JSON artifact. It killed the writer before/after file publication
+and before/after the enclosing DB commit. These tests establish process-restart
+behavior on the test host, not physical power-loss survival. Successful save depends
+on PostgreSQL's durability configuration and on the filesystem/controller honoring
+flushes. No hardware power-cut evidence or guarantee against media loss is claimed.
+The BinKeeper maintainer owns recovery and any later hardware-level acceptance;
+keep authenticated backups and offline keys intact. No format migration, key
+rotation, owner evidence rewrite or production garbage collection is part of this
+repair. Older readers can read the unchanged format; an older writer would restore
+the missing-object and locking defects, so prefer a forward fix.

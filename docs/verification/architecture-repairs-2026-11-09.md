@@ -186,6 +186,41 @@ were inspected; preserved fields, stored-photo status and manual/retry actions a
 visible. A final copy pass removes an overly broad safety claim and clarifies that
 confirmation, rather than rendering the form, saves bin details.
 
-Final copy-only UIPass run `75a426fb-7295-40e3-9c39-f53aac21bc99` passed 27 result
+Final copy-only UIPass run `75a426fb-7295-40e3-9c39-f53aac21bc99` passed 24 result
 cases without findings; busy phone/desktop screenshots were inspected again.
 The affected web/service tests passed 81 cases after the copy change.
+
+## BINK-59: vault publication and recovery
+
+Base: `7c192ec`, same repository and `master`. Five synthetic termination windows
+were run before implementation. Unpublished work had no metadata; publication
+before commit left an orphan; committed ciphertext authenticated after restart.
+Explicit retry recovered the orphan without rewriting accepted evidence. Additional
+regressions reproduced duplicate-save success with missing/corrupt ciphertext,
+unexercised flush failures, and a four-writer autocommit race. No owner-data loss
+is inferred from these tests.
+
+A separate implementation checkpoint was recorded in BINK-59 after those results
+and before changing the writer. The repair keeps keys, encryption and metadata
+formats unchanged. It owns the transaction around the digest lock, validates
+existing objects before duplicate success, and flushes the temporary file and
+publication directories before metadata insertion. Missing/corrupt evidence is
+refused rather than silently rewritten; orphan cleanup is not added.
+
+The repaired targeted run passed **14 cases** (10 vault and 4 backup), including
+file/directory flush failures and four concurrent writers. The existing encrypted,
+HMAC-authenticated PostgreSQL/blob restore drill passed with creation and print
+receipts. A pre-repair module extracted from the previously verified wheel read
+new output, and the new reader authenticated old output and replayed its metadata.
+Both directions left exactly two synthetic blob rows. The compatibility database
+and temporary vault were removed. Probe hashes/states are preserved in
+[vault-recovery-2026-11-09.json](vault-recovery-2026-11-09.json).
+
+The runbook enumerates known-good, unpublished, orphan and missing/corrupt states.
+Physical power-loss behavior remains unmeasured; filesystem flush success and a
+process-kill experiment do not verify the storage controller. Production keys,
+originals and existing backups were not changed by these experiments.
+
+The complete BINK-59 `make check` passed **694 tests**, **20 migration cases**,
+lint, type checks and wheel verification. The new writer does not change the
+backup or ciphertext format. Deployment and installed front checks follow below.

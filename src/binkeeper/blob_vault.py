@@ -8,6 +8,7 @@ import hmac
 import ipaddress
 import json
 import os
+import tempfile
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
@@ -85,10 +86,33 @@ class FilesystemBlobStore:
 
     def put(self, object_key: str, data: bytes) -> None:
         path = self._path(object_key)
+        # Persist new directory entries as well as the renamed object. An existing
+        # root need not be created by this store; include its first existing parent.
+        directories = [path.parent]
+        parent = path.parent
+        while not parent.exists():
+            parent = parent.parent
+            directories.append(parent)
         path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(".partial")
-        temporary.write_bytes(data)
-        os.replace(temporary, path)
+        with tempfile.NamedTemporaryFile(
+            dir=path.parent, prefix=f".{path.name}.", suffix=".partial", delete=False
+        ) as output:
+            temporary = Path(output.name)
+            try:
+                output.write(data)
+                output.flush()
+                os.fsync(output.fileno())
+                os.replace(temporary, path)
+                for directory in directories:
+                    fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+                    try:
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
+            finally:
+                # Only this writer's unpublished temporary file is disposable.
+                # A published orphan remains available for diagnosis/retry.
+                temporary.unlink(missing_ok=True)
 
     def get(self, object_key: str) -> bytes:
         try:
@@ -223,7 +247,35 @@ def put_blob(
     tenant_id: str = DEFAULT_BLOB_TENANT_ID,
     corpus_id: str = DEFAULT_BLOB_CORPUS_ID,
 ) -> BlobRecord:
-    """Encrypt one blob and append its metadata idempotently."""
+    """Publish ciphertext and append metadata under one transaction/lock.
+
+    When called inside another transaction, success still requires that caller
+    to commit. A duplicate is successful only after the existing object verifies.
+    """
+    with conn.transaction():
+        return _put_blob(
+            conn,
+            store,
+            data,
+            key=key,
+            key_ref=key_ref,
+            content_type=content_type,
+            tenant_id=tenant_id,
+            corpus_id=corpus_id,
+        )
+
+
+def _put_blob(
+    conn: psycopg.Connection,
+    store: BlobStore,
+    data: bytes,
+    *,
+    key: bytes,
+    key_ref: str,
+    content_type: str | None,
+    tenant_id: str,
+    corpus_id: str,
+) -> BlobRecord:
     _require_key(key)
     if not key_ref.strip():
         raise BlobVaultError("key_ref is required")
@@ -238,6 +290,7 @@ def put_blob(
         (tenant_id, corpus_id, digest),
     ).fetchone()
     if existing is not None:
+        open_blob(conn, store, digest, key=key, tenant_id=tenant_id, corpus_id=corpus_id)
         return BlobRecord(digest, object_key, int(existing[0]), True)
 
     nonce = os.urandom(12)

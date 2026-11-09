@@ -208,10 +208,13 @@ already knows, and can therefore refresh known bins but never mint one.
 Printed labels default to pure TSPL rendering for the CUPS printer. The owner
 can select a 384×240 PNG for the 50×30 mm Niimbot B1 on each print action.
 Both carry a QR of the bare bin code, a human
-code, and a base-36 check badge. Existing-bin reprints append a durable v2
-print-intent capture with target, format, and payload hash before printer I/O;
-historical v1 TSPL intents stay immutable. Replays never reprint, and a CUPS
-timeout or uncertain B1 completion is reported "unknown", never retried.
+code, and a base-36 check badge. Photo creation, quick labels and existing-bin
+reprints share a durable v3 print intent with target, format, copies and payload
+hash, committed before printer I/O. Observed outcomes are separate append-only
+captures; missing outcomes remain unresolved. Historical v1/v2 intents stay
+readable and suppress replay. The management page shows recent requests without
+claiming paper completion. Timeout or uncertain B1 completion is unknown and
+never automatically retried.
 
 The benchmark harness (`scripts/vision_bench.py`) scores candidate backends
 over the owner's real photo drops through the production `analyze` seam;
@@ -235,7 +238,16 @@ Local and nightly photo iteration remains serial. Results merge in upload order.
 Photos live as content-addressed AES-256-GCM ciphertext in the blob vault
 (filesystem or local/tailnet Garage S3 — the store constructor hard-rejects
 non-local endpoints). `open_blob` verifies ciphertext hash, AEAD tag, and
-plaintext hash, in that order. Thumbnails are derived per request from
+plaintext hash, in that order. Duplicate saves now perform that same verification
+before reporting success. Filesystem publication flushes the temporary file before
+rename, then the affected directory entries before metadata insertion. The digest
+lock and metadata append share a transaction even for autocommit callers. A caller
+with an enclosing transaction must commit before acknowledging save success.
+Missing/corrupt objects fail visibly and retain their metadata for authenticated
+recovery; published orphans are not garbage-collected. See the
+[save contract](runbooks/backup-restore.md#filesystem-save-and-recovery-contract)
+for the process-failure evidence and limits of host-failure guarantees.
+Thumbnails are derived per request from
 decrypted originals and carry no EXIF. Nightly backups are atomic artifacts:
 a chunk-encrypted `pg_dump` sharing one repeatable-read snapshot with an
 HMAC-signed manifest of every protected dimension (row counts and seals,

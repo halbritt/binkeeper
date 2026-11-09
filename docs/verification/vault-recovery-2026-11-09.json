@@ -1,0 +1,97 @@
+{
+  "fixture": "Synthetic immutable vault original",
+  "base_sha": "7c192ec",
+  "method": "separate process os._exit(23); live host remains running",
+  "before": [
+    {
+      "point": "before_write",
+      "published": false,
+      "metadata": 0,
+      "plaintext_sha256": "76cd63ee4825f3cd1ff8ab6c9332be15f7346872b128dfcd9e1f222b6c971cc5",
+      "ciphertext_sha256": null
+    },
+    {
+      "point": "before_publish",
+      "published": false,
+      "metadata": 0,
+      "plaintext_sha256": "76cd63ee4825f3cd1ff8ab6c9332be15f7346872b128dfcd9e1f222b6c971cc5",
+      "ciphertext_sha256": null
+    },
+    {
+      "point": "after_publish",
+      "published": true,
+      "metadata": 0,
+      "plaintext_sha256": "76cd63ee4825f3cd1ff8ab6c9332be15f7346872b128dfcd9e1f222b6c971cc5",
+      "ciphertext_sha256": "f3c3a5cd2c2eb95e6db6345296c585effbdfaba8c1a5923d53b7463e23c85fd1"
+    },
+    {
+      "point": "before_commit",
+      "published": true,
+      "metadata": 0,
+      "plaintext_sha256": "76cd63ee4825f3cd1ff8ab6c9332be15f7346872b128dfcd9e1f222b6c971cc5",
+      "ciphertext_sha256": "d085cee63c015f05c350be529590efa9ba387e6e0916fdaa2161717d2fe12883"
+    },
+    {
+      "point": "after_commit",
+      "published": true,
+      "metadata": 1,
+      "plaintext_sha256": "76cd63ee4825f3cd1ff8ab6c9332be15f7346872b128dfcd9e1f222b6c971cc5",
+      "ciphertext_sha256": "e53e426bd5894524778b77d4e3592d75c2de1c6add65dcce5a718e890487650f"
+    }
+  ],
+  "after": [
+    {
+      "point": "before_write",
+      "published": false,
+      "metadata": 0,
+      "plaintext_sha256": "76cd63ee4825f3cd1ff8ab6c9332be15f7346872b128dfcd9e1f222b6c971cc5",
+      "ciphertext_sha256": null
+    },
+    {
+      "point": "before_publish",
+      "published": false,
+      "metadata": 0,
+      "plaintext_sha256": "76cd63ee4825f3cd1ff8ab6c9332be15f7346872b128dfcd9e1f222b6c971cc5",
+      "ciphertext_sha256": null
+    },
+    {
+      "point": "after_publish",
+      "published": true,
+      "metadata": 0,
+      "plaintext_sha256": "76cd63ee4825f3cd1ff8ab6c9332be15f7346872b128dfcd9e1f222b6c971cc5",
+      "ciphertext_sha256": "31a45df32ae36f7af5499085440e47e7287a1efad17cd52bf942155900e64a58"
+    },
+    {
+      "point": "before_commit",
+      "published": true,
+      "metadata": 0,
+      "plaintext_sha256": "76cd63ee4825f3cd1ff8ab6c9332be15f7346872b128dfcd9e1f222b6c971cc5",
+      "ciphertext_sha256": "9229d1e8b82540b0effd6a6a4cff4f38057460b4b43f5faed384d233a707c25d"
+    },
+    {
+      "point": "after_commit",
+      "published": true,
+      "metadata": 1,
+      "plaintext_sha256": "76cd63ee4825f3cd1ff8ab6c9332be15f7346872b128dfcd9e1f222b6c971cc5",
+      "ciphertext_sha256": "a81b87f4648427b53065e9910ecd285014c2911152e38eaa0c08b0380628b386"
+    }
+  ],
+  "before_regressions": [
+    "missing duplicate incorrectly succeeds",
+    "corrupt duplicate incorrectly succeeds",
+    "flush failure not exercised",
+    "autocommit writers race"
+  ],
+  "after_targeted_result": "14 passed (10 vault, 4 backup)",
+  "compatibility": {
+    "old_writer_new_reader": true,
+    "new_writer_old_reader": true,
+    "old_metadata_replay": true,
+    "metadata_rows": 2
+  },
+  "limits": [
+    "Not a physical power-cut test",
+    "No production vault inspection or mutation",
+    "OS flush success does not verify controller/drive honesty"
+  ]
+}
