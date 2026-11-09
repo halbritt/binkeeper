@@ -64,7 +64,12 @@ def test_unknown_corrupt_and_interrupted_status_do_not_block_catalog(tmp_path):
     app = create_app(
         passport_loader=lambda: [], advisory_status_loader=lambda: load_status(path, now=START)
     )
-    for content in (None, "broken json", '{"state":"success","last_success":"bad-time"}'):
+    for content in (
+        None,
+        "broken json",
+        '{"state":[]}',
+        '{"state":"success","last_success":"bad-time"}',
+    ):
         if content:
             path.write_text(content)
         response = TestClient(app).get("/")

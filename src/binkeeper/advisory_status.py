@@ -63,7 +63,11 @@ def status_path() -> Path:
 
 def _read(path: Path) -> dict[str, str | None]:
     value = json.loads(path.read_text())
-    if not isinstance(value, dict) or value.get("state") not in {"running", "success", "failed"}:
+    if (
+        not isinstance(value, dict)
+        or not isinstance(value.get("state"), str)
+        or value["state"] not in {"running", "success", "failed"}
+    ):
         raise ValueError("invalid advisory status")
     for field in ("started_at", "last_success", "last_failure"):
         timestamp = value.get(field)
