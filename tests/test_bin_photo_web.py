@@ -140,6 +140,8 @@ def test_reviewed_creation_attaches_every_selected_saved_photo(
         "/register/confirm",
         headers=_LOOPBACK_ORIGIN,
         data={
+            "operation": "create",
+            "action_id": "2ad7b5aa-541b-4fc7-ab73-d3a23e499655",
             "bin_code": "AGR-123",
             "site": "alameda-garage",
             "theme": "MY WORKBENCH",
@@ -169,6 +171,8 @@ def test_invalid_extra_photo_rolls_back_bin_creation(
         "/register/confirm",
         headers=_LOOPBACK_ORIGIN,
         data={
+            "operation": "create",
+            "action_id": "2ad7b5aa-541b-4fc7-ab73-d3a23e499655",
             "bin_code": "AGR-123",
             "site": "alameda-garage",
             "theme": "MY WORKBENCH",
@@ -178,7 +182,7 @@ def test_invalid_extra_photo_rolls_back_bin_creation(
             "print_label": "0",
         },
     )
-    assert "Could not register" in response.text
+    assert "A selected photo is not available" in response.text
     assert conn.execute("SELECT count(*) FROM captures").fetchone() == (0,)
     assert conn.execute("SELECT count(*) FROM bin_trip_events").fetchone() == (0,)
 
@@ -1364,7 +1368,13 @@ def test_register_confirmed_view_renders_done(monkeypatch) -> None:
     monkeypatch.setattr(bin_photo_web, "_register_confirmed", lambda **_: done)
     resp = _client().post(
         "/register/confirm",
-        data={"bin_code": "AGR-001", "site": "alameda-garage", "lat": "37.7639", "lon": "-122.23"},
+        data={
+            "operation": "observe",
+            "bin_code": "AGR-001",
+            "site": "alameda-garage",
+            "lat": "37.7639",
+            "lon": "-122.23",
+        },
         headers=_LOOPBACK_ORIGIN,
     )
     assert resp.status_code == 200
@@ -1426,12 +1436,12 @@ def test_register_confirm_rejects_cross_origin_print(
 def test_confirm_route_carries_reviewed_theme_and_print_intent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from binkeeper import bin_label, bin_register, db
+    from binkeeper import bin_label, db
 
     monkeypatch.setattr(
         db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
     )
-    monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
+    monkeypatch.setattr(bin_photo_web, "create_bin", lambda *_args, **_kwargs: _register_result())
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     submissions: list[str] = []
 
@@ -1444,6 +1454,8 @@ def test_confirm_route_carries_reviewed_theme_and_print_intent(
     resp = _client().post(
         "/register/confirm",
         data={
+            "operation": "create",
+            "action_id": "2ad7b5aa-541b-4fc7-ab73-d3a23e499655",
             "bin_code": "AGR-014",
             "site": "alameda-garage",
             "theme": "hand tools",
@@ -1463,12 +1475,12 @@ def test_confirm_route_carries_reviewed_theme_and_print_intent(
 def test_confirm_route_prints_on_explicit_b1_without_changing_cups_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from binkeeper import bin_b1, bin_label, bin_register, db
+    from binkeeper import bin_b1, bin_label, db
 
     monkeypatch.setattr(
         db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
     )
-    monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
+    monkeypatch.setattr(bin_photo_web, "create_bin", lambda *_args, **_kwargs: _register_result())
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     monkeypatch.setattr(bin_b1, "B1_ADDRESS", "synthetic-address")
     sent: list[tuple[bytes, str, int]] = []
@@ -1484,6 +1496,8 @@ def test_confirm_route_prints_on_explicit_b1_without_changing_cups_default(
     response = _client().post(
         "/register/confirm",
         data={
+            "operation": "create",
+            "action_id": "2ad7b5aa-541b-4fc7-ab73-d3a23e499655",
             "bin_code": "AGR-014",
             "site": "alameda-garage",
             "theme": "hand tools",
@@ -1504,12 +1518,12 @@ def test_confirm_route_prints_on_explicit_b1_without_changing_cups_default(
 def test_confirm_route_prints_two_reviewed_labels_in_one_submission(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from binkeeper import bin_label, bin_register, db
+    from binkeeper import bin_label, db
 
     monkeypatch.setattr(
         db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
     )
-    monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
+    monkeypatch.setattr(bin_photo_web, "create_bin", lambda *_args, **_kwargs: _register_result())
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     submissions: list[str] = []
 
@@ -1522,6 +1536,8 @@ def test_confirm_route_prints_two_reviewed_labels_in_one_submission(
     response = _client().post(
         "/register/confirm",
         data={
+            "operation": "create",
+            "action_id": "2ad7b5aa-541b-4fc7-ab73-d3a23e499655",
             "bin_code": "AGR-014",
             "site": "alameda-garage",
             "theme": "hand tools",
@@ -1549,6 +1565,8 @@ def test_confirm_route_persists_the_reviewed_theme(
     resp = _client().post(
         "/register/confirm",
         data={
+            "operation": "create",
+            "action_id": "2ad7b5aa-541b-4fc7-ab73-d3a23e499655",
             "bin_code": "AGR-015",
             "site": "alameda-garage",
             "theme": "  Network adapters  ",

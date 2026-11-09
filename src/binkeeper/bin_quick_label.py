@@ -9,6 +9,7 @@ from uuid import UUID
 import psycopg
 
 from binkeeper.bin_b1 import B1PrintUnknown
+from binkeeper.bin_create import next_bin_code
 from binkeeper.bin_inventory import DEFAULT_BIN_CORPUS_ID, DEFAULT_BIN_TENANT_ID
 from binkeeper.bin_label import BinLabelError, make_label_job, send_label_job
 from binkeeper.bin_passport import load_known_bin_codes
@@ -102,7 +103,7 @@ def create_quick_label(
 
         prefix = SITE_PREFIXES[site]
         _lock(conn, f"bin-code:{prefix}")
-        code = _next_code(
+        code = next_bin_code(
             prefix, load_known_bin_codes(conn, tenant_id=tenant_id, corpus_id=corpus_id)
         )
         job = make_label_job(
@@ -143,13 +144,3 @@ def create_quick_label(
 
 def _lock(conn: psycopg.Connection, name: str) -> None:
     conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (name,))
-
-
-def _next_code(prefix: str, known_codes: list[str]) -> str:
-    highest = 0
-    for code in known_codes:
-        if code.startswith(f"{prefix}-"):
-            suffix = code[len(prefix) + 1 :]
-            if suffix.isdigit():
-                highest = max(highest, int(suffix))
-    return f"{prefix}-{highest + 1:03d}"

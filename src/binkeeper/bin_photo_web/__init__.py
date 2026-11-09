@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 from urllib.parse import quote
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -29,8 +29,9 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import FormData, UploadFile
 
 from binkeeper.bin_catalog_web import require_bin_catalog_request
+from binkeeper.bin_create import BinCreationConflict, BinCreationError, CreateBinRequest, create_bin
 from binkeeper.bin_label import BinLabelError
-from binkeeper.bin_manage import BinManageError
+from binkeeper.bin_manage import DEFAULT_BIN_ACTION_SCOPE, BinActionScope, BinManageError
 from binkeeper.bin_photo_media import BinPhotoMediaError, thumbnail_jpeg, validate_bin_photo
 from binkeeper.bin_photo_web.manage import (
     LabelDriftDismissalRecorder,
@@ -170,6 +171,7 @@ def create_app(
                 new_href=surface_path(normalized_base_path, "/quick-label"),
                 add_photo_url=f"{manage_url}#photos",
                 reprint_url=f"{manage_url}#label",
+                bin_details_url=manage_url,
                 catalog_url="/bins/",
                 photo_url=surface_path(normalized_base_path, "/"),
                 register_url=surface_path(normalized_base_path, "/register"),
@@ -290,7 +292,7 @@ def create_app(
                 stash_url=surface_path(normalized_base_path, "/stash"),
                 binkeeper_section="photo",
                 surface_label="Bin photo drop",
-                **view,
+                **{"action_id": str(uuid4()), **view},
             )
         )
 
@@ -497,7 +499,7 @@ def create_app(
         # Reusing an old photo is not a new location observation; do not harvest it again.
         return _render_photo_result(view)
 
-    def _render_register(view: dict[str, object]) -> object:
+    def _render_register(view: dict[str, object]) -> Response:
         template = {
             "done": "bin_register_done.html",
             "pick": "bin_register_pick.html",
@@ -511,6 +513,9 @@ def create_app(
                 new_href=surface_path(normalized_base_path, "/register"),
                 add_photo_url=surface_path(
                     normalized_base_path, f"/manage/{quote(code, safe='')}#photos"
+                ),
+                bin_details_url=surface_path(
+                    normalized_base_path, f"/manage/{quote(code, safe='')}"
                 ),
                 catalog_url="/bins/",
                 photo_url=surface_path(normalized_base_path, "/"),
@@ -553,22 +558,110 @@ def create_app(
             if print_requested and _clean(form_data.get("label_count")) == "2"
             else int(print_requested)
         )
+        operation = _clean(form_data.get("operation"))
+        if operation is None and not any(
+            field in form_data
+            for field in ("theme", "print_label", "action_id", "additional_photo_sha256")
+        ):
+            # Old physical-label forms also need one explicit reconfirmation;
+            # preserve their GPS context without treating them as new-bin creation.
+            response = _render_register(
+                {
+                    "mode": "pick",
+                    "bin_code": _clean(form_data.get("bin_code")) or "",
+                    "contents": _clean(form_data.get("contents")) or "",
+                    "photo_sha256": _clean(form_data.get("photo_sha256")) or "",
+                    "code_source": _clean(form_data.get("code_source")) or "entered",
+                    "lat": _float(form_data.get("lat")),
+                    "lon": _float(form_data.get("lon")),
+                    "accuracy_m": _float(form_data.get("accuracy_m")),
+                    "has_gps": _float(form_data.get("lat")) is not None,
+                    "reason": "please confirm the site again after the application update",
+                    "candidates": [_clean(form_data.get("site"))] if form_data.get("site") else [],
+                    "all_sites": list(_SITE_PREFIXES),
+                }
+            )
+            response.status_code = 409
+            return response
+        if operation != "observe":
+            refs = tuple(
+                str(ref)
+                for ref in [
+                    form_data.get("photo_sha256"),
+                    *form_data.getlist("additional_photo_sha256"),
+                ]
+                if ref
+            )
+            action_id = _clean(form_data.get("action_id")) or ""
+            creation_request = CreateBinRequest(
+                action_id=action_id,
+                bin_code=_clean(form_data.get("bin_code")) or "",
+                site=_clean(form_data.get("site")) or "",
+                theme=_clean(form_data.get("theme")) or "",
+                contents=_clean(form_data.get("contents")) or "",
+                photo_refs=refs,
+                printer=_clean(form_data.get("printer")) or "cups",
+                copies=label_count,
+            )
+            try:
+                UUID(action_id)
+                stale = operation != "create"
+            except ValueError:
+                stale = True
+            new_review = _clean(form_data.get("new_action")) == "1"
+            if stale or new_review:
+                view = {
+                    "error": "Review the saved details below, then confirm to create a new bin.",
+                    "action_id": str(uuid4()),
+                }
+            else:
+                view = await run_in_threadpool(
+                    _register_and_view,
+                    bin_code=creation_request.bin_code,
+                    site=creation_request.site,
+                    gps=None,
+                    photo_sha=refs[0] if refs else None,
+                    theme=creation_request.theme,
+                    contents=creation_request.contents,
+                    code_source=_clean(form_data.get("code_source")) or "owner review",
+                    label_count=label_count,
+                    printer=creation_request.printer,
+                    creation=creation_request,
+                    scope=BinActionScope(tenant_id, corpus_id),
+                )
+                if view.get("mode") == "done":
+                    return _render_register(view)
+            response = _render_photo_result(
+                {
+                    "photo_count": len(refs),
+                    "blob_refs": refs,
+                    "all_sites": list(_SITE_PREFIXES),
+                    "site": creation_request.site,
+                    "suggested_bin_code": creation_request.bin_code,
+                    "proposed_theme": creation_request.theme,
+                    "proposed_contents": creation_request.contents,
+                    "theme_provided": bool(creation_request.theme),
+                    "contents_provided": bool(creation_request.contents),
+                    "action_id": action_id,
+                    "printer": creation_request.printer,
+                    "label_count": 2 if _clean(form_data.get("label_count")) == "2" else 1,
+                    "creation_review": True,
+                    **view,
+                }
+            )
+            response.status_code = 200 if new_review else cast(int, view.get("status_code", 409))
+            return response
         view = await run_in_threadpool(
             _register_confirmed,
             bin_code=_clean(form_data.get("bin_code")),
             site=_clean(form_data.get("site")),
-            theme=_clean(form_data.get("theme")),
+            theme=None,
             contents=_clean(form_data.get("contents")),
             lat=_float(form_data.get("lat")),
             lon=_float(form_data.get("lon")),
             accuracy_m=_float(form_data.get("accuracy_m")),
             photo_sha256=_clean(form_data.get("photo_sha256")),
-            additional_photo_sha256s=tuple(
-                str(ref) for ref in form_data.getlist("additional_photo_sha256")
-            ),
             code_source=_clean(form_data.get("code_source")),
-            label_count=label_count,
-            printer=_clean(form_data.get("printer")) or "cups",
         )
         return _render_register(view)
 
@@ -978,6 +1071,8 @@ def _register_and_view(
     label_count: int = 0,
     printer: str = "cups",
     additional_photo_refs: tuple[str, ...] = (),
+    creation: CreateBinRequest | None = None,
+    scope: BinActionScope = DEFAULT_BIN_ACTION_SCOPE,
 ) -> dict[str, object]:
     try:
         from binkeeper.bin_manage import BinManageError, append_saved_bin_photos
@@ -987,14 +1082,18 @@ def _register_and_view(
         if len(additional_photo_refs) >= MAX_LABEL_PHOTOS:
             raise BinManageError(f"Choose at most {MAX_LABEL_PHOTOS} photos.")
         with connect() as conn, conn.transaction():
-            result = register_bin(
-                conn,
-                bin_code=bin_code,
-                site=site,
-                gps=gps,  # type: ignore[arg-type]
-                photo_sha256=photo_sha,
-                contents_text=contents,
-                theme=theme,
+            result = (
+                create_bin(conn, creation, scope=scope)
+                if creation is not None
+                else register_bin(
+                    conn,
+                    bin_code=bin_code,
+                    site=site,
+                    gps=gps,  # type: ignore[arg-type]
+                    photo_sha256=photo_sha,
+                    contents_text=contents,
+                    theme=theme,
+                )
             )
             if additional_photo_refs:
                 append_saved_bin_photos(
@@ -1003,6 +1102,18 @@ def _register_and_view(
                     ((photo_sha,) if photo_sha else ()) + additional_photo_refs,
                 )
     except Exception as exc:  # surface the failure; nothing partial is claimed
+        if creation is not None:
+            message = (
+                str(exc)
+                if isinstance(exc, BinCreationError | BinManageError)
+                else "Could not save the bin. Your reviewed details are below; try again."
+            )
+            logging.getLogger(__name__).warning("Bin creation failed: %s", exc)
+            return {
+                "error": message,
+                "creation_conflict": isinstance(exc, BinCreationConflict),
+                "status_code": 409 if isinstance(exc, BinCreationError | BinManageError) else 503,
+            }
         return {
             "mode": "form",
             "bin_code": bin_code,
@@ -1044,6 +1155,7 @@ def _register_and_view(
         "code_source": code_source,
         "site": result.site,
         "already_existed": result.already_existed,
+        "creation_replay": creation is not None and result.already_existed,
         "has_gps": gps is not None,
         "lat": lat if lat is not None else "",
         "lon": lon if lon is not None else "",

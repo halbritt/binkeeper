@@ -32,9 +32,49 @@ The repair applied `implementation-explicit-failure-policy` and
 `universal-repository-contract-precedence` from Pincite packet
 `pkt-61c47d23247950dd` (release `6deb1af41d41075b28577bcf2126c9db90d0e7c0`,
 corpus `corpus-2026-07-12-84d6cdfc0e9f`, doctrine `doctrine-2694f0450e78ff1e`).
+Packet SHA-256: `61c47d23247950dd5dc04fbbe0aa48a00a121a9eaa14505dbdc2f73798035103`;
+retriever: `retriever-8b654e47fcb1be28`.
 The retrieval gate passed. Material export/recovery questions are answered by the
 accepted ADR, both transport probes and workflow regressions. Remaining generic
 obligations about incident response, mutable graphs, Python special methods,
 non-ASCII text, unchanged resource ownership and structural-change procedures are
 nonmaterial to this bytes-to-image refusal repair. Production incident frequency
 and installed behavior are unmeasured; no claim about either follows from the suite.
+
+## BINK-55: stable creation and complete returned review
+
+Base: `90b6041`, same repository and `master` checkout. The concrete creation
+operation and compatibility/rollback contract are in
+[ADR 0008](../adr/0008-creation-action-identity.md). This is additive capture
+metadata, with no rewritten historical records or new SQL migration.
+
+The new collision test failed against the old route, which reported success for
+a second distinct intent using an occupied code. The repaired path rejects that
+case and retains its fields. Tests cover zero/one/multiple photos, ordered photo
+identity, all selected links, day rollover after an intervening move, divergent
+payloads, four concurrent identical/different actions, rollback after linking,
+unavailable DB recovery, old forms, explicit new review and print replay suppression.
+The physical-label registration path retains its day-scoped semantics and cannot
+invoke the photo-creation printing path.
+
+`make check` with the disposable PostgreSQL database passed **652 tests** and
+**20 migration cases**, lint, types and wheel verification. Two additional collision
+variants (single and multiple photos) were then added and passed the targeted
+creation suite. The existing authenticated backup/restore drill now includes a
+creation receipt and photo link; restored identity replay adds no capture or move,
+and unchanged passport projections read the receipt correctly.
+
+UIPass run `1c06be56-ff90-43cd-915d-7b3f9421e51d` passed **24 cases**, no warnings
+or blocking findings, for the proposal/recovery/replay and registration surfaces
+at 320, 390 and 1280 pixels. Conflict and replay screenshots were inspected at phone
+and desktop widths; the narrow vision-error screen was also inspected. The review
+corrected an inconsistent synthetic photo count, removed an unjustified storage
+claim from error reviews, and made explicit new review the only action for a
+consumed identity. A replay now labels its original site as historical and links
+to the current bin page, without claiming another placement.
+
+A candidate process with its own disposable database passed a real Tailscale HTTPS
+rehearsal on port 18777: create/replay returned 200, divergent payload 409 and
+missing Origin 403. Replays left exactly one capture and one move. No model or
+printer I/O was allowed. The temporary front, process and database were removed.
+This verifies the candidate through the front; it is not a production deployment.

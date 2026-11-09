@@ -9,12 +9,16 @@
     <span class="bin-photo-kicker">BinKeeper</span>
     <span class="status-chip" data-status="advisory">Review required</span>
   </div>
-  <h1>Bin photos received</h1>
-  <p class="bin-photo-intro">Storage and label analysis are reported separately. Review every field before creating the bin.</p>
+  <h1>{{ 'Review bin details' if creation_review else 'Bin photos received' }}</h1>
+  <p class="bin-photo-intro">{% if creation_review %}Your entries are kept below. Review the details before creating a bin.{% else %}Storage and label analysis are reported separately. Review every field before creating the bin.{% endif %}</p>
 </header>
 
+{% if error %}<p class="banner banner-error" role="alert">{{ error }}</p>{% endif %}
+
 {# Storage is the guaranteed primary action, reported on its own. #}
-{% if store_error %}
+{% if creation_review %}
+{% if blob_refs %}<p class="banner banner-ok" role="status">{{ blob_refs|length }} photo(s) selected. Your selection is kept for this review.</p>{% endif %}
+{% elif store_error %}
 <p class="banner banner-error" role="status"><strong>Photos were not stored.</strong>
   {{ store_error }}. Nothing was saved — please retry.</p>
 {% elif blob_refs %}
@@ -25,6 +29,7 @@
   The vault was unavailable, though {{ photo_count }} were received.</p>
 {% endif %}
 
+{% if not creation_review %}
 <section class="panel panel-padded bin-photo-card" aria-labelledby="proposal-heading">
   <div class="bin-photo-card-header">
     <h2 id="proposal-heading">{% if analysis_skipped %}Ready to review{% else %}Proposed label{% endif %}</h2>
@@ -68,8 +73,9 @@
   {% if photo_count %}<p class="field-help">Enter the label details below to create and print now.</p>{% endif %}
   {% endif %}
 </section>
+{% endif %}
 
-{% if photo_count %}
+{% if photo_count or creation_review %}
 <section class="panel panel-padded bin-photo-card" aria-labelledby="create-bin-heading">
   <div class="bin-photo-card-header">
     <h2 id="create-bin-heading">Create this bin</h2>
@@ -77,6 +83,8 @@
   </div>
   <form method="post" action="{{ confirm_action }}" class="form-grid bin-photo-form"
         data-submit-form>
+    <input type="hidden" name="operation" value="create">
+    <input type="hidden" name="action_id" value="{{ action_id }}">
     <input type="hidden" name="photo_sha256" value="{{ blob_refs[0] if blob_refs else '' }}">
     {% for ref in blob_refs[1:] %}
     <input type="hidden" name="additional_photo_sha256" value="{{ ref }}">
@@ -84,9 +92,9 @@
     <input type="hidden" name="code_source" value="{{ 'the proposal' if proposal else 'owner entry' }}">
 
     <div class="grid-fit-180">
-      {% call components.field("create_bin_code", "Bin code", "Check the suggested code or enter your own") %}
+      {% call components.field("create_bin_code", "Bin code", "Check the code, or leave it blank to assign the next available code") %}
         <input type="text" id="create_bin_code" name="bin_code"
-               value="{{ suggested_bin_code or '' }}" placeholder="AGR-014" required>
+               value="{{ suggested_bin_code or '' }}" placeholder="Assign automatically">
       {% endcall %}
 
       {% call components.field("create_site", "Site", "Where this bin lives") %}
@@ -101,30 +109,34 @@
 
     {% call components.field("create_theme", "Label", "The large heading printed on the label") %}
       <input type="text" id="create_theme" name="theme" value="{{ proposed_theme or (proposal.theme if proposal else '') }}"
-             placeholder="HAND TOOLS" required>
+             placeholder="HAND TOOLS" maxlength="120" required>
     {% endcall %}
 
     {% call components.field("create_contents", "Contents", "Review or enter the contents for this label") %}
-      <textarea id="create_contents" name="contents">{{ proposed_contents }}</textarea>
+      <textarea id="create_contents" name="contents" maxlength="1200">{{ proposed_contents }}</textarea>
     {% endcall %}
 
     <fieldset class="field-stack">
       <legend>Labels to print</legend>
       <div class="grid-fit-180">
-        <label><input type="radio" name="label_count" value="1" checked> 1 label</label>
-        <label><input type="radio" name="label_count" value="2"> 2 labels</label>
+        <label><input type="radio" name="label_count" value="1" {% if label_count != 2 %}checked{% endif %}> 1 label</label>
+        <label><input type="radio" name="label_count" value="2" {% if label_count == 2 %}checked{% endif %}> 2 labels</label>
       </div>
       <p class="field-help">Used only when you choose “Create and print.”</p>
     </fieldset>
 
     <label for="label-printer">Print on
       <select id="label-printer" name="printer">
-        <option value="cups" selected>Large label printer (CUPS)</option>
-        {% if b1_available %}<option value="niimbot-b1">Niimbot B1 (50 × 30 mm)</option>{% endif %}
+        <option value="cups"{% if printer != 'niimbot-b1' %} selected{% endif %}>Large label printer (CUPS)</option>
+        {% if b1_available or printer == 'niimbot-b1' %}<option value="niimbot-b1"{% if printer == 'niimbot-b1' %} selected{% endif %}>Niimbot B1 (50 × 30 mm)</option>{% endif %}
       </select>
     </label>
 
     <div class="action-bar bin-photo-action-row">
+      {% if creation_conflict %}
+      <button type="submit" class="bin-photo-primary" name="new_action" value="1">Review as a new bin</button>
+      <span class="field-help">Reviewing creates a new request for these details. Nothing is saved or printed until you confirm it.</span>
+      {% else %}
       <button type="submit" name="print_label" value="0" data-submit-button
               data-busy-label="Creating bin…">
         <span data-button-label>Create without printing</span>
@@ -137,6 +149,7 @@
         <span data-button-label>Create and print label</span>
       </button>
       <span class="field-help bin-photo-action-note">Printing happens only after this explicit confirmation.</span>
+      {% endif %}
     </div>
 
     <p id="label-align-status" class="field-help" role="status" aria-live="polite"></p>

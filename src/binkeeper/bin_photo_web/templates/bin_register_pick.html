@@ -26,6 +26,7 @@
 
   <form method="post" action="{{ confirm_action }}" class="form-grid bin-photo-form"
         data-submit-form>
+    <input type="hidden" name="operation" value="observe">
     <input type="hidden" name="bin_code" value="{{ bin_code }}">
     <input type="hidden" name="code_source" value="{{ code_source or '' }}">
     <input type="hidden" name="contents" value="{{ contents or '' }}">

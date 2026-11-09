@@ -11,6 +11,10 @@ keep are in [README.md](../README.md#invariants).
 The [2026-11-08 system review](architecture/BINK-ARCH-20261108/README.md)
 records verified exceptions to the intended creation/export contracts and the
 ordered repair plan. Its recommendations have not been deployed.
+Source repairs for image-export refusal and stable creation identity are recorded
+in [the repair verification](verification/architecture-repairs-2026-11-09.md) and
+[ADR 0008](adr/0008-creation-action-identity.md); installed behavior still needs
+the separate deployment checkpoint.
 
 ## The design rule everything follows
 

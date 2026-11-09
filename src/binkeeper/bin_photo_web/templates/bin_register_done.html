@@ -4,6 +4,7 @@
 {% block title %}Bin registered{% endblock %}
 
 {% block bin_photo_main %}
+{% set replayed_creation = creation_replay or (quick_label and already_existed) %}
 <header class="bin-photo-hero">
   <div class="bin-photo-heading-row">
     <span class="bin-photo-kicker">BinKeeper</span>
@@ -12,7 +13,7 @@
     </span>
   </div>
   <h1>{% if already_existed %}Already registered{% else %}Bin registered{% endif %}</h1>
-  <p class="bin-photo-intro">The bin now resolves to its saved record and location.</p>
+  <p class="bin-photo-intro">{% if replayed_creation %}This request already created the bin. No new placement was recorded. <a href="{{ bin_details_url }}">Open the bin page for its current location.</a>{% else %}The bin now resolves to its saved record and location.{% endif %}</p>
 </header>
 
 {% if print_requested %}
@@ -33,21 +34,25 @@
 
 <section class="panel panel-padded bin-photo-card" aria-labelledby="registered-bin-heading">
   <div class="bin-photo-card-header">
-    <h2 id="registered-bin-heading">{{ bin_code }} at {{ site }}</h2>
+    <h2 id="registered-bin-heading">{{ bin_code }}{% if not replayed_creation %} at {{ site }}{% endif %}</h2>
     <p class="bin-photo-card-copy">Registration details</p>
   </div>
   {% set pairs = [
     ('bin_code', bin_code ~ (' (from %s)'|format(code_source) if code_source and code_source != 'entered' else '')),
-    ('site', site),
+    ('created at' if replayed_creation else 'site', site),
     ('location', ('%s, %s'|format(lat, lon)) if has_gps else '(site selected manually)'),
     ('accuracy (m)', accuracy_m if has_gps and accuracy_m != '' else 'unknown'),
     ('photo stored', 'yes' if photo_stored else 'no')
   ] %}
   {{ components.kv_list(pairs) }}
 
+  {% if replayed_creation %}
+  <p>The original creation site was <strong>{{ site }}</strong>. The current location may have changed.</p>
+  {% else %}
   <p><strong>{{ bin_code }}</strong> is placed at <strong>{{ site }}</strong>.
     Scanning the label's QR now resolves to this record, and its location folds into
     the move ledger.</p>
+  {% endif %}
 </section>
 
 {% if not photo_stored and add_photo_url %}

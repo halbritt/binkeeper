@@ -152,7 +152,9 @@ def create_app(port: int) -> FastAPI:
         return await call_next(request)
 
     @app.get("/fixture/photo-result")
-    def photo_result(failure: bool = False, stored: bool = True, prefill: str = "") -> Response:
+    def photo_result(
+        failure: bool = False, stored: bool = True, prefill: str = "", creation_error: bool = False
+    ) -> Response:
         chrome = build_surface_chrome(
             "bin_photo", extra_template_dir=Path(bin_photo_web.__file__).parent / "templates"
         )
@@ -171,11 +173,15 @@ def create_app(port: int) -> FastAPI:
                 stash_url="/stash",
                 binkeeper_section="photo",
                 surface_label="Bin photo drop",
-                photo_count=1,
-                blob_refs=["synthetic-photo"] if stored else [],
+                photo_count=3 if creation_error else 1,
+                blob_refs=["a" * 64, "b" * 64, "c" * 64]
+                if creation_error
+                else ["synthetic-photo"]
+                if stored
+                else [],
                 store_error=None if stored else "Vault unavailable",
                 proposal=None
-                if failure or prefill == "both"
+                if failure or prefill == "both" or creation_error
                 else {
                     "theme": "MY WORKBENCH" if prefill == "label" else "Precision tools",
                     "owner_phrase": "Keep these together",
@@ -189,10 +195,44 @@ def create_app(port: int) -> FastAPI:
                 suggested_bin_code="AGR-023",
                 all_sites=["alameda-garage", "oakland-fab-east"],
                 proposed_contents="" if failure else "hex keys, calipers",
-                proposed_theme="MY WORKBENCH" if prefill in {"label", "both"} else "",
+                proposed_theme="MY WORKBENCH"
+                if prefill in {"label", "both"} or creation_error
+                else "",
                 theme_provided=prefill in {"label", "both"},
                 contents_provided=prefill == "both",
                 analysis_skipped=prefill == "both",
+                creation_review=creation_error,
+                creation_conflict=creation_error,
+                action_id="263c9d05-8ee9-4cbf-aebf-578159ac1483",
+                label_count=2 if creation_error else 1,
+                printer="niimbot-b1" if creation_error else "cups",
+                error="This creation request was already used with different details."
+                if creation_error
+                else None,
+            )
+        )
+
+    @app.get("/fixture/creation-replay")
+    def creation_replay() -> Response:
+        chrome = build_surface_chrome(
+            "bin_photo", extra_template_dir=Path(bin_photo_web.__file__).parent / "templates"
+        )
+        return page_response(
+            chrome.render(
+                "bin_register_done.html",
+                bin_code="AGR-014",
+                site="alameda-garage",
+                already_existed=True,
+                creation_replay=True,
+                photo_stored=True,
+                bin_details_url="/manage/AGR-014",
+                new_href="/",
+                catalog_url="/bins/",
+                photo_url="/",
+                register_url="/register",
+                stash_url="/stash",
+                binkeeper_section="photo",
+                surface_label="Bin photo drop",
             )
         )
 

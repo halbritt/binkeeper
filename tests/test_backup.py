@@ -21,7 +21,9 @@ from binkeeper.backup import (
     create_backup,
     restore_smoke,
 )
+from binkeeper.bin_create import CreateBinRequest, create_bin
 from binkeeper.bin_inventory import record_event
+from binkeeper.bin_passport import bin_passport
 from binkeeper.blob_vault import FilesystemBlobStore, put_blob
 
 
@@ -135,6 +137,15 @@ def test_unmocked_backup_restore_verifies_all_protected_state(
         key_ref="synthetic-vault-key",
         content_type="image/jpeg",
     )
+    creation_request = CreateBinRequest(
+        str(uuid4()),
+        "AGR-001",
+        "alameda-garage",
+        "Restored tools",
+        "Restored contents",
+        (blob.plaintext_sha256,),
+    )
+    creation = create_bin(conn, creation_request, observed_at=as_of)
     conn.commit()
 
     artifact = create_backup(
@@ -180,11 +191,17 @@ def test_unmocked_backup_restore_verifies_all_protected_state(
             vault_key=vault_key,
         )
         assert report.verified is True
-        assert report.table_counts["capture_evidence"] == 1
-        assert report.table_counts["bin_trip_events"] == 1
+        assert report.table_counts["capture_evidence"] == 3
+        assert report.table_counts["bin_trip_events"] == 2
         assert report.table_counts["bin_routing_requests"] == 1
         assert report.blob_count == 1
-        assert report.passport_count == 1
+        assert report.passport_count == 2
+        with psycopg.connect(target_url, autocommit=True) as restored:
+            replay = create_bin(restored, creation_request, observed_at=as_of + timedelta(days=1))
+            assert replay.already_existed and replay.capture_id == creation.capture_id
+            assert bin_passport(restored, "AGR-001").theme == "Restored tools"
+            assert restored.execute("SELECT count(*) FROM capture_evidence").fetchone() == (3,)
+            assert restored.execute("SELECT count(*) FROM bin_trip_events").fetchone() == (2,)
     finally:
         with psycopg.connect("postgresql:///postgres", autocommit=True) as admin:
             admin.execute(
