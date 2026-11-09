@@ -77,6 +77,10 @@ class BinVisionError(RuntimeError):
     """Domain root for vision-worker failures (RFC 0012 family)."""
 
 
+class ImagePreparationError(BinVisionError):
+    """The original cannot be converted to an authorized inference image."""
+
+
 @dataclass(frozen=True)
 class DetectedItem:
     """One item a photo shows, with the model's confidence. Provisional."""
@@ -523,27 +527,29 @@ def _analyze_photos(
 def _prepare_image(image: bytes, *, max_edge: int, quality: int) -> tuple[bytes, str]:
     """Downscale (EXIF-aware) to a bounded long edge and re-encode JPEG.
 
-    Returns ``(bytes, mime)``. Reduction is for inference only -- the caller
-    stores the original bytes as evidence. If the image can't be decoded (HEIC
-    without a decoder, Pillow absent, corrupt data), the original bytes are
-    returned unchanged for the endpoint to attempt.
+    Returns ``(bytes, mime)`` or raises before transport. The caller keeps the
+    original locally; failure must never expand the authorized export scope.
     """
     try:
         import io
 
         from PIL import Image, ImageOps
-    except Exception:  # Pillow is a serve-extra; degrade to sending as-is
-        return image, _image_mime(image)
+    except ImportError as exc:
+        raise ImagePreparationError("Cannot prepare image: image decoder unavailable") from exc
     try:
         with Image.open(io.BytesIO(image)) as opened:
             oriented = ImageOps.exif_transpose(opened) or opened
             rgb = oriented.convert("RGB")
             rgb.thumbnail((max_edge, max_edge))
+            rgb.info.clear()
             buffer = io.BytesIO()
             rgb.save(buffer, format="JPEG", quality=quality)
             return buffer.getvalue(), "image/jpeg"
-    except Exception:  # undecodable/corrupt -> let the endpoint try the original
-        return image, _image_mime(image)
+    except Exception as exc:
+        raise ImagePreparationError(
+            "Cannot prepare image for analysis; the original remains local. "
+            "Enter the label and contents manually or choose another photo."
+        ) from exc
 
 
 def _http_error_detail(exc: urllib.error.HTTPError) -> str:
@@ -623,21 +629,6 @@ def read_visible_bin_codes(client: VisionClient, image: bytes) -> list[str]:
             seen.add(code)
             codes.append(code)
     return codes
-
-
-def _image_mime(image: bytes) -> str:
-    """Sniff a common image mime from magic bytes (defaults to jpeg)."""
-    if image.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if image[:3] == b"\xff\xd8\xff":
-        return "image/jpeg"
-    if image[:4] == b"RIFF" and image[8:12] == b"WEBP":
-        return "image/webp"
-    if image[:6] in (b"GIF87a", b"GIF89a"):
-        return "image/gif"
-    if image[4:12] in (b"ftypheic", b"ftypheix", b"ftypmif1"):
-        return "image/heic"
-    return "image/jpeg"
 
 
 def _build_prompt(notes: str | None) -> str:

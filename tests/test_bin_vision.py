@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from io import BytesIO
 from threading import Event, Lock
 from urllib.request import Request
 
 import pytest
+from PIL import Image
 
 from binkeeper.bin_vision import (
     BinVisionError,
@@ -18,6 +20,12 @@ from binkeeper.bin_vision import (
     default_vision_client,
     propose_bin_label,
 )
+
+
+def _jpeg() -> bytes:
+    with Image.new("RGB", (1, 1), "navy") as image, BytesIO() as output:
+        image.save(output, format="JPEG")
+        return output.getvalue()
 
 
 class _FakeVisionClient:
@@ -295,7 +303,7 @@ def test_ollama_request_asks_for_no_thinking_and_json(
         timeout_s=45,
     )
 
-    client.analyze("Describe this bin", b"not-a-real-image")
+    client.analyze("Describe this bin", _jpeg())
 
     assert captured["url"] == "http://peecee:11434/v1/chat/completions"
     assert captured["timeout"] == 45
@@ -320,7 +328,7 @@ def test_openrouter_uses_hosted_reasoning_and_routing_controls(
     monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
     monkeypatch.setenv("BINKEEPER_OPENROUTER_API_KEY", "synthetic-key")
 
-    propose_bin_label(default_vision_client("openrouter"), [b"synthetic-image"])
+    propose_bin_label(default_vision_client("openrouter"), [_jpeg()])
 
     assert len(captured) == 2
     for payload in captured:
@@ -345,7 +353,7 @@ def test_ollama_uses_reasoning_json_when_content_is_non_json(
     monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
     client = OllamaVisionClient(endpoint="http://peecee:11434/v1")
 
-    proposal = propose_bin_label(client, [b"not-a-real-image"])
+    proposal = propose_bin_label(client, [_jpeg()])
 
     assert proposal.theme == "hand tools"
 
@@ -371,7 +379,7 @@ def test_non_json_model_output_recovers_with_larger_budget(
         max_tokens=3072,
     )
 
-    proposal = propose_bin_label(client, [b"not-a-real-image"])
+    proposal = propose_bin_label(client, [_jpeg()])
 
     assert proposal.theme == "hand tools"
 
@@ -395,7 +403,7 @@ def test_non_json_retry_uses_remaining_request_deadline(
     monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
     client = OllamaVisionClient(endpoint="http://peecee:11434/v1", timeout_s=60)
 
-    proposal = propose_bin_label(client, [b"not-a-real-image"])
+    proposal = propose_bin_label(client, [_jpeg()])
 
     assert proposal.theme == "hand tools"
     assert timeouts == [60, 48]
@@ -414,7 +422,7 @@ def test_read_timeout_becomes_a_vision_error(monkeypatch: pytest.MonkeyPatch) ->
     client = OllamaVisionClient(endpoint="http://peecee:11434/v1", timeout_s=60)
 
     with pytest.raises(BinVisionError, match="did not respond within 60"):
-        propose_bin_label(client, [b"not-a-real-image"])
+        propose_bin_label(client, [_jpeg()])
 
 
 def test_invalid_http_response_becomes_a_vision_error(
@@ -427,7 +435,7 @@ def test_invalid_http_response_becomes_a_vision_error(
     client = OllamaVisionClient(endpoint="https://synthetic.invalid/v1")
 
     with pytest.raises(BinVisionError, match="response was not valid JSON"):
-        client.analyze("Describe this bin", b"not-a-real-image")
+        client.analyze("Describe this bin", _jpeg())
 
 
 class _FakeGeminiResponse:
@@ -465,7 +473,7 @@ def test_gemini_request_shape_and_key_header(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", fake_urlopen)
     client = GeminiVisionClient(model="gemini-test", api_key="synthetic-key", timeout_s=45)
 
-    proposal = propose_bin_label(client, [b"not-a-real-image"])
+    proposal = propose_bin_label(client, [_jpeg()])
 
     assert proposal.theme == "hand tools"
     assert captured["url"] == (
@@ -490,7 +498,7 @@ def test_gemini_missing_key_is_a_vision_error(monkeypatch: pytest.MonkeyPatch) -
     client = GeminiVisionClient()
 
     with pytest.raises(BinVisionError, match="no Gemini API key"):
-        client.analyze("Describe this bin", b"not-a-real-image")
+        client.analyze("Describe this bin", _jpeg())
 
 
 def test_gemini_http_error_is_a_vision_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -510,7 +518,7 @@ def test_gemini_http_error_is_a_vision_error(monkeypatch: pytest.MonkeyPatch) ->
     client = GeminiVisionClient(api_key="synthetic-key")
 
     with pytest.raises(BinVisionError, match=r"HTTP 404.*model retired"):
-        client.analyze("Describe this bin", b"not-a-real-image")
+        client.analyze("Describe this bin", _jpeg())
 
 
 def test_gemini_read_timeout_is_a_vision_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -521,7 +529,7 @@ def test_gemini_read_timeout_is_a_vision_error(monkeypatch: pytest.MonkeyPatch) 
     client = GeminiVisionClient(api_key="synthetic-key", timeout_s=60)
 
     with pytest.raises(BinVisionError, match="did not respond within 60"):
-        client.analyze("Describe this bin", b"not-a-real-image")
+        client.analyze("Describe this bin", _jpeg())
 
 
 def test_gemini_empty_candidates_is_a_vision_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -532,7 +540,7 @@ def test_gemini_empty_candidates_is_a_vision_error(monkeypatch: pytest.MonkeyPat
     client = GeminiVisionClient(api_key="synthetic-key")
 
     with pytest.raises(BinVisionError, match="missing message content"):
-        client.analyze("Describe this bin", b"not-a-real-image")
+        client.analyze("Describe this bin", _jpeg())
 
 
 def test_default_vision_client_selects_the_configured_backend(
@@ -576,6 +584,6 @@ def test_openai_compatible_client_sends_bearer_token_when_keyed(
         api_key="synthetic-key",
     )
 
-    client.analyze("Describe this bin", b"not-a-real-image")
+    client.analyze("Describe this bin", _jpeg())
 
     assert captured["auth"] == "Bearer synthetic-key"

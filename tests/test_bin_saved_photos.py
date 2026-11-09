@@ -315,6 +315,60 @@ def test_prefilled_field_survives_model_failure(
     assert "Synthetic model outage" in response.text
 
 
+@pytest.mark.parametrize("route", ["/", "/saved-photos"])
+@pytest.mark.parametrize(
+    "client_type", [bin_vision.OpenRouterVisionClient, bin_vision.GeminiVisionClient]
+)
+@pytest.mark.parametrize("field,value", [("theme", "MY WORKBENCH"), ("contents", "My calipers")])
+def test_image_preparation_refusal_keeps_originals_and_manual_review(
+    monkeypatch, route, client_type, field, value
+) -> None:
+    photos = _SavedPhotos()
+    original = photos.image
+    digest = hashlib.sha256(original).hexdigest()
+    stored: list[bytes] = []
+    transport_calls: list[object] = []
+
+    def store(images):
+        stored.extend(images)
+        return [digest], None
+
+    def fail_preparation(*args, **kwargs):
+        raise OSError("synthetic image transform failure")
+
+    def transport(*args, **kwargs):
+        transport_calls.append(args)
+        pytest.fail("Preparation refusal must precede transport")
+
+    monkeypatch.setattr(bin_photo_web, "_store_photos", store)
+    monkeypatch.setattr(bin_photo_web, "_harvest_colocations", lambda images: None)
+    monkeypatch.setattr(
+        bin_vision, "default_vision_client", lambda: client_type(api_key="synthetic-key")
+    )
+    monkeypatch.setattr("PIL.ImageOps.exif_transpose", fail_preparation)
+    monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", transport)
+    form = {"bin_code": "AGR-123", "site": "alameda-garage", field: value}
+    if route == "/saved-photos":
+        form["photo_ids"] = PHOTO_IDS[0]
+    response = TestClient(bin_photo_web.create_app(saved_photo_source=photos)).post(
+        route,
+        headers=ORIGIN,
+        data=form,
+        files={"photos": ("original.jpg", original, "image/jpeg")} if route == "/" else None,
+    )
+
+    assert response.status_code == 200
+    assert "Cannot prepare image" in response.text
+    assert value in response.text
+    assert 'value="AGR-123"' in response.text
+    assert 'value="alameda-garage" selected' in response.text
+    assert f'name="photo_sha256" value="{digest}"' in response.text
+    assert 'action="/register/confirm"' in response.text
+    assert stored == ([original] if route == "/" else [])
+    assert photos.image == original
+    assert not transport_calls
+
+
 def test_prefilled_fields_survive_vault_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     photos = _SavedPhotos()
 
