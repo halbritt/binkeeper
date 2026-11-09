@@ -108,7 +108,7 @@ def test_get_renders_upload_form() -> None:
     assert "Make a bin label" in body
     assert 'type="file"' in body
     assert 'name="notes"' in body
-    assert "The originals are stored when you submit" in body
+    assert "Accepted originals are stored before analysis" in body
     assert "A downscaled image and prompt may be sent" in body
     assert "nothing is registered or printed until you confirm" in body
     assert "Photo analysis may use the configured vision provider" in body
@@ -1284,7 +1284,7 @@ def test_post_reports_stored_photos_even_when_label_fails(monkeypatch) -> None:
     body = resp.text
     assert "2 of 2 photo(s) stored" in body
     assert "context length exceeded" in body
-    assert "safe in the vault" in body
+    assert "Your originals were saved" in body
     assert 'action="/register/confirm"' in body
     assert 'name="photo_sha256" value="aaa"' in body
     assert 'name="theme" value=""' in body
@@ -1307,14 +1307,14 @@ def test_photo_and_vision_failure_does_not_claim_photos_are_safe(monkeypatch) ->
     )
     assert response.status_code == 200
     assert "Photos were not stored" in response.text
-    assert "safe in the vault" not in response.text
+    assert "Your originals were saved" not in response.text
 
 
-def test_empty_photo_drop_does_not_offer_registration() -> None:
+def test_empty_photo_drop_reports_the_validation_error() -> None:
     response = _client().post("/", headers=_LOOPBACK_ORIGIN)
-    assert response.status_code == 200
-    assert "No photos were uploaded" in response.text
-    assert 'action="/register/confirm"' not in response.text
+    assert response.status_code == 400
+    assert "Choose between 1 and 12 photos" in response.text
+    assert "No new photos were stored" in response.text
 
 
 def test_post_cross_origin_is_refused(monkeypatch) -> None:

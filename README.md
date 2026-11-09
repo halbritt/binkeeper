@@ -143,7 +143,9 @@ and its initial placement, and submits one local print job. CUPS remains the
 default, with the Niimbot B1 offered per print. A repeated submission does not
 print twice. The catalog and bin page remind you to add a contents photo later.
 
-The photo flow analyzes up to three cloud requests concurrently. Local vision
+The photo flow shares three inference slots across requests and accepts at most
+12 photos, 20 MiB each. Busy analysis returns saved originals and entered fields
+for manual review or retry. Local vision
 stays serial. The page returns before the advisory QR co-location scan finishes;
 if vision fails, it keeps the stored-photo reference and offers manual label
 entry through the same reviewed create/print action.

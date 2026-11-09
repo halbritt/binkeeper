@@ -67,3 +67,33 @@ service. The existing quick-label page remains usable without vision.
 The post-response co-location scan is best effort, not a durable job queue;
 a forced service stop may interrupt it. A hard wall-clock vision deadline and
 automatic model failover remain outside this repair.
+
+## Shared admission repair (2026-11-09, BINK-58)
+
+The direct upload and saved-photo routes now share the 12-photo application limit.
+Every photo must be nonempty, decodable and at most 20 MiB before model work.
+An invalid new batch is refused before storage; already saved selections remain
+available. Accepted uploads are stored before inference admission.
+
+The interactive service has one explicit worker and three shared model-call slots.
+Cloud batches reserve up to three slots, local batches one, and label OCR one.
+Admission does not wait: overload returns HTTP 429 with saved-photo references
+and entered fields for manual review or retry. Reservations are released on success
+or error; no background job is persisted. A failed photo analysis returns manual
+review instead of presenting a partially completed batch as a finished proposal.
+The per-request concurrency rule above no longer permits separate overlapping
+requests to multiply the three-call limit.
+
+Local journal events contain an opaque request ID, count, result category and
+validation/storage/model/merge-and-orchestration/render durations. They contain
+no photo, prompt, field contents or hashes. Model time is the union of active call
+intervals, not their sum. These measurements are not a latency SLO or evidence of
+production demand. No external telemetry is added.
+
+Persistent drafts and jobs remain deferred. The BinKeeper maintainer owns a future
+proposal if measured interruptions or repeated owner reports show lost edits need
+durable recovery. Current accepted originals retain the existing vault lifetime;
+unsaved fields live in the returned page only. Closing or abandoning that page
+can lose those fields. No stale result auto-applies: creation is still a separate
+reviewed action. A future draft/job design must set retention, expiry, input-version
+binding, stale-result handling and backup semantics before implementation.

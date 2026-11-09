@@ -14,8 +14,10 @@ terminated by Tailscale Serve). Served by the standalone BinKeeper service.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
+from time import perf_counter
 from typing import Final, cast
 from urllib.parse import quote
 from uuid import UUID, uuid4
@@ -32,7 +34,12 @@ from binkeeper.bin_catalog_web import require_bin_catalog_request
 from binkeeper.bin_create import BinCreationConflict, BinCreationError, CreateBinRequest, create_bin
 from binkeeper.bin_label import BinLabelError
 from binkeeper.bin_manage import DEFAULT_BIN_ACTION_SCOPE, BinActionScope, BinManageError
-from binkeeper.bin_photo_media import BinPhotoMediaError, thumbnail_jpeg, validate_bin_photo
+from binkeeper.bin_photo_media import (
+    MAX_PHOTO_BYTES,
+    BinPhotoMediaError,
+    thumbnail_jpeg,
+    validate_bin_photos,
+)
 from binkeeper.bin_photo_web.manage import (
     LabelDriftDismissalRecorder,
     ManageLoader,
@@ -65,6 +72,7 @@ from binkeeper.bin_saved_photos import (
     attach_photos_to_bin,
     selected_photo_ids,
 )
+from binkeeper.interactive_vision import INTERACTIVE_VISION_BUDGET, TimedVisionClient, VisionBusy
 from binkeeper.sites import SITE_PREFIXES
 from binkeeper.web.chrome import build_surface_chrome, mount_shared_static, page_response
 from binkeeper.web.origin import install_origin_refusal_handler, require_origin
@@ -258,7 +266,11 @@ def create_app(
         notes = _clean(form_data.get("notes"))
         site = _clean(form_data.get("site"))
         requested_code = _clean(form_data.get("bin_code"))
-        images = await _uploaded_photos(form_data)
+        input_error = None
+        try:
+            images = await _uploaded_photos(form_data)
+        except BinPhotoMediaError as exc:
+            images, input_error = [], str(exc)
         view = await run_in_threadpool(
             _analyze,
             images=images,
@@ -267,9 +279,10 @@ def create_app(
             requested_code=requested_code,
             theme=_clean(form_data.get("theme")),
             contents=_clean(form_data.get("contents")),
+            input_error=input_error,
         )
         response = _render_photo_result(view)
-        if images:
+        if images and not view.get("admission_error"):
             response.background = BackgroundTask(_harvest_colocations, images)
         return response
 
@@ -277,7 +290,8 @@ def create_app(
         from binkeeper.bin_b1 import B1_ADDRESS
         from binkeeper.bin_label import BIN_LABEL_CUPS_QUEUE
 
-        return page_response(
+        started = perf_counter()
+        response = page_response(
             chrome.render(
                 "bin_photo_result.html",
                 new_href=surface_path(normalized_base_path, "/"),
@@ -295,6 +309,12 @@ def create_app(
                 **{"action_id": str(uuid4()), **view},
             )
         )
+        timings = view.get("phase_timings")
+        if isinstance(timings, dict):
+            timings["render_ms"] = round((perf_counter() - started) * 1000, 3)
+            logging.getLogger(__name__).info("BinKeeper photo phases %s", json.dumps(timings))
+        response.status_code = int(cast(int, view.get("status_code", 200)))
+        return response
 
     def saved_photo_access(request: Request) -> None:
         require_bin_catalog_request(
@@ -368,16 +388,13 @@ def create_app(
         dependencies=[Depends(saved_photo_access), Depends(strict_origin_check)],
     )
     async def saved_photo_upload(request: Request) -> Response:
-        images = await _uploaded_photos(await request.form())
         error: str | None = None
-        if not 1 <= len(images) <= MAX_LABEL_PHOTOS:
-            error = f"Choose between 1 and {MAX_LABEL_PHOTOS} photos to upload."
-        else:
-            try:
-                for original in images:
-                    await run_in_threadpool(validate_bin_photo, original)
-            except BinPhotoMediaError as exc:
-                error = str(exc)
+        images: list[bytes] = []
+        try:
+            images = await _uploaded_photos(await request.form())
+            await run_in_threadpool(validate_bin_photos, images)
+        except BinPhotoMediaError as exc:
+            error = str(exc)
         if error:
             return await run_in_threadpool(_render_saved_photos, error=error, status_code=400)
         _, store_error = await run_in_threadpool(
@@ -773,13 +790,20 @@ async def _first_photo(form_data: FormData) -> bytes | None:
 
 
 async def _uploaded_photos(form_data: FormData) -> list[bytes]:
-    images = []
-    for upload in form_data.getlist("photos"):
-        if isinstance(upload, UploadFile):
-            data = await upload.read()
-            if data:
-                images.append(data)
-    return images
+    uploads = [item for item in form_data.getlist("photos") if isinstance(item, UploadFile)]
+    try:
+        if not 1 <= len(uploads) <= MAX_LABEL_PHOTOS:
+            raise BinPhotoMediaError(f"Choose between 1 and {MAX_LABEL_PHOTOS} photos of one bin.")
+        images = []
+        for upload in uploads:
+            data = await upload.read(MAX_PHOTO_BYTES + 1)
+            if not data or len(data) > MAX_PHOTO_BYTES:
+                raise BinPhotoMediaError("Each photo must be nonempty and at most 20 MiB.")
+            images.append(data)
+        return images
+    finally:
+        for upload in uploads:
+            await upload.close()
 
 
 def _analyze(
@@ -791,33 +815,38 @@ def _analyze(
     stored_blob_refs: list[str] | None = None,
     theme: str | None = None,
     contents: str | None = None,
+    input_error: str | None = None,
 ) -> dict[str, object]:
-    """Store the photos, then best-effort propose a label; build a view model.
-
-    Storage is the guaranteed primary action and is reported on its own: the
-    ORIGINAL full-resolution bytes are preserved in the vault regardless of
-    whether the vision model is reachable. The label is a best-effort
-    enrichment; a model outage yields ``label_error`` (calm, retryable), never
-    a lost photo or a failed request.
-    """
-    if not images:
-        return {
-            "photo_count": 0,
-            "blob_refs": [],
-            "store_error": None,
-            "proposal": None,
-            "label_error": "No photos were uploaded.",
-            "site": site,
-            "suggested_bin_code": None,
-            "all_sites": list(_SITE_PREFIXES),
-            "proposed_contents": "",
-        }
+    """Validate, preserve accepted originals, then attempt bounded advisory work."""
+    timings: dict[str, object] = {
+        "request_id": str(uuid4()),
+        "photo_count": len(images),
+        "validation_ms": 0.0,
+        "storage_ms": 0.0,
+        "model_ms": 0.0,
+        "merge_overhead_ms": 0.0,
+        "outcome": "manual",
+    }
+    started = perf_counter()
+    admission_error = input_error
+    if not admission_error:
+        try:
+            validate_bin_photos(images)
+        except BinPhotoMediaError as exc:
+            admission_error = str(exc)
+    timings["validation_ms"] = round((perf_counter() - started) * 1000, 3)
+    started = perf_counter()
     blob_refs, store_error = (
-        _store_photos(images) if stored_blob_refs is None else (stored_blob_refs, None)
+        (stored_blob_refs, None)
+        if stored_blob_refs is not None
+        else ([], None)
+        if admission_error
+        else _store_photos(images)
     )
-
+    timings["storage_ms"] = round((perf_counter() - started) * 1000, 3)
     proposal: dict[str, object] | None = None
-    label_error: str | None = None
+    label_error = admission_error
+    status_code = 400 if admission_error else 200
     from binkeeper.bin_vision import (
         BinVisionError,
         GeminiVisionClient,
@@ -826,21 +855,41 @@ def _analyze(
         propose_bin_label,
     )
 
-    if not (theme and contents):
+    if admission_error:
+        timings["outcome"] = "refused"
+    elif not (theme and contents):
         try:
             client = default_vision_client()
-            workers = 3 if isinstance(client, OpenRouterVisionClient | GeminiVisionClient) else 1
-            proposal = propose_bin_label(
-                client,
-                images,
-                notes=notes,
-                max_workers=workers,
-                contents_only=bool(theme),
-                existing_theme=theme,
-                theme_only=bool(contents),
-            ).to_json()
+            workers = (
+                min(len(images), 3)
+                if isinstance(client, OpenRouterVisionClient | GeminiVisionClient)
+                else 1
+            )
+            with INTERACTIVE_VISION_BUDGET.admit(workers):
+                measured = TimedVisionClient(client)
+                started = perf_counter()
+                try:
+                    proposal = propose_bin_label(
+                        measured,
+                        images,
+                        notes=notes,
+                        max_workers=workers,
+                        fail_on_error=True,
+                        contents_only=bool(theme),
+                        existing_theme=theme,
+                        theme_only=bool(contents),
+                    ).to_json()
+                finally:
+                    elapsed = perf_counter() - started
+                    timings["model_ms"] = round(measured.active_seconds * 1000, 3)
+                    timings["merge_overhead_ms"] = round(
+                        max(0, elapsed - measured.active_seconds) * 1000, 3
+                    )
+            timings["outcome"] = "completed"
         except BinVisionError as exc:
             label_error = str(exc)
+            status_code = 429 if isinstance(exc, VisionBusy) else 200
+            timings["outcome"] = "busy" if isinstance(exc, VisionBusy) else "model_failed"
             logging.getLogger(__name__).warning("BinKeeper label analysis failed: %s", exc)
 
     accepts = proposal.get("accepts") if isinstance(proposal, dict) else None
@@ -853,6 +902,10 @@ def _analyze(
         "store_error": store_error,
         "proposal": proposal,
         "label_error": label_error,
+        "admission_error": admission_error,
+        "status_code": status_code,
+        "phase_timings": timings,
+        "review_recovery": bool(admission_error),
         "site": site,
         "suggested_bin_code": requested_code or _suggest_bin_code(site),
         "all_sites": list(_SITE_PREFIXES),
@@ -860,7 +913,7 @@ def _analyze(
         "proposed_theme": theme or (proposal.get("theme", "") if proposal else ""),
         "theme_provided": bool(theme),
         "contents_provided": bool(contents),
-        "analysis_skipped": bool(theme and contents),
+        "analysis_skipped": bool(theme and contents) and not admission_error,
     }
 
 
@@ -1002,7 +1055,8 @@ def _detect_bin_code(*, image: bytes | None, entered: str | None) -> tuple[str |
     from binkeeper.bin_vision import BinVisionError, default_vision_client, read_bin_code
 
     try:
-        code = read_bin_code(default_vision_client(), image)
+        with INTERACTIVE_VISION_BUDGET.admit(1):
+            code = read_bin_code(default_vision_client(), image)
     except BinVisionError:
         return (None, "")
     if code:

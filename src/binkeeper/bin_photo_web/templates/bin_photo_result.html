@@ -26,7 +26,9 @@
   in the encrypted, full-resolution vault. This is independent of the label below.</p>
 {% elif photo_count %}
 <p class="banner banner-warn" role="status"><strong>No photos were stored.</strong>
-  The vault was unavailable, though {{ photo_count }} were received.</p>
+  {% if admission_error %}The upload did not pass photo validation.{% else %}The vault was unavailable, though {{ photo_count }} were received.{% endif %}</p>
+{% elif admission_error %}
+<p class="banner banner-warn" role="status">No new photos were stored. Your entered details are kept below.</p>
 {% endif %}
 
 {% if not creation_review %}
@@ -69,17 +71,17 @@
   <p>Both fields were supplied, so photo analysis was skipped. Review your label and contents below.</p>
   {% elif label_error %}
   <p class="banner banner-warn" role="status">No label proposed this time: {{ label_error }}</p>
-  {% if blob_refs and not store_error %}<p class="field-help">Your photos are safe in the vault.</p>{% endif %}
+  {% if blob_refs and not store_error %}<p class="field-help">Your originals were saved.</p>{% endif %}
   {% if photo_count %}<p class="field-help">Enter the label details below to create and print now.</p>{% endif %}
   {% endif %}
 </section>
 {% endif %}
 
-{% if photo_count or creation_review %}
+{% if photo_count or creation_review or review_recovery %}
 <section class="panel panel-padded bin-photo-card" aria-labelledby="create-bin-heading">
   <div class="bin-photo-card-header">
     <h2 id="create-bin-heading">Create this bin</h2>
-    <p class="bin-photo-card-copy">Code, site, theme, and contents are saved. The same reviewed theme is used on the optional printed label. {% if proposal %}Edit anything the proposal got wrong.{% else %}Enter a main label and any contents you want to print.{% endif %}</p>
+    <p class="bin-photo-card-copy">Confirmation saves the code, site, label, and contents. The reviewed label is also used for optional printing. {% if proposal %}Edit anything the proposal got wrong.{% else %}Enter a main label and any contents you want to print.{% endif %}</p>
   </div>
   <form method="post" action="{{ confirm_action }}" class="form-grid bin-photo-form"
         data-submit-form>

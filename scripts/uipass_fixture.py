@@ -164,7 +164,11 @@ def create_app(port: int) -> FastAPI:
 
     @app.get("/fixture/photo-result")
     def photo_result(
-        failure: bool = False, stored: bool = True, prefill: str = "", creation_error: bool = False
+        failure: bool = False,
+        stored: bool = True,
+        prefill: str = "",
+        creation_error: bool = False,
+        busy: bool = False,
     ) -> Response:
         chrome = build_surface_chrome(
             "bin_photo", extra_template_dir=Path(bin_photo_web.__file__).parent / "templates"
@@ -192,7 +196,7 @@ def create_app(port: int) -> FastAPI:
                 else [],
                 store_error=None if stored else "Vault unavailable",
                 proposal=None
-                if failure or prefill == "both" or creation_error
+                if failure or prefill == "both" or creation_error or busy
                 else {
                     "theme": "MY WORKBENCH" if prefill == "label" else "Precision tools",
                     "owner_phrase": "Keep these together",
@@ -201,13 +205,20 @@ def create_app(port: int) -> FastAPI:
                     "summary": "Hex keys and calipers",
                     "items": [{"label": "hex keys", "confidence": 0.9}],
                 },
-                label_error="Vision model is unavailable" if failure else None,
+                label_error=(
+                    "Photo analysis is busy. "
+                    "Review the entered details now or retry from Saved photos."
+                    if busy
+                    else "Vision model is unavailable"
+                    if failure
+                    else None
+                ),
                 site="alameda-garage",
                 suggested_bin_code="AGR-023",
                 all_sites=["alameda-garage", "oakland-fab-east"],
                 proposed_contents="" if failure else "hex keys, calipers",
                 proposed_theme="MY WORKBENCH"
-                if prefill in {"label", "both"} or creation_error
+                if prefill in {"label", "both"} or creation_error or busy
                 else "",
                 theme_provided=prefill in {"label", "both"},
                 contents_provided=prefill == "both",

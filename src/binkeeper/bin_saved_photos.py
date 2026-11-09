@@ -12,6 +12,7 @@ from uuid import UUID
 
 import psycopg
 
+from binkeeper.bin_photo_media import MAX_LABEL_PHOTOS as MAX_LABEL_PHOTOS
 from binkeeper.blob_vault import (
     BlobVaultError,
     blob_store_from_config,
@@ -21,7 +22,6 @@ from binkeeper.blob_vault import (
 from binkeeper.database import ServingRoleUnavailableError, connect
 
 PAGE_SIZE = 12
-MAX_LABEL_PHOTOS = 12
 
 
 class SavedPhotoSelectionError(ValueError):

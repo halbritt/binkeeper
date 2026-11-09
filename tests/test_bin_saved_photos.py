@@ -334,7 +334,7 @@ def test_image_preparation_refusal_keeps_originals_and_manual_review(
         return [digest], None
 
     def fail_preparation(*args, **kwargs):
-        raise OSError("synthetic image transform failure")
+        raise bin_vision.ImagePreparationError("Cannot prepare image: synthetic transform failure")
 
     def transport(*args, **kwargs):
         transport_calls.append(args)
@@ -345,7 +345,7 @@ def test_image_preparation_refusal_keeps_originals_and_manual_review(
     monkeypatch.setattr(
         bin_vision, "default_vision_client", lambda: client_type(api_key="synthetic-key")
     )
-    monkeypatch.setattr("PIL.ImageOps.exif_transpose", fail_preparation)
+    monkeypatch.setattr(bin_vision, "_prepare_image", fail_preparation)
     monkeypatch.setattr("binkeeper.bin_vision.urllib.request.urlopen", transport)
     form = {"bin_code": "AGR-123", "site": "alameda-garage", field: value}
     if route == "/saved-photos":

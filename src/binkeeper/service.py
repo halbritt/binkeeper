@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import timedelta
@@ -135,4 +136,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         parser.error(f"standalone service is frozen to {FROZEN_HOST}:{FROZEN_PORT}")
     import uvicorn
 
-    uvicorn.run("binkeeper.service:app", host=args.host, port=args.port, access_log=False)
+    logging.basicConfig(level=logging.INFO, format="%(name)s %(message)s")
+    # The interactive vision admission budget belongs to this one worker.
+    uvicorn.run(
+        "binkeeper.service:app", host=args.host, port=args.port, access_log=False, workers=1
+    )

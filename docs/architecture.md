@@ -224,7 +224,10 @@ anecdote-chosen default scored worst of the live candidates.
 ADR 0007 replaces the retired Qwen3-VL hosted model. The interactive OpenRouter
 client disables reasoning through OpenRouter's API and requests latency-sorted
 provider routing. Each cloud photo-drop request runs at most three analyses
-concurrently; overlapping requests do not share an application-wide budget.
+concurrently within a shared three-call budget in the single service worker
+(BINK-58). Overlapping requests cannot multiply that limit; overload returns a
+recoverable 429 after accepted originals are saved. Direct and saved selections
+are limited to 12 decodable images, at most 20 MiB each.
 Local and nightly photo iteration remains serial. Results merge in upload order.
 
 ### Media and durability (`blob_vault`, `bin_photo_media`, `backup`, `restore_drill`, `transfer`)

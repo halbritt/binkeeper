@@ -48,6 +48,7 @@ surfaces:
       label_prefilled: {route: "/fixture/photo-result?prefill=label", ready: h1}
       both_prefilled: {route: "/fixture/photo-result?prefill=both", ready: h1}
       vision_failure: {route: "/fixture/photo-result?failure=true", ready: h1}
+      analysis_busy: {route: "/fixture/photo-result?busy=true", ready: h1}
       creation_conflict: {route: "/fixture/photo-result?creation_error=true", ready: h1}
       creation_replayed: {route: /fixture/creation-replay, ready: h1}
       storage_and_vision_failure:

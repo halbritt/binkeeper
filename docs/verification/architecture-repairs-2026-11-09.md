@@ -144,3 +144,48 @@ narrow expanded-review screenshot were inspected. The first run exposed a real
 320-pixel clipping defect in the existing contents panel; wrapping its summary
 and allowing its grid width to shrink fixed that defect and all 18 associated
 contrast-assessment warnings. Times now use readable UTC text.
+
+## BINK-58: bounded photo admission and measured recovery
+
+Base: `0a33909`, same repository and `master`. Invalid new batches are refused
+before storage/model work; accepted originals are saved before admission. Direct
+uploads, saved uploads and saved selections use the same 12-photo, 20-MiB-per-photo
+and decode checks. One service worker shares three inference slots, with immediate
+recoverable 429 on overload. Label OCR uses the same budget. Model errors preserve
+manual review and never automatically register or print.
+
+`make check` passed **684 tests**, **20 migration cases**, lint, types and wheel
+verification. Two overlapping 13-photo batches make zero model/storage calls. A
+12-photo blocked cloud batch and overlapping direct/saved attempts never exceed
+three active calls; both refused attempts preserve accepted originals and fields.
+After release, retry succeeds; evidence still contains no inventory/print mutation.
+Malformed, empty and oversized input tests cover both upload paths. Export-failure
+recovery tests now inject failure at the export-preparation seam, after successful
+input validation, preserving their original intended boundary check.
+
+The bounded 64x64 synthetic overlap run took 93.45 ms, including deliberate model
+blocking until recovery assertions finished. Its 12-photo request measured 1.571 ms
+validation, 6.307 ms storage, 77.351 ms model-active time, 0.483 ms merge/orchestration
+and 0.284 ms render. A separate 1600x1200 browser fixture through actual tailnet
+HTTPS measured 48.305/10.374/277.467/0.102/15.875 ms for those phases. These are fake
+model timings and do not predict live provider latency, abandonment rate or an SLO.
+
+The real Chromium front rehearsal navigated away while inference was blocked,
+closed/reopened the page, found the saved original and retried successfully.
+Unsaved fields were empty on reopen: durable draft recovery is explicitly deferred
+in ADR 0007. HTTPS create/replay returned 200, divergent creation 409 and missing
+Origin 403. Fake printing produced exactly one creation attempt and one deliberate
+reprint despite replay. The management page showed the two-copy handoff; the catalog
+remained usable with both current and degraded advisory status. The isolated
+process, database and temporary Tailscale port 18777 were removed. No live owner
+image, provider call, physical printer or production deployment was involved.
+
+UIPass run `d8e37e0c-1a72-4921-9090-c519f2d51201` passed 48 photo, saved-photo and
+result cases at three widths without findings. Busy-result phone/desktop screenshots
+were inspected; preserved fields, stored-photo status and manual/retry actions are
+visible. A final copy pass removes an overly broad safety claim and clarifies that
+confirmation, rather than rendering the form, saves bin details.
+
+Final copy-only UIPass run `75a426fb-7295-40e3-9c39-f53aac21bc99` passed 27 result
+cases without findings; busy phone/desktop screenshots were inspected again.
+The affected web/service tests passed 81 cases after the copy change.
