@@ -10,11 +10,10 @@ keep are in [README.md](../README.md#invariants).
 
 The [2026-11-08 system review](architecture/BINK-ARCH-20261108/README.md)
 records verified exceptions to the intended creation/export contracts and the
-ordered repair plan. Its recommendations have not been deployed.
-Source repairs for image-export refusal and stable creation identity are recorded
-in [the repair verification](verification/architecture-repairs-2026-11-09.md) and
-[ADR 0008](adr/0008-creation-action-identity.md); installed behavior still needs
-the separate deployment checkpoint.
+ordered repair plan. Repairs BINK-54 through BINK-59 were deployed on 2026-11-09.
+Source tests, synthetic failure probes and installed HTTPS checks are recorded in
+[the repair verification](verification/architecture-repairs-2026-11-09.md).
+[ADR 0008](adr/0008-creation-action-identity.md) defines stable creation identity.
 
 ## The design rule everything follows
 
@@ -27,9 +26,9 @@ Raw evidence is append-only; everything the owner reads is a fold.
   a canonical content hash (the plaintext hash for blobs, the phrase/source
   natural key for liveness) — enforced either by `ON CONFLICT DO NOTHING` or
   by an advisory-locked check-then-insert (containment, blob vault,
-  captures). This is intended to make replays no-ops. Photo creation still uses
-  a code/site/day registration key: the review reproduced distinct-intent
-  collisions and next-day replay effects (BINK-55).
+  captures). Photo creation uses a scoped action UUID and canonical reviewed
+  payload; exact replay is a no-op and divergent reuse is a conflict. Physical
+  label observation retains its historical code/site/day identity.
 - **Derived state** — a bin's location, its passport, the review queues, the
   catalog — is computed at read time by pure folds over that evidence. No
   mutable "current state" row exists anywhere. A bin's location is the fold
@@ -191,12 +190,12 @@ runs ~4.6 s per photo in the November 2026 sample (ADR 0007), and the
 |---|---|---|---|
 | Interactive first pass (photo drop) | hosted `qwen/qwen3.8-flash` via OpenRouter | on photo drop, advisory label proposal | downscaled JPEG + prompt (ADR 0004/0005/0007) |
 | Nightly peripheral-OCR true-up | local `qwen3-vl:32b` on peecee | `binkeeper-ocr-harvest.timer`, 03:30 | nothing (pinned `--local-only`) |
-| Label-drift review queue (ADR 0006) | explicit local-only `qwen3-vl:8b` rollback (BINK-57 source) | `binkeeper-label-drift.timer`, 04:00, input-keyed | none |
+| Label-drift review queue (ADR 0006) | explicit local-only `qwen3-vl:8b` rollback (BINK-57) | `binkeeper-label-drift.timer`, 04:00, input-keyed | none |
 
-This table describes the installed configuration. The current owner instruction
-requires subscription-covered models to use their subscription route, so the
-nightly Opus/OpenRouter pin needs reconciliation (BINK-57). The latest observed
-run on 2026-11-08 failed before inference because no local 8B slot was routable.
+This table describes the installed configuration. The former nightly
+Opus/OpenRouter route is refused under the subscription-only rule. The most recent
+nightly attempt (2026-11-09) failed before inference because no exact local slot
+was routable. Local mode is configured; capacity remains an operational dependency.
 
 Geofencing resolves a photo's EXIF GPS against owner-local site anchors and
 abstains on ambiguity or a fix looser than 100 m. The site *vocabulary*
@@ -272,9 +271,10 @@ with the read-only catalog at `/bins/`
 thumbnails). Reviewed POST actions sit behind a strict origin guard with a
 paired-origin allowlist and a legible refusal contract. Reviewed actions
 such as quick-label and manage actions carry server-rendered request IDs, so
-replays are no-ops and divergent reuse errors out. Photo-based creation still
-uses the day-scoped registration identity described above. The photo drop stores the
-original bytes first, as the guaranteed action. Vision failure keeps the
+replays are no-ops and divergent reuse errors out. Photo-based creation
+uses the action identity described above. Physical-label registration remains
+day-scoped. The photo drop validates the batch and stores accepted originals
+before requesting inference capacity. Vision failure keeps the
 stored-photo reference and offers manual label entry. The advisory QR
 co-location harvest runs after the response, in the same service process;
 it owns its database connection and remains best effort across service stops.
@@ -333,9 +333,9 @@ URL, writer gate, vision provider and keys, backup root) is shared by every
 unit. The OCR harvest layers `/etc/binkeeper/binkeeper-ocr-harvest.env` after
 it to pin local 32B. The label-drift pass layers
 `/etc/binkeeper/binkeeper-label-drift.env`, then obtains its local 8B endpoint
-from a fenced gpu-fleet lease; the shared file supplies writer authority. BINK-57
-source pins local-only mode and refuses the old ensemble route. A local status
-file records service start/completion, last success/failure and actionable reasons,
+from a fenced gpu-fleet lease; the shared file supplies writer authority. The
+BINK-57 pin selects local-only mode and refuses the old ensemble route. A local
+status file records service start/completion, last success/failure and actionable reasons,
 including lease failure before the CLI starts. It is replaceable operational state,
 not inventory evidence or part of the core readiness gate.
 Blob and backup key material lives only in `/etc/binkeeper/blob-vault.json`
@@ -349,18 +349,17 @@ conditions.
 The one standing owner-approved export (ADR 0004) permits only the advisory
 vision lane's downscaled inference JPEG (bounded long edge, re-encoded) and
 prompt text. Original photo bytes, bin codes, coordinates and ledgers must stay
-local. The system review reproduced a violation: image-preparation failure
-returns original bytes to both cloud transports. BINK-54 tracks removal of that
-fallback; the policy is not evidence that every current path enforces it.
+local. BINK-54 removed the original-byte fallback: image-preparation failure now
+refuses transport, and successful preparation removes carried image metadata.
+Synthetic probes verify both cloud transports and recovery through the web forms.
 
 Per lane: the interactive pass is configured for OpenRouter (ADR 0005/0007); the
 nightly OCR true-up exports nothing and is doubly pinned local (env layering
 plus a `--local-only` refusal that aborts before any photo is read); the nightly
-drift queue is configured to send the same inference input through OpenRouter to
-Anthropic (ADR 0006), subject to the newer subscription-route restriction above.
-Its documented no-cloud rollback is
-`BINKEEPER_BIN_LABEL_DRIFT_MODE=local` or disabling its timer. The interactive
-lane separately rolls back with `BINKEEPER_BIN_VISION_PROVIDER=local`.
+drift queue uses only the leased local model (ADR 0006's BINK-57 amendment).
+Its installed pin selects `BINKEEPER_BIN_LABEL_DRIFT_MODE=local`, and the former
+Opus/OpenRouter ensemble is refused before model I/O. The interactive lane
+separately rolls back with `BINKEEPER_BIN_VISION_PROVIDER=local`.
 
 ## Decision records
 
@@ -373,6 +372,7 @@ lane separately rolls back with `BINKEEPER_BIN_VISION_PROVIDER=local`.
 | [0005](adr/0005-benchmarked-vision-default.md) | Benchmark-selected OpenRouter Qwen3-VL 32B interactive default |
 | [0006](adr/0006-label-drift-review-queue.md) | Async label-drift proposals with an owner review queue (accepted; slices `BINK-42`..`BINK-44`) |
 | [0007](adr/0007-interactive-vision-repair.md) | Replace retired interactive vision model; bound parallel photo analysis and retain manual recovery |
+| [0008](adr/0008-creation-action-identity.md) | Stable creation identity, atomic photo links and explicit conflict recovery |
 
 ## Known seams and rough edges
 

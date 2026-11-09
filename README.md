@@ -16,9 +16,9 @@ consumer and rollback-window gates. The advisory vision lane with its
 benchmark-selected cloud default (ADR 0005, renewed in ADR 0007) and the nightly local-only
 peripheral-OCR true-up timer (`binkeeper-ocr-harvest.timer`) are also
 deployed. ADR 0006's review queue and append-only accept/dismiss workflow are
-deployed after the OCR pass. BINK-57 changes the source configuration to the
-explicit local-only rollback and rejects the former Opus/OpenRouter route.
-Installing that repair is tracked separately from source verification.
+deployed after the OCR pass. The BINK-57 repair deployed on
+2026-11-09 selects the explicit local-only rollback and rejects the former
+Opus/OpenRouter route. GPU capacity remains a separate dependency.
 
 The whole-system design is described in
 [docs/architecture.md](docs/architecture.md).
@@ -128,7 +128,7 @@ means photos were read but no code was legible anywhere. See
 [docs/deployment.md](docs/deployment.md).
 
 The follow-on label-drift pass runs at 04:00 through an exact-model gpu-fleet
-lease for `qwen3-vl:8b`. The BINK-57 source pin explicitly selects local-only
+lease for `qwen3-vl:8b`. The BINK-57 pin explicitly selects local-only
 review, preserving input-keyed proposals for possible contents additions. Missing
 GPU capacity stops the pass without a fallback. The catalog shows the last success
 and failure separately from inventory readiness, plus the rebuildable pending count; the manage page lets the owner save reviewed

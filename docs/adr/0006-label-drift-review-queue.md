@@ -127,5 +127,7 @@ and reviews older than 28 hours are explicit. Unreadable photos also make a run
 incomplete. None of these conditions change the core readiness result or owner
 evidence. Contents-only additions, input identity and review remain unchanged.
 
-This amendment records the implementation contract. Source verification does not
-claim that the installed wheel or timer has been updated or a live model run made.
+The repaired wheel, local pin and status hooks were deployed on 2026-11-09.
+Installed HTTPS checks passed. No live model run was made during deployment;
+the exact local fleet capability remains unavailable. See the
+[repair verification](../verification/architecture-repairs-2026-11-09.md).

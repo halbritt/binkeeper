@@ -24,7 +24,7 @@ photo references, site, code and supplied fields, with manual review still avail
 Existing transport tests now use generated JPEGs so they still reach their intended
 transport/response assertions. No live provider request, owner-data write, physical
 print, schema change or production deployment was used for these checks. Fronted
-installed-package verification remains a deployment check. Rollback must not restore
+installed-package verification is recorded below. Rollback must not restore
 the raw-byte fallback: disable cloud assistance or select the accepted local route
 while forward-fixing.
 
@@ -39,7 +39,7 @@ accepted ADR, both transport probes and workflow regressions. Remaining generic
 obligations about incident response, mutable graphs, Python special methods,
 non-ASCII text, unchanged resource ownership and structural-change procedures are
 nonmaterial to this bytes-to-image refusal repair. Production incident frequency
-and installed behavior are unmeasured; no claim about either follows from the suite.
+is unmeasured; installed behavior is checked separately below.
 
 ## BINK-55: stable creation and complete returned review
 
@@ -102,8 +102,8 @@ UIPass run `ad3c7aec-4b65-40ae-84a9-2fb98353f965` passed 12 management and quick
 cases at three widths with no findings. Phone and desktop print-history screenshots
 were inspected: the unknown status, timestamp, printer, copies and check-before-
 reprint instruction remain readable, with the deliberate reprint action below.
-The final combined candidate front rehearsal will cover this route before release.
-No physical printer call or production service change occurred.
+The combined candidate front rehearsal recorded under BINK-58 also covers this
+route. No physical printer call or production service change occurred in this check.
 
 Rollback retains all print evidence. If an older binary cannot preserve the
 reservation contract, disable its affected print actions and forward-fix; never
@@ -121,7 +121,9 @@ Read-only fleet inspection at 2026-11-09 18:21 UTC, gpu-fleet revision `2de2007`
 found two declared 8B slots but neither routable: both were below their loadability
 thresholds. Heartbeat was active; the installed nightly service had exited 75 at
 04:08 local time. Its installed pin still selected the old ensemble. This repair
-does not change fleet capacity, installed configuration, or run owner photos.
+did not change fleet capacity, installed configuration, or run owner photos at
+that source checkpoint. The installed configuration was updated during deployment
+below; fleet capacity remains a separate dependency.
 
 `make check` passed **674 tests**, **20 migration cases**, lint, types and wheel
 verification. Routing refusal, failure/resume, unreadable photos, stale/interrupted
@@ -224,3 +226,45 @@ originals and existing backups were not changed by these experiments.
 The complete BINK-59 `make check` passed **694 tests**, **20 migration cases**,
 lint, type checks and wheel verification. The new writer does not change the
 backup or ciphertext format. Deployment and installed front checks follow below.
+
+## Deployment and acceptance
+
+All six repairs were installed on 2026-11-09 at 18:47 UTC. Runtime source is
+`a4c4dfb` on `master`. The final wheel's SHA-256 is
+`3c89e79facf806b6c20c54689ea8857424984ca034b2e7f66fdab46fb009fdb7`;
+105 installed package files matched it byte for byte. After the complete gate
+above, a final malformed-status regression passed all 8 advisory-status tests:
+an invalid JSON state type now reports unknown instead of blocking the catalog.
+The wheel was rebuilt and verified after that change.
+
+The production Python 3.12 environment passed synthetic image preparation,
+filesystem publication and app construction checks. A disposable PostgreSQL
+rehearsal with the installed package verified creation replay and print replay,
+with exactly one fake printer submission. Development checks used Python 3.14.
+
+Deployment replaced the wheel, installed the local-only nightly pin and status
+hooks, reloaded systemd, and restarted the existing inventory service. The
+nightly timer remains active. Unit validation found no BinKeeper error. No
+manual nightly run, owner-photo model request or physical print was performed.
+Canonical owner evidence, keys and existing backups were unchanged.
+
+Through the existing Tailscale HTTPS front, `/healthz`, `/readyz`, `/`,
+`/saved-photos` and `/bins/` all returned 200; readiness was true. The upload page
+showed the admission limit, and the catalog exposed the advisory failure without
+blocking inventory. These checks completed at 18:47:28 UTC. The installed unit
+and pin matched their repository versions.
+
+The new operational status file was initialized from the actual prior systemd
+failure at 04:08:33 local time on November 9 (exit 75, lease unavailable/lost).
+It records no invented success or new model run. A second read-only fleet check
+at 18:48 UTC still found no routable exact `qwen3-vl:8b` capacity. **BINK-60**
+tracks restoring that capacity and verifying a lease-backed synthetic run;
+neither fleet configuration nor unrelated GPU work was changed here. This is
+the remaining operational dependency for nightly contents review.
+
+Rollback preserves creation, print and blob evidence and the explicit local-only
+route. Keep affected actions disabled if an older package cannot honor their
+receipt contracts; forward-fix rather than replaying an unknown physical effect
+or restoring original-byte export. No schema rollback or evidence rewrite is
+required. Probe databases, the temporary HTTPS front and synthetic vaults were
+removed; committed verification contains only synthetic results.

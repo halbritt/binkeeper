@@ -1,6 +1,6 @@
 # ADR 0008: Stable identity for new-bin creation
 
-- Status: implemented for the owner-directed BINK-55 repair; deployment pending
+- Status: implemented and deployed for the owner-directed BINK-55 repair (2026-11-09)
 - Date: 2026-11-09
 
 ## Context
