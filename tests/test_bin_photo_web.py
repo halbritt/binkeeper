@@ -1434,14 +1434,12 @@ def test_register_confirm_rejects_cross_origin_print(
 
 
 def test_confirm_route_carries_reviewed_theme_and_print_intent(
+    conn: psycopg.Connection,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from binkeeper import bin_label, db
 
-    monkeypatch.setattr(
-        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
-    )
-    monkeypatch.setattr(bin_photo_web, "create_bin", lambda *_args, **_kwargs: _register_result())
+    monkeypatch.setattr(db, "connect", lambda **_: nullcontext(conn))
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     submissions: list[str] = []
 
@@ -1473,14 +1471,12 @@ def test_confirm_route_carries_reviewed_theme_and_print_intent(
 
 
 def test_confirm_route_prints_on_explicit_b1_without_changing_cups_default(
+    conn: psycopg.Connection,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from binkeeper import bin_b1, bin_label, db
 
-    monkeypatch.setattr(
-        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
-    )
-    monkeypatch.setattr(bin_photo_web, "create_bin", lambda *_args, **_kwargs: _register_result())
+    monkeypatch.setattr(db, "connect", lambda **_: nullcontext(conn))
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     monkeypatch.setattr(bin_b1, "B1_ADDRESS", "synthetic-address")
     sent: list[tuple[bytes, str, int]] = []
@@ -1516,14 +1512,12 @@ def test_confirm_route_prints_on_explicit_b1_without_changing_cups_default(
 
 
 def test_confirm_route_prints_two_reviewed_labels_in_one_submission(
+    conn: psycopg.Connection,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from binkeeper import bin_label, db
 
-    monkeypatch.setattr(
-        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
-    )
-    monkeypatch.setattr(bin_photo_web, "create_bin", lambda *_args, **_kwargs: _register_result())
+    monkeypatch.setattr(db, "connect", lambda **_: nullcontext(conn))
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     submissions: list[str] = []
 
@@ -1587,14 +1581,13 @@ def test_confirm_route_persists_the_reviewed_theme(
 
 
 def test_explicit_print_renders_reviewed_label_and_submits_once(
+    conn: psycopg.Connection,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from binkeeper import bin_label, bin_register, db
+    from binkeeper import bin_label, db
+    from binkeeper.bin_create import CreateBinRequest
 
-    monkeypatch.setattr(
-        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
-    )
-    monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
+    monkeypatch.setattr(db, "connect", lambda **_: nullcontext(conn))
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     submissions: list[tuple[str, str | None]] = []
 
@@ -1610,6 +1603,14 @@ def test_explicit_print_renders_reviewed_label_and_submits_once(
     monkeypatch.setattr(bin_label, "send_to_printer", fake_send)
 
     view = bin_photo_web._register_and_view(
+        creation=CreateBinRequest(
+            "2ad7b5aa-541b-4fc7-ab73-d3a23e499655",
+            "AGR-014",
+            "alameda-garage",
+            "hand tools",
+            "hex keys",
+            copies=1,
+        ),
         bin_code="AGR-014",
         site="alameda-garage",
         gps=None,
@@ -1631,14 +1632,13 @@ def test_explicit_print_renders_reviewed_label_and_submits_once(
 
 
 def test_print_failure_does_not_hide_successful_registration(
+    conn: psycopg.Connection,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from binkeeper import bin_label, bin_register, db
+    from binkeeper import bin_label, db
+    from binkeeper.bin_create import CreateBinRequest
 
-    monkeypatch.setattr(
-        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
-    )
-    monkeypatch.setattr(bin_register, "register_bin", lambda *_args, **_kwargs: _register_result())
+    monkeypatch.setattr(db, "connect", lambda **_: nullcontext(conn))
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
 
     def fail_print(*_args: object, **_kwargs: object) -> None:
@@ -1647,6 +1647,14 @@ def test_print_failure_does_not_hide_successful_registration(
     monkeypatch.setattr(bin_label, "send_to_printer", fail_print)
 
     view = bin_photo_web._register_and_view(
+        creation=CreateBinRequest(
+            "2ad7b5aa-541b-4fc7-ab73-d3a23e499655",
+            "AGR-014",
+            "alameda-garage",
+            "hand tools",
+            "hex keys",
+            copies=1,
+        ),
         bin_code="AGR-014",
         site="alameda-garage",
         gps=None,
@@ -1662,19 +1670,13 @@ def test_print_failure_does_not_hide_successful_registration(
 
 
 def test_replayed_registration_does_not_submit_a_second_label(
+    conn: psycopg.Connection,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from binkeeper import bin_label, bin_register, db
+    from binkeeper import bin_label, db
+    from binkeeper.bin_create import CreateBinRequest
 
-    monkeypatch.setattr(
-        db, "connect", lambda: nullcontext(SimpleNamespace(transaction=nullcontext))
-    )
-    already_existed = iter((False, True))
-    monkeypatch.setattr(
-        bin_register,
-        "register_bin",
-        lambda *_args, **_kwargs: _register_result(already_existed=next(already_existed)),
-    )
+    monkeypatch.setattr(db, "connect", lambda **_: nullcontext(conn))
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "OmezizyD450")
     submissions: list[str] = []
 
@@ -1684,6 +1686,14 @@ def test_replayed_registration_does_not_submit_a_second_label(
 
     monkeypatch.setattr(bin_label, "send_to_printer", fake_send)
     kwargs = {
+        "creation": CreateBinRequest(
+            "2ad7b5aa-541b-4fc7-ab73-d3a23e499655",
+            "AGR-014",
+            "alameda-garage",
+            "hand tools",
+            "hex keys",
+            copies=1,
+        ),
         "bin_code": "AGR-014",
         "site": "alameda-garage",
         "gps": None,

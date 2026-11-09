@@ -375,7 +375,7 @@ def test_label_print_intent_is_reserved_at_most_once(conn: psycopg.Connection) -
     assert rows == [
         (
             "bin_label_print_intent",
-            "bin_label_print_intent.v2",
+            "bin_label_print_intent.v3",
             "cups:OmezizyD450",
             "tspl",
             "b" * 64,

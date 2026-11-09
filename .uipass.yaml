@@ -71,6 +71,11 @@ surfaces:
   manage:
     states:
       pending_review: {route: /manage/AGR-014, ready: h1}
+      print_history:
+        route: /manage/AGR-014
+        ready: "#label"
+        actions:
+          - {type: click, selector: ".bin-manage-jumps a[href='#label']"}
       location_jump:
         route: /manage/AGR-014
         ready: "#location"

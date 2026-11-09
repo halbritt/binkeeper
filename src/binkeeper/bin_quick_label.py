@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from subprocess import TimeoutExpired
 from uuid import UUID
 
 import psycopg
 
-from binkeeper.bin_b1 import B1PrintUnknown
 from binkeeper.bin_create import next_bin_code
 from binkeeper.bin_inventory import DEFAULT_BIN_CORPUS_ID, DEFAULT_BIN_TENANT_ID
-from binkeeper.bin_label import BinLabelError, make_label_job, send_label_job
+from binkeeper.bin_label import BinLabelError, make_label_job
+from binkeeper.bin_manage import BinActionScope
 from binkeeper.bin_passport import load_known_bin_codes
+from binkeeper.bin_print import submit_label
 from binkeeper.bin_register import QuickLabelIntent, RegisterResult, register_bin
 from binkeeper.sites import SITE_PREFIXES
 
@@ -128,7 +128,9 @@ def create_quick_label(
     if result.already_existed:
         raise QuickLabelError("The assigned code was already registered. Reload and try again.")
     try:
-        plan = send_label_job(job)
+        print_result = submit_label(
+            code, action_id, job, scope=BinActionScope(tenant_id, corpus_id)
+        )
     except BinLabelError as exc:
         return QuickLabelResult(
             code,
@@ -137,9 +139,17 @@ def create_quick_label(
             False,
             "",
             str(exc),
-            isinstance(exc, B1PrintUnknown) or isinstance(exc.__cause__, TimeoutExpired),
+            False,
         )
-    return QuickLabelResult(code, site, False, True, plan.target, None)
+    return QuickLabelResult(
+        code,
+        site,
+        False,
+        print_result.status == "submitted",
+        print_result.display_target,
+        print_result.error,
+        print_result.status in {"unknown", "unresolved"},
+    )
 
 
 def _lock(conn: psycopg.Connection, name: str) -> None:

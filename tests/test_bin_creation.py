@@ -225,7 +225,7 @@ def test_replayed_confirmation_never_submits_a_second_print(conn, monkeypatch):
     )
     clock += timedelta(days=1)
     response = client.post("/register/confirm", headers=ORIGIN, data=fields)
-    assert response.status_code == 200 and "already existed" in response.text
+    assert response.status_code == 200 and "No second label was sent" in response.text
     assert "Open the bin page for its current location" in response.text
     assert "AGR-123</strong> is placed at" not in response.text
     assert len(sent) == 1

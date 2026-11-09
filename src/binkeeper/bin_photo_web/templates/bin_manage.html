@@ -249,6 +249,25 @@
       <h2 id="print-heading">Label</h2>
       <p class="bin-photo-card-copy">Request one extra copy from the saved details—for example, for the other side of the bin.</p>
     </div>
+    {% if print_records %}
+    <details class="bin-photo-options" open>
+      <summary>Recent label requests</summary>
+      <ul>
+        {% for record in print_records %}
+        <li>
+          <strong>{% if record.status == 'submitted' %}Sent to printer{% elif record.status == 'failed' %}Printer reported a failure{% else %}Print status unknown{% endif %}</strong>
+          — {{ record.requested_at.strftime('%Y-%m-%d %H:%M UTC') }};
+          {{ record.display_target }}{% if record.copies %}, {{ record.copies }} cop{% if record.copies == 1 %}y{% else %}ies{% endif %}{% endif %}.
+          {% if record.status in ['unresolved', 'unknown'] %}
+          Check the printer before requesting another label. This request will not retry automatically.
+          {% elif record.status == 'submitted' %}
+          The printer accepted the request; paper output is not confirmed.
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
     <form method="post" action="{{ print_action }}" class="bin-photo-form" data-submit-form>
       <input type="hidden" name="action_id" value="{{ print_action_id }}">
       <label for="manage-label-printer">Print on

@@ -34,7 +34,6 @@ def _request(**changes: object) -> QuickLabelRequest:
 def test_quick_label_registers_without_a_photo_or_vision_and_replay_does_not_reprint(
     conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from binkeeper import bin_quick_label
 
     monkeypatch.setattr(db, "connect", lambda **_kwargs: nullcontext(conn))
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "synthetic-queue")
@@ -44,7 +43,7 @@ def test_quick_label_registers_without_a_photo_or_vision_and_replay_does_not_rep
         sent.append(job.payload)
         return PrintPlan("cups", "synthetic-queue", len(job.payload))
 
-    monkeypatch.setattr(bin_quick_label, "send_label_job", send)
+    monkeypatch.setattr(bin_label, "send_label_job", send)
 
     first = create_quick_label(_request())
     replay = create_quick_label(_request())
@@ -70,7 +69,6 @@ def test_quick_label_registers_without_a_photo_or_vision_and_replay_does_not_rep
 def test_quick_label_assigns_distinct_codes_and_keeps_failed_print_registration(
     conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from binkeeper import bin_quick_label
 
     monkeypatch.setattr(db, "connect", lambda **_kwargs: nullcontext(conn))
     monkeypatch.setattr(bin_label, "BIN_LABEL_CUPS_QUEUE", "synthetic-queue")
@@ -78,7 +76,7 @@ def test_quick_label_assigns_distinct_codes_and_keeps_failed_print_registration(
     def printer_down(_job: object) -> PrintPlan:
         raise BinLabelError("synthetic printer unavailable")
 
-    monkeypatch.setattr(bin_quick_label, "send_label_job", printer_down)
+    monkeypatch.setattr(bin_label, "send_label_job", printer_down)
     first = create_quick_label(_request())
     second = create_quick_label(_request(action_id="e0d2317a-5e50-4c65-9d9d-cc655d296263"))
 
@@ -95,7 +93,11 @@ def test_quick_label_reports_uncertain_b1_completion_without_reprinting(
     from binkeeper.bin_b1 import B1PrintUnknown
 
     monkeypatch.setattr(db, "connect", lambda **_kwargs: nullcontext(conn))
-    monkeypatch.setattr(bin_quick_label, "make_label_job", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(
+        bin_quick_label,
+        "make_label_job",
+        lambda *_args, **_kwargs: bin_label.LabelJob("niimbot-b1:fake", "png", b"fake", 1),
+    )
     calls = 0
 
     def uncertain(_job: object) -> PrintPlan:
@@ -103,7 +105,7 @@ def test_quick_label_reports_uncertain_b1_completion_without_reprinting(
         calls += 1
         raise B1PrintUnknown("synthetic completion unknown")
 
-    monkeypatch.setattr(bin_quick_label, "send_label_job", uncertain)
+    monkeypatch.setattr(bin_label, "send_label_job", uncertain)
     first = create_quick_label(_request(printer="niimbot-b1"))
     replay = create_quick_label(_request(printer="niimbot-b1"))
 

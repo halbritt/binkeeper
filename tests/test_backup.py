@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -57,6 +58,7 @@ def test_backup_key_must_be_distinct_from_blob_key() -> None:
 def test_unmocked_backup_restore_verifies_all_protected_state(
     conn: psycopg.Connection,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     database_url = os.environ.get("BINKEEPER_TEST_DATABASE_URL")
     assert database_url is not None
@@ -147,6 +149,19 @@ def test_unmocked_backup_restore_verifies_all_protected_state(
     )
     creation = create_bin(conn, creation_request, observed_at=as_of)
     conn.commit()
+    from binkeeper import bin_label, db
+    from binkeeper.bin_print import submit_label
+
+    monkeypatch.setattr(db, "connect", lambda **_: nullcontext(conn))
+    submissions = []
+    monkeypatch.setattr(
+        bin_label,
+        "send_label_job",
+        lambda job: submissions.append(job) or bin_label.PrintPlan("cups", "synthetic", 1),
+    )
+    print_action = str(uuid4())
+    print_job = bin_label.LabelJob("cups:synthetic", "tspl", b"synthetic label", 1)
+    assert submit_label("AGR-001", print_action, print_job).status == "submitted"
 
     artifact = create_backup(
         database_url=database_url,
@@ -191,7 +206,7 @@ def test_unmocked_backup_restore_verifies_all_protected_state(
             vault_key=vault_key,
         )
         assert report.verified is True
-        assert report.table_counts["capture_evidence"] == 3
+        assert report.table_counts["capture_evidence"] == 5
         assert report.table_counts["bin_trip_events"] == 2
         assert report.table_counts["bin_routing_requests"] == 1
         assert report.blob_count == 1
@@ -200,7 +215,11 @@ def test_unmocked_backup_restore_verifies_all_protected_state(
             replay = create_bin(restored, creation_request, observed_at=as_of + timedelta(days=1))
             assert replay.already_existed and replay.capture_id == creation.capture_id
             assert bin_passport(restored, "AGR-001").theme == "Restored tools"
-            assert restored.execute("SELECT count(*) FROM capture_evidence").fetchone() == (3,)
+            monkeypatch.setattr(db, "connect", lambda **_: nullcontext(restored))
+            print_replay = submit_label("AGR-001", print_action, print_job)
+            assert print_replay.replayed and print_replay.status == "submitted"
+            assert len(submissions) == 1
+            assert restored.execute("SELECT count(*) FROM capture_evidence").fetchone() == (5,)
             assert restored.execute("SELECT count(*) FROM bin_trip_events").fetchone() == (2,)
     finally:
         with psycopg.connect("postgresql:///postgres", autocommit=True) as admin:

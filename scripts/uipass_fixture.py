@@ -23,6 +23,7 @@ from binkeeper.bin_label_drift import LabelDriftQueueEntry
 from binkeeper.bin_passport import BinPassport
 from binkeeper.bin_photo_web import create_app as create_authoring_app
 from binkeeper.bin_photo_web.manage import ManageView
+from binkeeper.bin_print import PrintRecord
 from binkeeper.bin_saved_photos import (
     SavedPhoto,
     SavedPhotoContent,
@@ -137,6 +138,15 @@ def _manage_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> ManageView
         "contained_bin_codes": (),
         "container_options": (),
         "label_drift": PROPOSAL,
+        "print_records": (
+            PrintRecord(
+                "synthetic-action",
+                datetime(2026, 11, 9, 12, tzinfo=UTC),
+                "cups:synthetic-printer",
+                2,
+                "unresolved",
+            ),
+        ),
     }
 
 

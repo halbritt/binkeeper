@@ -17,9 +17,9 @@
 </header>
 
 {% if print_requested %}
-  {% if already_existed and quick_label %}
+  {% if already_existed and (quick_label or creation_replay) %}
   <p class="banner banner-warn" role="status"><strong>This request already created {{ bin_code }}.</strong>
-    No second label was sent. <a href="{{ reprint_url }}">Print another from the bin page</a> if needed.</p>
+    No second label was sent. <a href="{{ reprint_url }}">Check print history on the bin page</a> before requesting another.</p>
   {% elif print_unknown %}
   <p class="banner banner-warn" role="status"><strong>The bin was registered, but print status is unknown.</strong>
     {{ print_error }} Check the printer before requesting another label.</p>

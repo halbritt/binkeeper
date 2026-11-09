@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -24,7 +23,6 @@ from binkeeper.bin_label import BinLabelError, LabelJob
 from binkeeper.bin_label_drift import LabelDriftError, LabelDriftQueueEntry
 from binkeeper.bin_manage import (
     BinActionScope,
-    BinLabelPrintIntent,
     BinManageError,
     BinManageNotFoundError,
     BinPhotoAddition,
@@ -32,9 +30,10 @@ from binkeeper.bin_manage import (
     BinProfileUpdate,
 )
 from binkeeper.bin_photo_media import BinPhotoMediaError, validate_bin_photo
+from binkeeper.bin_print import PrintRecord, print_history
 from binkeeper.blob_vault import BlobVaultError
 from binkeeper.db import ServingRoleUnavailableError
-from binkeeper.personal_memory import CaptureResult, PersonalMemoryError
+from binkeeper.personal_memory import PersonalMemoryError
 from binkeeper.web.chrome import SurfaceChrome, page_response
 from binkeeper.web.paths import surface_path
 
@@ -57,6 +56,7 @@ class ManageView(TypedDict):
     contained_bin_codes: tuple[str, ...]
     container_options: tuple[str, ...]
     label_drift: NotRequired[LabelDriftQueueEntry | None]
+    print_records: NotRequired[tuple[PrintRecord, ...]]
 
 
 class ManageLoader(Protocol):
@@ -649,6 +649,9 @@ def load_manage_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> Manage
             ),
             None,
         )
+        print_records = tuple(
+            print_history(conn, code, scope=BinActionScope(tenant_id, corpus_id))[:10]
+        )
     return {
         "bin_code": passport.bin_code,
         "theme": passport.theme or "",
@@ -663,6 +666,7 @@ def load_manage_view(*, bin_code: str, tenant_id: str, corpus_id: str) -> Manage
             f"/bins/photo/{quote(passport.bin_code, safe='')}" if has_photo else None
         ),
         "label_drift": label_drift,
+        "print_records": print_records,
     }
 
 
@@ -863,14 +867,19 @@ def change_bin_containment(action: ContainmentAction, scope: BinActionScope) -> 
 
 def reprint_bin(action: PrintAction, scope: BinActionScope) -> PrintOutcome:
     """Reserve and attempt one current saved label without replaying registration."""
+    from binkeeper.bin_print import submit_label
     from binkeeper.db import connect
 
     with connect() as conn:
         label = _prepare_label(conn, action.bin_code, scope, action.printer)
-        reservation = _reserve_print_intent(conn, action, scope, label)
-    if reservation.already_existed:
+    result = submit_label(
+        label.bin_code, action.action_id, label.job, scope=scope, requested_at=action.received_at
+    )
+    if result.replayed:
         return "replayed"
-    return _attempt_print(label)
+    if result.status == "submitted":
+        return "sent"
+    return "unknown" if result.status == "unresolved" else result.status
 
 
 def _prepare_label(
@@ -907,43 +916,6 @@ def _prepare_label(
             contents=contents,
         ),
     )
-
-
-def _reserve_print_intent(
-    conn: psycopg.Connection,
-    action: PrintAction,
-    scope: BinActionScope,
-    label: PreparedLabel,
-) -> CaptureResult:
-    """Append the durable one-attempt boundary before printer I/O."""
-    from binkeeper.bin_manage import reserve_label_print_intent
-
-    intent = BinLabelPrintIntent(
-        bin_code=label.bin_code,
-        action_id=action.action_id,
-        requested_at=action.received_at,
-        target=label.job.target,
-        payload_format=label.job.format,
-        payload_sha256=hashlib.sha256(label.job.payload).hexdigest(),
-    )
-    return reserve_label_print_intent(conn, intent, scope=scope)
-
-
-def _attempt_print(label: PreparedLabel) -> PrintOutcome:
-    """Classify the one reserved local printer submission."""
-    from binkeeper import bin_label
-
-    try:
-        bin_label.send_label_job(label.job)
-    except BinLabelError as exc:
-        from binkeeper.bin_b1 import B1PrintUnknown
-
-        if isinstance(exc, B1PrintUnknown):
-            return "unknown"
-        if isinstance(exc.__cause__, subprocess.TimeoutExpired):
-            return "unknown"
-        return "failed"
-    return "sent"
 
 
 def _has_linked_photo(

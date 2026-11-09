@@ -1126,8 +1126,10 @@ def _register_and_view(
     printed = False
     print_target = ""
     print_error: str | None = None
+    print_unknown = False
     if label_count:
-        from binkeeper.bin_label import BinLabelError, make_label_job, send_label_job
+        from binkeeper.bin_label import BinLabelError, make_label_job
+        from binkeeper.bin_print import submit_label
 
         if result.already_existed:
             print_error = (
@@ -1136,6 +1138,8 @@ def _register_and_view(
             )
         else:
             try:
+                if creation is None:
+                    raise BinLabelError("Printing requires a reviewed creation request.")
                 job = make_label_job(
                     result.bin_code,
                     printer=printer,
@@ -1144,9 +1148,11 @@ def _register_and_view(
                     contents=contents,
                     copies=label_count,
                 )
-                plan = send_label_job(job)
-                printed = True
-                print_target = plan.target
+                print_result = submit_label(result.bin_code, creation.action_id, job, scope=scope)
+                printed = print_result.status == "submitted"
+                print_target = print_result.display_target
+                print_error = print_result.error
+                print_unknown = print_result.status in {"unknown", "unresolved"}
             except BinLabelError as exc:
                 print_error = str(exc)
     return {
@@ -1166,6 +1172,7 @@ def _register_and_view(
         "printed": printed,
         "print_target": print_target,
         "print_error": print_error,
+        "print_unknown": print_unknown,
     }
 
 

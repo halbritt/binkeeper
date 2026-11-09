@@ -78,3 +78,33 @@ rehearsal on port 18777: create/replay returned 200, divergent payload 409 and
 missing Origin 403. Replays left exactly one capture and one move. No model or
 printer I/O was allowed. The temporary front, process and database were removed.
 This verifies the candidate through the front; it is not a production deployment.
+
+## BINK-56: durable printer handoff
+
+Base: `a8e5680`, same repository and `master` checkout. Photo creation, quick
+labels and management reprints now use one committed reservation before printer
+I/O. New v3 intents include copies and the exact payload hash, format and target.
+An append-only outcome records submitted, failed or unknown only when observed.
+A reservation without an outcome remains unresolved; replay never reclaims it.
+Management shows recent requests and their observed status. Submitted means the
+transport accepted the request, not confirmed paper output.
+
+`make check` passed **666 tests**, **20 migration cases**, lint, types and wheel
+verification. Tests terminate separate processes before transport, after transport
+and before the response, then replay in a new process: no second printer attempt.
+Concurrent same-action requests also make one attempt. Failure, timeout, B1
+uncertainty, reservation failure and lost outcome writes have explicit coverage.
+Legacy v1/v2 reservations suppress replay even when the requested backend changes;
+missing historical copies/outcomes are not invented. The authenticated backup/
+restore drill preserves both the reservation and outcome and suppresses replay.
+
+UIPass run `ad3c7aec-4b65-40ae-84a9-2fb98353f965` passed 12 management and quick-label
+cases at three widths with no findings. Phone and desktop print-history screenshots
+were inspected: the unknown status, timestamp, printer, copies and check-before-
+reprint instruction remain readable, with the deliberate reprint action below.
+The final combined candidate front rehearsal will cover this route before release.
+No physical printer call or production service change occurred.
+
+Rollback retains all print evidence. If an older binary cannot preserve the
+reservation contract, disable its affected print actions and forward-fix; never
+retry an unknown effect automatically. No migration or evidence rewrite is needed.

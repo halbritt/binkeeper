@@ -99,6 +99,7 @@ class BinLabelPrintIntent:
     target: str
     payload_format: str
     payload_sha256: str
+    copies: int = 1
 
 
 def update_bin_profile(
@@ -240,12 +241,26 @@ def reserve_label_print_intent(
     scope: BinActionScope = DEFAULT_BIN_ACTION_SCOPE,
 ) -> CaptureResult:
     """Append one immutable print reservation; an exact replay is a no-op."""
+    identity = f"binprint:{intent.bin_code.strip()}:{_action_id(intent.action_id)}"
+    external_id = capture_external_id(
+        idempotency_key=identity, tenant_id=scope.tenant_id, corpus_id=scope.corpus_id
+    )
+    with conn.transaction():
+        conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (external_id,))
+        return _reserve_label_print_intent(conn, intent, scope=scope)
+
+
+def _reserve_label_print_intent(
+    conn: psycopg.Connection, intent: BinLabelPrintIntent, *, scope: BinActionScope
+) -> CaptureResult:
     code, action_id = _existing_bin_action(conn, intent.bin_code, intent.action_id, scope)
     target = intent.target.strip()
     if not target:
         raise BinManageError("printer target is required")
     if intent.payload_format not in {"tspl", "png"}:
         raise BinManageError("unsupported label payload format")
+    if intent.copies not in {1, 2}:
+        raise BinManageError("label count must be one or two")
     digest = _sha256(intent.payload_sha256, "payload_sha256")
     idempotency_key = f"binprint:{code}:{action_id}"
     external_id = capture_external_id(
@@ -333,13 +348,14 @@ def _print_capture_request(
 ) -> CaptureRequest:
     metadata: dict[str, object] = {
         "kind": BIN_LABEL_PRINT_INTENT_KIND,
-        "schema_version": "bin_label_print_intent.v2",
+        "schema_version": "bin_label_print_intent.v3",
         "bin_code": code,
         "intent_id": intent.action_id,
         "requested_at": intent.requested_at.isoformat(),
         "target": intent.target,
         "payload_format": intent.payload_format,
         "payload_sha256": intent.payload_sha256,
+        "copies": intent.copies,
         "app": "binkeeper-bin-manage/0.1",
     }
     return _capture_request(
