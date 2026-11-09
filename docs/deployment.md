@@ -115,16 +115,20 @@ binkeeper-ocr-harvest.timer`.
 
 `binkeeper-label-drift.{service,timer}` runs at 04:00 with up to 15 minutes of
 jitter and is ordered after `binkeeper-ocr-harvest.service`. It uses
-`gpu-fleet-run` to claim the exact peecee `qwen3-vl:8b` batch slot and passes
+`gpu-fleet-run` to claim an exact `qwen3-vl:8b` batch slot and passes
 the leased endpoint and served model to `binkeeper bin-label-drift-harvest`.
-Each photo then runs concurrently through local 8B and OpenRouter Anthropic
-Opus 5. A proposal is recorded only if both legs return valid model JSON.
+The BINK-57 source pin explicitly selects the authorized local-only rollback.
+The former Opus/OpenRouter route is refused even when an API key is available.
+A proposal is recorded only after valid local model output.
 
 Install `deploy/systemd/binkeeper-label-drift.env` mode 0600 as
 `/etc/binkeeper/binkeeper-label-drift.env`; it contains no secret. The
-OpenRouter key and `BINKEEPER_WRITES_ENABLED` remain in the shared
-`/etc/binkeeper/binkeeper.env`. Install both unit files, verify them, then
-enable the timer:
+writer gate `BINKEEPER_WRITES_ENABLED` remains in the shared
+`/etc/binkeeper/binkeeper.env`. Install the repaired wheel before both unit files:
+the new hooks require `/opt/binkeeper/venv/bin/binkeeper-advisory-status`.
+Systemd creates `/var/lib/binkeeper-advisory` for the local status file. Both
+the review service and web service run as the owner and can read that file.
+After an authorized deployment, verify the units and enable the timer:
 
 ```sh
 systemd-analyze verify \
@@ -137,17 +141,24 @@ journalctl -u binkeeper-label-drift.service -n 100 --no-pager
 ```
 
 The CLI runs autocommit, so proposals already appended for other bins survive
-a later model error. Exit 5 means at least one bin failed strict two-model
-analysis; unchanged inputs are skipped only after a proposal exists, so the
+a later model error. Exit 5 means at least one bin had unreadable photos or a
+model failure; unchanged inputs are skipped only after a proposal exists, so the
 next night retries failed bins. An unavailable slot returns the fleet runner's
 temporary-failure exit 75. The journal summary reports scanned, analyzed, recorded,
 unchanged, unreadable, and model-error counts without naming owner contents.
 
-Rollback is one lane-local setting plus a rerun:
-`BINKEEPER_BIN_LABEL_DRIFT_MODE=local` stops the Anthropic export while keeping
-the queue, or `systemctl disable --now binkeeper-label-drift.timer` stops the
-pass. Existing proposals and dismissals remain immutable evidence in either
-case.
+`ExecStartPre` and `ExecStopPost` record attempt state, last success/failure and
+a safe reason in `label-drift.json`, including exit 75 before the inventory CLI
+starts. The catalog shows this status separately from core readiness. A missing
+or corrupt file is unknown; an unfinished run older than four hours or a success
+older than 28 hours is stale. This file is replaceable operational state, not
+owner evidence. An explicit test-only `BINKEEPER_LABEL_DRIFT_STATUS_PATH` must
+be set consistently on both processes when rehearsing with an isolated file.
+
+Rollback keeps local mode or disables `binkeeper-label-drift.timer`. Never restore
+the subscription-covered OpenRouter route. Existing proposals and dismissals
+remain immutable in either case. Missing local capacity requires a separate fleet
+capacity repair; it does not authorize changing global fleet state here.
 
 The reviewed backup and restore-smoke units are timer-driven templates, not an
 authorization to install or enable them. Their key material belongs only in the

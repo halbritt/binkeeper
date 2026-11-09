@@ -63,7 +63,7 @@ flowchart TD
     timer1[binkeeper-backup.timer 03:15] --> pg
     timer2[binkeeper-ocr-harvest.timer 03:30] -->|local model only| vision
     timer2 --> pg
-    timer3[binkeeper-label-drift.timer 04:00] -->|Opus 5 + local 8B| vision
+    timer3[binkeeper-label-drift.timer 04:00] -->|leased local 8B| vision
     timer3 --> pg
     timer4[binkeeper-restore-smoke.timer Sun 04:15] --> pg
 ```
@@ -191,7 +191,7 @@ runs ~4.6 s per photo in the November 2026 sample (ADR 0007), and the
 |---|---|---|---|
 | Interactive first pass (photo drop) | hosted `qwen/qwen3.8-flash` via OpenRouter | on photo drop, advisory label proposal | downscaled JPEG + prompt (ADR 0004/0005/0007) |
 | Nightly peripheral-OCR true-up | local `qwen3-vl:32b` on peecee | `binkeeper-ocr-harvest.timer`, 03:30 | nothing (pinned `--local-only`) |
-| Label-drift review queue (ADR 0006) | `claude-opus-5` + local `qwen3-vl:8b` union ensemble | `binkeeper-label-drift.timer`, 04:00, input-keyed | downscaled JPEG + prompt via OpenRouter to Anthropic |
+| Label-drift review queue (ADR 0006) | explicit local-only `qwen3-vl:8b` rollback (BINK-57 source) | `binkeeper-label-drift.timer`, 04:00, input-keyed | none |
 
 This table describes the installed configuration. The current owner instruction
 requires subscription-covered models to use their subscription route, so the
@@ -310,7 +310,7 @@ deliberately CLI-only.
 | `binkeeper.service` | persistent | `binkeeper-serve` | hardened; only the blob root writable |
 | `binkeeper-backup.timer` | daily 03:15 (+15 m jitter) | `binkeeper-backup create` | writes only `/var/lib/binkeeper/backups` |
 | `binkeeper-ocr-harvest.timer` | nightly 03:30 (+15 m jitter) | `binkeeper bin-ocr-harvest --local-only` | autocommit; exit 3 = no geofence, exit 4 = zero codes read |
-| `binkeeper-label-drift.timer` | nightly 04:00 (+15 m jitter), after OCR | gpu-fleet lease + `binkeeper bin-label-drift-harvest` | exact local 8B route; autocommit; exit 5 = one or more strict ensemble failures |
+| `binkeeper-label-drift.timer` | nightly 04:00 (+15 m jitter), after OCR | gpu-fleet lease + `binkeeper bin-label-drift-harvest` | exact local 8B route; autocommit; exit 5 = unreadable photos or model failures; exit 75 = lease unavailable/lost |
 | `binkeeper-restore-smoke.timer` | Sundays 04:15 (+30 m jitter) | `binkeeper-restore-drill` | disposable `binkeeper_restore_*` target only |
 
 Configuration is layered: `/etc/binkeeper/binkeeper.env` (root-only; database
@@ -318,8 +318,11 @@ URL, writer gate, vision provider and keys, backup root) is shared by every
 unit. The OCR harvest layers `/etc/binkeeper/binkeeper-ocr-harvest.env` after
 it to pin local 32B. The label-drift pass layers
 `/etc/binkeeper/binkeeper-label-drift.env`, then obtains its local 8B endpoint
-from a fenced gpu-fleet lease; the shared file supplies only the owner-local
-OpenRouter key and writer authority.
+from a fenced gpu-fleet lease; the shared file supplies writer authority. BINK-57
+source pins local-only mode and refuses the old ensemble route. A local status
+file records service start/completion, last success/failure and actionable reasons,
+including lease failure before the CLI starts. It is replaceable operational state,
+not inventory evidence or part of the core readiness gate.
 Blob and backup key material lives only in `/etc/binkeeper/blob-vault.json`
 (0600). Wheels install to `/opt/binkeeper/venv`. See
 [deployment.md](deployment.md) for procedures and

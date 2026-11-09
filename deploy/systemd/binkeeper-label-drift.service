@@ -1,5 +1,5 @@
 [Unit]
-Description=Nightly BinKeeper two-model label-drift review harvest
+Description=Nightly BinKeeper local contents-review harvest
 ConditionPathExists=/etc/binkeeper/blob-vault.json
 Wants=network-online.target
 After=postgresql.service network-online.target binkeeper-ocr-harvest.service
@@ -9,14 +9,17 @@ Type=oneshot
 User=halbritt
 Group=halbritt
 # The lane-specific file is required and wins over the shared interactive
-# configuration. The OpenRouter key and writer gate remain owner-local in the
-# shared file; no secret belongs in the repository pin.
+# configuration. The writer gate remains owner-local in the shared file.
 EnvironmentFile=/etc/binkeeper/binkeeper.env
 EnvironmentFile=/etc/binkeeper/binkeeper-label-drift.env
 # The fleet runner claims the exact local 8B slot before starting BinKeeper,
 # substitutes the live route, renews the lease, and returns 75 when the slot is
-# unavailable. The command then fans out local 8B and Opus 5 concurrently.
+# unavailable. Local mode is an explicit rollback, never an ensemble fallback.
+StateDirectory=binkeeper-advisory
+StateDirectoryMode=0750
+ExecStartPre=/opt/binkeeper/venv/bin/binkeeper-advisory-status start
 ExecStart=/home/halbritt/git/gpu-fleet/bin/gpu-fleet-run --model qwen3-vl:8b --max-context 32768 --latency-class batch --job binkeeper-label-drift-nightly --timeout 13500 -- /opt/binkeeper/venv/bin/binkeeper bin-label-drift-harvest --local-model @@GPU_FLEET_SERVED_MODEL@@ --local-endpoint @@GPU_FLEET_ENDPOINT_URL@@
+ExecStopPost=/opt/binkeeper/venv/bin/binkeeper-advisory-status finish
 TimeoutStartSec=4h
 NoNewPrivileges=true
 PrivateTmp=true

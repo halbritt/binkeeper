@@ -28,6 +28,7 @@ binkeeper-mcp-stdio = "binkeeper.mcp_stdio:main"
 binkeeper-serve = "binkeeper.service:main"
 binkeeper-backup = "binkeeper.backup_cli:main"
 binkeeper-restore-drill = "binkeeper.restore_drill:main"
+binkeeper-advisory-status = "binkeeper.advisory_status:main"
 
 [project.optional-dependencies]
 b1 = [

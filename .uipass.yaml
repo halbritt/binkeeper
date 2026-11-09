@@ -10,6 +10,11 @@ surfaces:
   catalog:
     states:
       populated: {route: /bins/, ready: h1}
+      advisory_degraded:
+        route: /bins/
+        ready: h1
+        actions:
+          - {type: click, selector: ".bin-advisory-status > summary"}
       no_match: {route: "/bins/?q=no-such-bin", ready: h1}
       details_open:
         route: /bins/

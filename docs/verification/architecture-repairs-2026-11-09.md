@@ -108,3 +108,39 @@ No physical printer call or production service change occurred.
 Rollback retains all print evidence. If an older binary cannot preserve the
 reservation contract, disable its affected print actions and forward-fix; never
 retry an unknown effect automatically. No migration or evidence rewrite is needed.
+
+## BINK-57: authorized local review and visible freshness
+
+Base: `4cb228e`, same repository and `master`. Source default and service pin now
+select ADR 0006's explicit local-only rollback. Explicit ensemble configuration is
+refused before model I/O regardless of API-key presence. No subscription adapter
+is claimed. Fleet selection still requires exact `qwen3-vl:8b`, 32768 context and
+batch latency, with no endpoint/model fallback or automatic replay.
+
+Read-only fleet inspection at 2026-11-09 18:21 UTC, gpu-fleet revision `2de2007`,
+found two declared 8B slots but neither routable: both were below their loadability
+thresholds. Heartbeat was active; the installed nightly service had exited 75 at
+04:08 local time. Its installed pin still selected the old ensemble. This repair
+does not change fleet capacity, installed configuration, or run owner photos.
+
+`make check` passed **674 tests**, **20 migration cases**, lint, types and wheel
+verification. Routing refusal, failure/resume, unreadable photos, stale/interrupted
+status and corrupt/missing status are covered. Failed input resumes once; already
+recorded input is skipped. Proposal-only runs preserve theme, contents, location
+and print history until owner review. A real transient user-systemd rehearsal
+ran a synthetic exit-75 command, then `/bin/true`: start/stop hooks recorded the
+failure and later success while retaining both timestamps. No model ran.
+
+Status is a replaceable local file owned by the service's StateDirectory. It is
+not inventory evidence or a core readiness dependency. Catalog reads show last
+completion/failure and a safe reason, including a lease failure before the CLI
+starts. Deployment must install the wheel before units because the new hooks
+need the new entry point; checking the new unit against the old installed wheel
+correctly reports that executable missing.
+
+UIPass final run `72f598b8-8567-481d-8870-b88145767077` passed 15 catalog cases at
+three widths with no findings. Phone/desktop degraded-status screenshots and the
+narrow expanded-review screenshot were inspected. The first run exposed a real
+320-pixel clipping defect in the existing contents panel; wrapping its summary
+and allowing its grid width to shrink fixed that defect and all 18 associated
+contrast-assessment warnings. Times now use readable UTC text.

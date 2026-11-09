@@ -364,8 +364,8 @@ def harvest_exit_code(payload: dict[str, Any]) -> int:
 
 
 def label_drift_exit_code(payload: dict[str, Any]) -> int:
-    """Exit 5 when any bin failed its strict two-model analysis."""
-    return 5 if payload.get("model_errors", 0) else 0
+    """Exit 5 when a bin's photos could not be read or analyzed."""
+    return 5 if payload.get("model_errors", 0) or payload.get("skipped_unreadable_photos", 0) else 0
 
 
 def main() -> None:

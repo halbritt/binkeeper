@@ -18,13 +18,11 @@ import psycopg
 from binkeeper.bin_inventory import DEFAULT_BIN_CORPUS_ID, DEFAULT_BIN_TENANT_ID
 from binkeeper.bin_passport import BIN_CAPTURE_KIND, BinPassport, load_bin_passports
 from binkeeper.bin_vision import (
-    DEFAULT_OPENROUTER_ENDPOINT,
     DEFAULT_VISION_ENDPOINT,
     DEFAULT_VISION_MODEL,
     BinLabelProposal,
     BinVisionError,
     DetectedItem,
-    EnsembleVisionClient,
     OllamaVisionClient,
     VisionClient,
 )
@@ -39,16 +37,7 @@ LABEL_DRIFT_PROPOSAL_KIND: Final[str] = "label_drift_proposal"
 LABEL_DRIFT_DISMISSAL_KIND: Final[str] = "label_drift_dismissal"
 _TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 LABEL_DRIFT_SOURCE_LABEL: Final[str] = "binkeeper-label-drift"
-DEFAULT_LABEL_DRIFT_MODE: Final[str] = os.environ.get("BINKEEPER_BIN_LABEL_DRIFT_MODE", "ensemble")
-DEFAULT_LABEL_DRIFT_CLOUD_MODEL: Final[str] = os.environ.get(
-    "BINKEEPER_BIN_LABEL_DRIFT_CLOUD_MODEL", "anthropic/claude-opus-5"
-)
-DEFAULT_LABEL_DRIFT_CLOUD_ENDPOINT: Final[str] = os.environ.get(
-    "BINKEEPER_BIN_LABEL_DRIFT_CLOUD_ENDPOINT", DEFAULT_OPENROUTER_ENDPOINT
-)
-DEFAULT_LABEL_DRIFT_CLOUD_TIMEOUT_S: Final[float] = float(
-    os.environ.get("BINKEEPER_BIN_LABEL_DRIFT_CLOUD_TIMEOUT_S", "120")
-)
+DEFAULT_LABEL_DRIFT_MODE: Final[str] = os.environ.get("BINKEEPER_BIN_LABEL_DRIFT_MODE", "local")
 DEFAULT_LABEL_DRIFT_LOCAL_TIMEOUT_S: Final[float] = float(
     os.environ.get("BINKEEPER_BIN_LABEL_DRIFT_LOCAL_TIMEOUT_S", "240")
 )
@@ -172,29 +161,20 @@ def default_label_drift_client(
     local_endpoint: str | None = None,
     local_model: str | None = None,
 ) -> VisionClient:
-    """Build the ADR 0006 ensemble, or its configured local-only rollback."""
+    """Use the authorized local rollback; the old cloud route is unavailable."""
     selected_mode = (mode or DEFAULT_LABEL_DRIFT_MODE).strip().lower()
-    local = OllamaVisionClient(
+    if selected_mode == "ensemble":
+        raise BinVisionError(
+            "Nightly ensemble is unavailable: its subscription model has no authorized "
+            "adapter. Select the explicit local rollback; OpenRouter fallback is forbidden."
+        )
+    if selected_mode != "local":
+        raise BinVisionError(f"unsupported label-drift mode {selected_mode!r} (use 'local')")
+    return OllamaVisionClient(
         endpoint=local_endpoint or DEFAULT_VISION_ENDPOINT,
         model=local_model or DEFAULT_VISION_MODEL,
         timeout_s=DEFAULT_LABEL_DRIFT_LOCAL_TIMEOUT_S,
     )
-    if selected_mode == "local":
-        return local
-    if selected_mode != "ensemble":
-        raise BinVisionError(
-            f"unsupported label-drift mode {selected_mode!r} (use 'ensemble' or 'local')"
-        )
-    key = os.environ.get("BINKEEPER_OPENROUTER_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
-    if not key or not key.strip():
-        raise BinVisionError("no OpenRouter API key configured for the label-drift cloud leg")
-    cloud = OllamaVisionClient(
-        endpoint=DEFAULT_LABEL_DRIFT_CLOUD_ENDPOINT,
-        model=DEFAULT_LABEL_DRIFT_CLOUD_MODEL,
-        api_key=key.strip(),
-        timeout_s=DEFAULT_LABEL_DRIFT_CLOUD_TIMEOUT_S,
-    )
-    return EnsembleVisionClient(cloud=cloud, local=local)
 
 
 def diff_label_proposal(passport: BinPassport, proposal: BinLabelProposal) -> LabelDriftDiff:

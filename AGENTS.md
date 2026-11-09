@@ -27,11 +27,14 @@ pinned by an environment pin file, and fails closed (exit 3 = no geofence site
 configured, exit 4 = photos read but zero codes seen). ADR 0006 (accepted
 2026-08-06) is deployed as `binkeeper-label-drift.{service,timer}`
 (`deploy/systemd/`, 04:00 with up to 15 minutes of jitter, ordered after OCR).
-It runs an input-keyed union of OpenRouter `anthropic/claude-opus-5` and an
-exact gpu-fleet lease for peecee `qwen3-vl:8b`, then writes append-only
-proposals for the rebuildable owner review queue. A model error fails the
-affected bin closed; exit 5 reports one or more model failures. `BINK-42`..
-`BINK-44` completed on 2026-08-11.
+The BINK-57 source repair selects the explicit local-only rollback through an
+exact gpu-fleet `qwen3-vl:8b` lease. The former Opus/OpenRouter configuration is
+forbidden by the owner's current subscription-only rule and fails before model
+I/O. Source verification and installed deployment are tracked separately in
+`docs/verification/architecture-repairs-2026-11-09.md`. Proposals remain append-only;
+exit 5 means unreadable photos or model failures, and exit 75 means an unavailable
+or lost lease. Optional review freshness is separate from core readiness.
+`BINK-42`..`BINK-44` completed on 2026-08-11.
 
 ## Architecture constraints
 
@@ -44,8 +47,8 @@ affected bin closed; exit 5 reports one or more model failures. `BINK-42`..
   owner approval. The one accepted export exception is ADR 0004: the advisory
   vision lane may call the configured cloud vision provider with the
   downscaled inference image and prompt text only. ADR 0005 selects the
-  current default provider inside that unchanged scope; ADR 0006 adds the
-  deployed nightly ensemble upstream under the same scope.
+  current default provider inside that unchanged scope; ADR 0006's BINK-57
+  amendment selects the nightly local rollback under the subscription-only rule.
 - Tests and fixtures must be deterministic and synthetic. Never commit real bin
   contents, photos, coordinates, credentials, or database dumps.
 - Tailnet-fronted HTTPS is the owner access path. Verify fronted behavior before

@@ -16,12 +16,16 @@ def test_label_drift_unit_claims_the_exact_local_model_and_runs_after_ocr() -> N
     assert "--local-endpoint @@GPU_FLEET_ENDPOINT_URL@@" in unit
 
 
-def test_label_drift_timer_and_pin_keep_the_nightly_ensemble_explicit() -> None:
+def test_label_drift_timer_and_pin_keep_the_local_rollback_explicit() -> None:
     timer = Path("deploy/systemd/binkeeper-label-drift.timer").read_text(encoding="utf-8")
     pin = Path("deploy/systemd/binkeeper-label-drift.env").read_text(encoding="utf-8")
 
     assert "OnCalendar=*-*-* 04:00:00" in timer
     assert "RandomizedDelaySec=15m" in timer
     assert "Persistent=true" in timer
-    assert "BINKEEPER_BIN_LABEL_DRIFT_MODE=ensemble" in pin
-    assert "BINKEEPER_BIN_LABEL_DRIFT_CLOUD_MODEL=anthropic/claude-opus-5" in pin
+    assert "BINKEEPER_BIN_LABEL_DRIFT_MODE=local" in pin
+    assert "BINKEEPER_BIN_LABEL_DRIFT_CLOUD_MODEL=" not in pin
+    unit = Path("deploy/systemd/binkeeper-label-drift.service").read_text()
+    assert "ExecStartPre=/opt/binkeeper/venv/bin/binkeeper-advisory-status start" in unit
+    assert "ExecStopPost=/opt/binkeeper/venv/bin/binkeeper-advisory-status finish" in unit
+    assert "StateDirectory=binkeeper-advisory" in unit

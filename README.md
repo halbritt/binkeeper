@@ -15,9 +15,10 @@ direct inventory writer were retired under `BINK-13` after the accepted
 consumer and rollback-window gates. The advisory vision lane with its
 benchmark-selected cloud default (ADR 0005, renewed in ADR 0007) and the nightly local-only
 peripheral-OCR true-up timer (`binkeeper-ocr-harvest.timer`) are also
-deployed. ADR 0006's input-keyed Opus 5 + local Qwen3-VL 8B label-drift pass,
-rebuildable owner review queue, and append-only accept/dismiss workflow are
-deployed as `binkeeper-label-drift.timer` after the OCR pass.
+deployed. ADR 0006's review queue and append-only accept/dismiss workflow are
+deployed after the OCR pass. BINK-57 changes the source configuration to the
+explicit local-only rollback and rejects the former Opus/OpenRouter route.
+Installing that repair is tracked separately from source verification.
 
 The whole-system design is described in
 [docs/architecture.md](docs/architecture.md).
@@ -49,8 +50,8 @@ BinKeeper-owned key while retaining both source and target manifests.
   [ADR 0005](docs/adr/0005-benchmarked-vision-default.md), with the current
   `qwen/qwen3.8-flash` pin and latency controls in
   [ADR 0007](docs/adr/0007-interactive-vision-repair.md). The deployed
-  [ADR 0006](docs/adr/0006-label-drift-review-queue.md) nightly ensemble also
-  sends that bounded inference input through OpenRouter to Anthropic.
+  [ADR 0006](docs/adr/0006-label-drift-review-queue.md) amendment selects local-only
+  nightly review; its former subscription-covered cloud route is forbidden.
 - Raw captures, moves, observations, receipts, and owner decisions are
   append-only.
 - Current location and other current state are folds over evidence, not mutable
@@ -127,10 +128,10 @@ means photos were read but no code was legible anywhere. See
 [docs/deployment.md](docs/deployment.md).
 
 The follow-on label-drift pass runs at 04:00 through an exact-model gpu-fleet
-lease. It fans each changed bin photo out concurrently to OpenRouter Anthropic
-Opus 5 and local peecee `qwen3-vl:8b`, stores the union as append-only advisory
-evidence, and queues possible contents additions for review. The catalog shows
-the rebuildable pending count; the manage page lets the owner save reviewed
+lease for `qwen3-vl:8b`. The BINK-57 source pin explicitly selects local-only
+review, preserving input-keyed proposals for possible contents additions. Missing
+GPU capacity stops the pass without a fallback. The catalog shows the last success
+and failure separately from inventory readiness, plus the rebuildable pending count; the manage page lets the owner save reviewed
 contents or append a proposal-linked dismissal. The bin theme stays as set at
 registration or through an explicit profile edit. See [ADR 0006](docs/adr/0006-label-drift-review-queue.md) and
 [docs/deployment.md](docs/deployment.md).

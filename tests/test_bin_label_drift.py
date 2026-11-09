@@ -195,6 +195,23 @@ def test_writer_preserves_other_bins_when_one_strict_ensemble_call_fails(
         """
     ).fetchall()
     assert recorded_bins == [("TST-002",)]
+    resumed = harvest_label_drift(
+        conn,
+        client=_EnsembleClient(),
+        open_photo=lambda _conn, _sha: b"good-photo",
+        now=observed + timedelta(days=1),
+    )
+    assert resumed.proposals_recorded == 1 and resumed.skipped_unchanged == 1
+    from binkeeper.bin_passport import bin_passport
+
+    passport = bin_passport(conn, "TST-001")
+    assert passport.theme == "hand tools" and passport.sibling_contents == ("hex keys",)
+    assert passport.current_site == "test-site"
+    assert conn.execute("SELECT count(*) FROM bin_trip_events").fetchone() == (2,)
+    assert conn.execute(
+        "SELECT count(*) FROM captures "
+        "WHERE raw_payload->'metadata'->>'kind' = 'bin_label_print_intent'"
+    ).fetchone() == (0,)
 
 
 def test_cli_refuses_the_nightly_writer_when_authority_is_closed(

@@ -18,6 +18,7 @@ from fastapi import Path as ApiPath
 from fastapi.responses import HTMLResponse, Response
 from PIL import Image
 
+from binkeeper.advisory_status import AdvisoryStatus, load_status
 from binkeeper.bin_colocation import ContainmentBelief, containment_by_bin
 from binkeeper.bin_inventory import BinInventoryError
 from binkeeper.bin_label_drift import LabelDriftError, LabelDriftQueueEntry
@@ -229,6 +230,7 @@ def create_app(
     containment_loader: ContainmentLoader | None = None,
     virtual_loader: VirtualLoader | None = None,
     label_drift_loader: LabelDriftLoader | None = None,
+    advisory_status_loader: Callable[[], AdvisoryStatus] = load_status,
 ) -> FastAPI:
     """Build the loopback-bound, paired-tailnet-safe BinKeeper catalog app."""
     normalized_host = host.strip()
@@ -431,6 +433,7 @@ def create_app(
                 visibility_pct=_visibility_pct(all_entries, site_key=selected_site or None),
                 label_drift_entries=label_drift_entries,
                 label_drift_count=len(label_drift_entries),
+                advisory_status=advisory_status_loader(),
                 virtual_bins=virtual_bins,
                 query=query,
                 selected_site=selected_site,

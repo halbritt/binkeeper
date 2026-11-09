@@ -18,6 +18,7 @@ from PIL import Image, ImageDraw
 from starlette.responses import Response
 
 from binkeeper import bin_photo_web
+from binkeeper.advisory_status import AdvisoryStatus
 from binkeeper.bin_catalog_web import create_app as create_catalog_app
 from binkeeper.bin_label_drift import LabelDriftQueueEntry
 from binkeeper.bin_passport import BinPassport
@@ -257,6 +258,12 @@ def create_app(port: int) -> FastAPI:
             containment_loader=lambda: {},
             virtual_loader=lambda: [],
             label_drift_loader=lambda: PROPOSALS,
+            advisory_status_loader=lambda: AdvisoryStatus(
+                "degraded",
+                "The local model could not be leased. Check GPU capacity.",
+                "2026-11-07T12:00:00+00:00",
+                "2026-11-09T12:00:00+00:00",
+            ),
             photo_source=_SyntheticPhotos(),
         ),
     )

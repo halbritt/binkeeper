@@ -217,7 +217,7 @@
   .bin-catalog-details > summary { padding: var(--space-2) 0 0; color: var(--color-accent); font-size: var(--type-meta); font-weight: 600; }
   .bin-catalog-details > .details-body { padding: var(--space-2) 0 0; }
   .bin-catalog-no-match { text-align: center; }
-  .bin-label-review-panel { border-color: var(--color-warn-muted); background: #fffaf0; }
+  .bin-label-review-panel { min-width: 0; border-color: var(--color-warn-muted); background: #fffaf0; }
   .bin-label-review-panel > summary {
     display: flex;
     justify-content: space-between;
@@ -259,7 +259,8 @@
     .bin-catalog-hero { gap: var(--space-3); }
     .bin-catalog-stat { min-width: 42%; }
     .bin-catalog-theme { font-size: 18px; }
-    .bin-label-review-panel > summary h2 { font-size: 17px; white-space: nowrap; }
+    .bin-label-review-panel > summary { flex-wrap: wrap; }
+    .bin-label-review-panel > summary h2 { font-size: 17px; }
     .bin-label-review-row { align-items: stretch; flex-direction: column; }
     .bin-label-review-row .button { width: fit-content; }
     .bin-photo-dialog-shell { padding: var(--space-3); }
@@ -308,6 +309,14 @@
     </div>
     {% endif %}
   </header>
+  {% if advisory_status %}
+  <details class="panel panel-padded bin-advisory-status">
+    <summary><strong>Nightly photo review: {{ advisory_status.label }}</strong></summary>
+    <p>{{ advisory_status.reason }} Inventory browsing and manual edits remain available.</p>
+    <p class="muted">Last completed review: {{ advisory_status.success_time }}.<br>
+      Last failed review: {{ advisory_status.failure_time }}.</p>
+  </details>
+  {% endif %}
 
   {% if catalog_unavailable %}
   <section class="panel panel-padded stack" aria-labelledby="unavailable-heading">

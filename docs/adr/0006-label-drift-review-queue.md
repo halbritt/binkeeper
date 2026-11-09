@@ -108,3 +108,24 @@ ignores its former theme materiality. Dismissals demote item suggestions only.
 The proposal input key is versioned so the next nightly pass records a fresh
 contents-focused analysis. This correction supersedes the theme portions of
 the materiality, dismissal, and review-surface bullets above (`BINK-47`).
+
+## Routing and freshness repair (2026-11-09, BINK-57)
+
+The owner's current subscription-only rule supersedes the OpenRouter/Opus route
+above. The source default and nightly pin now explicitly select the existing
+local-only rollback. An explicit `ensemble` request fails before model I/O;
+there is no subscription adapter or API-key fallback. Restoring an ensemble
+requires an authorized subscription adapter and its own verification. The local
+job still requires the exact `qwen3-vl:8b` fleet lease; unavailable capacity is a
+visible failure, not permission to switch models or bypass the lease.
+
+The catalog now exposes optional review freshness. Systemd start and stop hooks
+write a local operational status file, including a lease failure before the
+inventory command starts. It records the latest attempt and last success/failure;
+the journal retains detailed history. Missing/corrupt status, interrupted jobs
+and reviews older than 28 hours are explicit. Unreadable photos also make a run
+incomplete. None of these conditions change the core readiness result or owner
+evidence. Contents-only additions, input identity and review remain unchanged.
+
+This amendment records the implementation contract. Source verification does not
+claim that the installed wheel or timer has been updated or a live model run made.
